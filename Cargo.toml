@@ -1,0 +1,12 @@
+[package]
+name = "curi"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "cv_generator"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow = "1.0.93"
+clap = { version = "4.5.20", features = ["derive"] }
