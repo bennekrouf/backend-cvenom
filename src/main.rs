@@ -1,7 +1,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use cv_generator::{CvConfig, CvGenerator, list_persons};
+use cv_generator::{CvConfig, CvGenerator, list_persons, web::start_web_server};
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -32,9 +32,14 @@ enum Commands {
         person: String,
     },
     List,
+    Server {
+        #[arg(short, long, default_value = "8000")]
+        port: u16,
+    },
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let cli = Cli::parse();
     
     match cli.command {
@@ -75,6 +80,19 @@ fn main() -> Result<()> {
             }
             
             Ok(())
+        }
+
+        Commands::Server { port: _ } => {
+            println!("Starting CV generator web server on http://0.0.0.0:8000");
+            println!("Endpoints:");
+            println!("  POST /api/generate - Generate CV");
+            println!("  GET  /api/health   - Health check");
+            
+            start_web_server(
+                cli.data_dir,
+                cli.output_dir,
+                cli.templates_dir
+            ).await
         }
     }
 }

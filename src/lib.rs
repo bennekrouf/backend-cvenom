@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 use std::process::Command;
-
+pub mod web;
 /// Multi-tenant CV configuration
 pub struct CvConfig {
     pub person_name: String,
