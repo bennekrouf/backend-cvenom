@@ -23,27 +23,27 @@ impl TemplateProcessor {
             let placeholder = format!("{{{{{}}}}}", key);
             result = result.replace(&placeholder, value);
         }
-        
+
         result
     }
-    
+
     /// Create person directory with template-based files
     pub fn create_person_from_templates(&self, person_name: &str, data_dir: &PathBuf) -> Result<()> {
         let person_dir = data_dir.join(person_name);
         fs::create_dir_all(&person_dir)
             .context("Failed to create person directory")?;
-        
+ 
         // Create variables for template processing
         let mut variables = HashMap::new();
         variables.insert("name".to_string(), person_name.to_string());
-        
+
         // Process and create cv_params.toml
         let toml_template_path = self.templates_dir.join("person_template.toml");
         if toml_template_path.exists() {
             let template_content = fs::read_to_string(&toml_template_path)
                 .context("Failed to read person_template.toml")?;
             let processed_content = self.process_template(&template_content, &variables);
-            
+
             let output_path = person_dir.join("cv_params.toml");
             fs::write(&output_path, processed_content)
                 .context("Failed to write cv_params.toml")?;
