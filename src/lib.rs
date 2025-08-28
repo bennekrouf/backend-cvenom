@@ -55,7 +55,7 @@ impl TemplateProcessor {
             let template_content = fs::read_to_string(&experience_template_path)
                 .context("Failed to read experiences_template.typ")?;
             
-            let languages = ["en", "fr", "ch", "ar"];
+            let languages = ["en", "fr"];
             for lang in &languages {
                 let output_path = person_dir.join(format!("experiences_{}.typ", lang));
                 fs::write(&output_path, &template_content)
@@ -140,8 +140,8 @@ pub struct CvGenerator {
 impl CvGenerator {
     pub fn new(config: CvConfig) -> Result<Self> {
         // Validate language
-        if !["fr", "en", "ch", "ar"].contains(&config.lang.as_str()) {
-            anyhow::bail!("Unsupported language: {}. Use fr, en, ch, or ar", config.lang);
+        if !["fr", "en"].contains(&config.lang.as_str()) {
+            anyhow::bail!("Unsupported language: {}. Use fr, en", config.lang);
         }
         
         // Check if person's data directory exists

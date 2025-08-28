@@ -100,8 +100,6 @@ curl http://localhost:8000/api/health
 ### Supported Languages
 - `en` (English) - default
 - `fr` (French)
-- `ch` (Chinese)  
-- `ar` (Arabic)
 
 ## Directory Structure
 
