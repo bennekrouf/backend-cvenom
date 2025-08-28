@@ -3,34 +3,53 @@
 
 #let details = toml("cv_params.toml")
 
-// Custom configuration for Keyteo template with header on every page
-#show: doc => conf(details, doc)
+// Custom section function with layered rectangle effect
+#let keyteo_section(title) = {
+  block(
+    fill: gray,
+    width: 100%,
+    inset: 0pt,
+    outset: 0pt,
+  )[
+    #move(
+      dx: -4pt,
+      dy: -4pt,
+      block(
+        fill: rgb("#14A4E6"),
+        width: 100%,
+        inset: (x: 15pt, y: 8pt),
+        text(size: 14pt, weight: "bold", fill: white, title)
+      )
+    )
+  ]
+  v(1em)
+}
 
-// Add Keyteo logo/header to every page - ensure it appears on first page
+// Don't use the default conf layout - we'll create custom layout
 #set page(
-  header: [
-    #align(center)[
-      #if "company_logo" in details and details.company_logo != "" {
-        image(details.company_logo, width: 80pt)
-      } else {
-        text(size: 16pt, weight: "bold", fill: rgb("#14A4E6"), "KEYTEO")
-      }
-    ]
-    #line(length: 100%, stroke: 0.5pt + rgb("#14A4E6"))
-  ],
+ header: [
+  #align(center)[
+    #if details.at("company_logo", default: "").len() > 0 {
+      image(details.company_logo, width: 80pt)
+    } else {
+      text(size: 16pt, weight: "bold", fill: rgb("#14A4E6"), "KEYTEO")
+    }
+  ]
+  #line(length: 100%, stroke: 0.5pt + rgb("#14A4E6"))
+],
   footer: [
     #grid(
       columns: (1fr, 2fr, 1fr),
       align: (left, center, right),
-      text(size: 7pt, "Skills file"),
-      text(size: 7pt, "Confidential document, reproduction prohibited"),
-      context text(size: 7pt, [#counter(page).display()/#counter(page).final().first()])
+      text(size: 9pt, "Skills file"),
+      text(size: 9pt, "Confidential document, reproduction prohibited"),
+      context text(size: 9pt, [#counter(page).display()/#counter(page).final().first()])
     )
-    #v(-0.10em)
+    #v(-0.2em)
     #line(length: 100%, stroke: 0.5pt + rgb("#14A4E6"))
-    #v(-0.10em)
+    #v(-0.2em)
     #align(center)[
-      #text(size: 5pt, "www.keyteo.ch")
+      #text(size: 7pt, "www.keyteo.ch")
     ]
   ],
   header-ascent: 15pt,
@@ -38,19 +57,53 @@
   margin: (top: 2.8cm, left: 1.5cm, bottom: 2.8cm, right: 1.5cm),
 )
 
-// Ensure content starts properly
+// Custom first page layout for Keyteo template
+#v(1em)
+
+// Job title centered
+#align(center)[
+  #text(size: 18pt, weight: "bold", 
+    if "job_title" in details { details.job_title } else { "Technical Lead" }
+  )
+]
+
+#v(1.5em)
+
+// Two rows layout for consultant info
+#grid(
+  columns: 2,
+  column-gutter: 4em,
+  row-gutter: 1em,
+  // First row
+  text(size: 12pt, weight: "bold", fill: rgb("#14A4E6"), "Consultant"),
+  if "consultant_name" in details { 
+    text(size: 11pt, details.consultant_name) 
+  } else { 
+    text(size: 11pt, details.at("name", default: "")) 
+  },
+  // Second row  
+  text(size: 12pt, weight: "bold", fill: rgb("#14A4E6"), "Keyteo Business Manager"),
+  if "manager_info" in details { 
+    text(size: 11pt, details.manager_info) 
+  } else { 
+    text(size: 11pt, "Anthony Levavasseur – alevavasseur@keyteo.ch – 078 230 36 38") 
+  }
+)
+
 #v(0.5em)
 
-#get_work_experience()
+#keyteo_section("Key insights")
 
-= Technical Skills
+
+
+#keyteo_section("Technical Skills")
 #if "skills" in details {
   show_skills(details.skills)
 } else {
   [No skills data found in configuration]
 }
 
-= Certifications & Education
+#keyteo_section("Certifications & Education")
 #if "education" in details {
   for item in details.education {
     dated_experience(
@@ -62,7 +115,7 @@
   [No education data found in configuration]
 }
 
-= Languages
+#keyteo_section("Languages")
 #if "languages" in details {
   let lang_items = ()
   if "native" in details.languages {
@@ -84,3 +137,5 @@
 } else {
   [No language data found in configuration]
 }
+
+#get_work_experience()
