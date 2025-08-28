@@ -35,6 +35,45 @@ The server runs on `http://localhost:8000` with full CORS support.
 
 ### API Endpoints
 
+#### Upload Profile Picture
+```bash
+curl -X POST http://localhost:8000/api/upload-picture \
+  -F "person=john-doe" \
+  -F "file=@/path/to/your/image.jpg"
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Profile picture uploaded successfully for john-doe",
+  "file_path": "data/john-doe/profile.png"
+}
+```
+
+Accepts any image format and automatically saves as `profile.png` in the person's directory.
+
+#### Create New Person
+```bash
+curl -X POST http://localhost:8000/api/create \
+  -H "Content-Type: application/json" \
+  -d '{"person": "john-doe"}'
+```
+
+Response:
+```json
+{
+  "success": true,
+  "message": "Person directory created successfully for john-doe",
+  "person_dir": "data/john-doe"
+}
+```
+
+This creates:
+- `data/john-doe/cv_params.toml` - Personal info template
+- `data/john-doe/experiences_*.typ` - Experience templates for all languages
+- `data/john-doe/README.md` - Instructions
+
 #### Generate CV (Returns PDF file)
 ```bash
 curl -X POST http://localhost:8000/api/generate \

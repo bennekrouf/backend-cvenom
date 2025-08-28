@@ -1,0 +1,29 @@
+# Personal Information
+name = "john-doe"
+phonenumber = ""
+email = ""
+address = ""
+picture = "profile.png"
+
+[links]
+github = ""
+linkedin = ""
+personal = ""
+
+# Technical Skills
+[skills]
+Languages = [""]
+Frameworks = [""]
+Others = [""]
+
+# Education & Certifications
+[[education]]
+title = ""
+date = ""
+
+# Languages
+[languages]
+native = [""]
+fluent = [""]
+intermediate = [""]
+basic = [""]

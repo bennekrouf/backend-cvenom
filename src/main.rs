@@ -61,10 +61,11 @@ async fn main() -> Result<()> {
         Commands::Create { person } => {
             let config = CvConfig::new(&person, "en")
                 .with_data_dir(cli.data_dir)
+                .with_output_dir(cli.output_dir)
                 .with_templates_dir(cli.templates_dir);
             
             let generator = CvGenerator { config };
-            generator.create_person()
+            generator.create_person_unchecked()
         }
         
         Commands::List => {

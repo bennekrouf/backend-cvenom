@@ -1,7 +1,81 @@
 use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 use std::process::Command;
+use std::collections::HashMap;
+
 pub mod web;
+
+/// Template processing for creating new persons
+pub struct TemplateProcessor {
+    templates_dir: PathBuf,
+}
+
+impl TemplateProcessor {
+    pub fn new(templates_dir: PathBuf) -> Self {
+        Self { templates_dir }
+    }
+    
+    /// Process a template file by replacing placeholders
+    pub fn process_template(&self, template_content: &str, variables: &HashMap<String, String>) -> String {
+        let mut result = template_content.to_string();
+        
+        for (key, value) in variables {
+            let placeholder = format!("{{{{{}}}}}", key);
+            result = result.replace(&placeholder, value);
+        }
+        
+        result
+    }
+    
+    /// Create person directory with template-based files
+    pub fn create_person_from_templates(&self, person_name: &str, data_dir: &PathBuf) -> Result<()> {
+        let person_dir = data_dir.join(person_name);
+        fs::create_dir_all(&person_dir)
+            .context("Failed to create person directory")?;
+        
+        // Create variables for template processing
+        let mut variables = HashMap::new();
+        variables.insert("name".to_string(), person_name.to_string());
+        
+        // Process and create cv_params.toml
+        let toml_template_path = self.templates_dir.join("person_template.toml");
+        if toml_template_path.exists() {
+            let template_content = fs::read_to_string(&toml_template_path)
+                .context("Failed to read person_template.toml")?;
+            let processed_content = self.process_template(&template_content, &variables);
+            
+            let output_path = person_dir.join("cv_params.toml");
+            fs::write(&output_path, processed_content)
+                .context("Failed to write cv_params.toml")?;
+        }
+        
+        // Create experience files for all supported languages
+        let experience_template_path = self.templates_dir.join("experiences_template.typ");
+        if experience_template_path.exists() {
+            let template_content = fs::read_to_string(&experience_template_path)
+                .context("Failed to read experiences_template.typ")?;
+            
+            let languages = ["en", "fr", "ch", "ar"];
+            for lang in &languages {
+                let output_path = person_dir.join(format!("experiences_{}.typ", lang));
+                fs::write(&output_path, &template_content)
+                    .with_context(|| format!("Failed to write experiences_{}.typ", lang))?;
+            }
+        }
+        
+        // Create placeholder profile image info
+        let readme_path = person_dir.join("README.md");
+        let readme_content = format!(
+            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\n\nEdit the following files:\n- `cv_params.toml` - Personal information and skills\n- `experiences_*.typ` - Work experience for each language\n",
+            person_name
+        );
+        fs::write(&readme_path, readme_content)
+            .context("Failed to write README.md")?;
+        
+        Ok(())
+    }
+}
+
 /// Multi-tenant CV configuration
 pub struct CvConfig {
     pub person_name: String,
@@ -129,19 +203,29 @@ impl CvGenerator {
         Ok(())
     }
     
-    /// Create person's data directory structure
-    pub fn create_person(&self) -> Result<()> {
+    /// Create person's data directory structure using templates (bypassing validation)
+    pub fn create_person_unchecked(&self) -> Result<()> {
+        let template_processor = TemplateProcessor::new(self.config.templates_dir.clone());
+        template_processor.create_person_from_templates(&self.config.person_name, &self.config.data_dir)?;
+        
         let person_dir = self.config.person_data_dir();
-        fs::create_dir_all(&person_dir)
-            .context("Failed to create person directory")?;
-            
-        println!("✓ Created person directory for: {}", self.config.person_name);
-        println!("  📁 {}", person_dir.display());
-        println!("  🖼️  Put profile image: {}", self.config.person_image_path().display());
-        println!("  📝 Create: {}", self.config.person_config_path().display());
-        println!("  📄 Create: {}", self.config.person_experiences_path().display());
+        println!("Created person directory structure for: {}", self.config.person_name);
+        println!("  Directory: {}", person_dir.display());
+        println!("  Files created:");
+        println!("    - cv_params.toml (edit your personal info)");
+        println!("    - experiences_*.typ (for all languages)");
+        println!("    - README.md (instructions)");
+        println!("  Next steps:");
+        println!("    1. Add your profile image as: profile.png");
+        println!("    2. Edit cv_params.toml with your information");
+        println!("    3. Update experiences_*.typ files with your work history");
         
         Ok(())
+    }
+    
+    /// Create person's data directory structure using templates
+    pub fn create_person(&self) -> Result<()> {
+        self.create_person_unchecked()
     }
     
     fn setup_output_dir(&self) -> Result<()> {
