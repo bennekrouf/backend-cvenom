@@ -1,9 +1,45 @@
+// Updated CvConfig to support templates
 use anyhow::{Context, Result};
 use std::{fs, path::PathBuf};
 use std::process::Command;
 use std::collections::HashMap;
 
 pub mod web;
+
+/// Available CV templates
+#[derive(Debug, Clone)]
+pub enum CvTemplate {
+    Default,
+    Keyteo,
+}
+
+impl CvTemplate {
+    pub fn as_str(&self) -> &str {
+        match self {
+            CvTemplate::Default => "default",
+            CvTemplate::Keyteo => "keyteo",
+        }
+    }
+    
+    pub fn from_str(s: &str) -> Result<Self> {
+        match s {
+            "default" => Ok(CvTemplate::Default),
+            "keyteo" => Ok(CvTemplate::Keyteo),
+            _ => anyhow::bail!("Unsupported template: {}. Use default, keyteo", s),
+        }
+    }
+    
+    pub fn template_file(&self) -> &str {
+        match self {
+            CvTemplate::Default => "cv.typ",
+            CvTemplate::Keyteo => "cv_keyteo.typ",
+        }
+    }
+    
+    pub fn all() -> Vec<&'static str> {
+        vec!["default", "keyteo"]
+    }
+}
 
 /// Template processing for creating new persons
 pub struct TemplateProcessor {
@@ -66,7 +102,7 @@ impl TemplateProcessor {
         // Create placeholder profile image info
         let readme_path = person_dir.join("README.md");
         let readme_content = format!(
-            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\n\nEdit the following files:\n- `cv_params.toml` - Personal information and skills\n- `experiences_*.typ` - Work experience for each language\n",
+            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\n\nEdit the following files:\n- `cv_params.toml` - Personal information and skills\n- `experiences_*.typ` - Work experience for each language\n\n## Available Templates:\n- default: Standard CV layout\n- keyteo: CV with Keyteo logo at the top of every page\n",
             person_name
         );
         fs::write(&readme_path, readme_content)
@@ -80,6 +116,7 @@ impl TemplateProcessor {
 pub struct CvConfig {
     pub person_name: String,
     pub lang: String,
+    pub template: CvTemplate,
     pub output_dir: PathBuf,
     pub data_dir: PathBuf,
     pub templates_dir: PathBuf,
@@ -90,10 +127,16 @@ impl CvConfig {
         Self {
             person_name: person_name.to_string(),
             lang: lang.to_string(),
+            template: CvTemplate::Default,
             output_dir: PathBuf::from("output"),
             data_dir: PathBuf::from("data"),
             templates_dir: PathBuf::from("templates"),
         }
+    }
+    
+    pub fn with_template(mut self, template: CvTemplate) -> Self {
+        self.template = template;
+        self
     }
     
     pub fn with_output_dir(mut self, dir: PathBuf) -> Self {
@@ -128,7 +171,12 @@ impl CvConfig {
 
     /// Get person's profile image path
     pub fn person_image_path(&self) -> PathBuf {
-        self.person_data_dir().join("profile.jpg")
+        self.person_data_dir().join("profile.png")
+    }
+    
+    /// Get the template file to use for compilation
+    pub fn template_file_path(&self) -> PathBuf {
+        self.templates_dir.join(self.template.template_file())
     }
 }
 
@@ -153,6 +201,7 @@ impl CvGenerator {
         // Validate required files exist
         let config_path = config.person_config_path();
         let experiences_path = config.person_experiences_path();
+        let template_path = config.template_file_path();
         
         if !config_path.exists() {
             anyhow::bail!("Config file not found: {}", config_path.display());
@@ -160,6 +209,10 @@ impl CvGenerator {
         
         if !experiences_path.exists() {
             anyhow::bail!("Experiences file not found: {}", experiences_path.display());
+        }
+        
+        if !template_path.exists() {
+            anyhow::bail!("Template file not found: {}", template_path.display());
         }
         
         Ok(Self { config })
@@ -174,8 +227,11 @@ impl CvGenerator {
         
         self.cleanup_workspace()?;
         
-        println!("✓ Successfully compiled CV for {} in {} to {}", 
-                self.config.person_name, self.config.lang, output_path.display());
+        println!("✅ Successfully compiled CV for {} ({} template, {} lang) to {}", 
+                self.config.person_name, 
+                self.config.template.as_str(),
+                self.config.lang, 
+                output_path.display());
         
         Ok(output_path)
     }
@@ -185,13 +241,17 @@ impl CvGenerator {
         self.setup_output_dir()?;
         self.prepare_workspace()?;
         
-        let output_path = self.config.output_dir.join(format!("{}_{}.pdf", self.config.person_name, self.config.lang));
+        let output_path = self.config.output_dir.join(format!("{}_{}_{}.pdf", 
+            self.config.person_name, 
+            self.config.template.as_str(),
+            self.config.lang));
         
-        println!("👀 Watching for changes for {}...", self.config.person_name);
+        println!("👀 Watching for changes for {} ({} template)...", 
+                self.config.person_name, self.config.template.as_str());
         
         let status = Command::new("typst")
             .arg("watch")
-            .arg("cv.typ")
+            .arg(self.config.template.template_file())
             .arg(&output_path)
             .status()
             .context("Failed to execute typst watch command")?;
@@ -215,6 +275,7 @@ impl CvGenerator {
         println!("    - cv_params.toml (edit your personal info)");
         println!("    - experiences_*.typ (for all languages)");
         println!("    - README.md (instructions)");
+        println!("  Available templates: {}", CvTemplate::all().join(", "));
         println!("  Next steps:");
         println!("    1. Add your profile image as: profile.png");
         println!("    2. Edit cv_params.toml with your information");
@@ -236,47 +297,59 @@ impl CvGenerator {
     fn prepare_workspace(&self) -> Result<()> {
         // Copy person's config to workspace
         fs::copy(self.config.person_config_path(), "cv_params.toml")
-        .context("Failed to copy person config")?;
+            .context("Failed to copy person config")?;
         
-    // Copy person's experiences file  
-    fs::copy(self.config.person_experiences_path(), format!("experiences_{}.typ", self.config.lang))
-        .context("Failed to copy person experiences")?;
+        // Copy person's experiences file  
+        fs::copy(self.config.person_experiences_path(), format!("experiences_{}.typ", self.config.lang))
+            .context("Failed to copy person experiences")?;
         
-    // Copy person's profile image - use the actual filename from TOML
-    let person_image_png = self.config.person_data_dir().join("profile.png");
-    if person_image_png.exists() {
-        fs::copy(&person_image_png, "profile.png")
-            .context("Failed to copy person image")?;
-    }
-            
-        // Copy template files if they don't exist in workspace
-        let template_file = self.config.templates_dir.join("template.typ");
-        if template_file.exists() && !PathBuf::from("template.typ").exists() {
-            fs::copy(template_file, "template.typ")
-                .context("Failed to copy template.typ")?;
+        // Copy person's profile image
+        let person_image_png = self.config.person_data_dir().join("profile.png");
+        if person_image_png.exists() {
+            fs::copy(&person_image_png, "profile.png")
+                .context("Failed to copy person image")?;
         }
         
-        let cv_template = self.config.templates_dir.join("cv.typ");
-        if cv_template.exists() && !PathBuf::from("cv.typ").exists() {
-            fs::copy(cv_template, "cv.typ")
-                .context("Failed to copy cv.typ")?;
+        // Copy the specific template file
+        let template_file = self.config.template_file_path();
+        if template_file.exists() {
+            fs::copy(&template_file, self.config.template.template_file())
+                .context("Failed to copy template file")?;
+        }
+        
+        // Copy base template.typ if it exists
+        let base_template = self.config.templates_dir.join("template.typ");
+        if base_template.exists() && !PathBuf::from("template.typ").exists() {
+            fs::copy(base_template, "template.typ")
+                .context("Failed to copy template.typ")?;
         }
         
         Ok(())
     }
     
     fn compile_cv(&self) -> Result<PathBuf> {
-        let output_path = self.config.output_dir.join(format!("{}_{}.pdf", self.config.person_name, self.config.lang));
+        let output_path = self.config.output_dir.join(format!("{}_{}_{}.pdf", 
+            self.config.person_name, 
+            self.config.template.as_str(),
+            self.config.lang));
+        
+        // Add debug output
+        println!("Attempting to create PDF at: {}", output_path.display());
         
         let status = Command::new("typst")
             .arg("compile")
-            .arg("cv.typ")
+            .arg(self.config.template.template_file())
             .arg(&output_path)
             .status()
             .context("Failed to execute typst command")?;
 
         if !status.success() {
             anyhow::bail!("Typst compilation failed");
+        }
+        
+        // Check if file actually exists
+        if !output_path.exists() {
+            anyhow::bail!("PDF was not created at expected path: {}", output_path.display());
         }
         
         Ok(output_path)
@@ -287,7 +360,8 @@ impl CvGenerator {
         let files_to_clean = [
             "cv_params.toml",
             &format!("experiences_{}.typ", self.config.lang),
-            "profile.jpg",
+            "profile.png",
+            self.config.template.template_file(),
         ];
         
         for file in &files_to_clean {
@@ -332,9 +406,37 @@ pub fn list_persons(data_dir: &PathBuf) -> Result<Vec<String>> {
     Ok(persons)
 }
 
+/// List all available templates
+pub fn list_templates(templates_dir: &PathBuf) -> Result<Vec<String>> {
+    let mut templates = Vec::new();
+    
+    for template in CvTemplate::all() {
+        let template_path = templates_dir.join(match template {
+            "default" => "cv.typ",
+            "keyteo" => "cv_keyteo.typ",
+            _ => continue,
+        });
+        
+        if template_path.exists() {
+            templates.push(template.to_string());
+        }
+    }
+    
+    if templates.is_empty() {
+        templates.push("default".to_string()); // Always have default as fallback
+    }
+    
+    Ok(templates)
+}
+
 /// Convenience function for quick CV generation
-pub fn generate_cv(person_name: &str, lang: &str, output_dir: Option<PathBuf>) -> Result<PathBuf> {
+pub fn generate_cv(person_name: &str, lang: &str, template: Option<&str>, output_dir: Option<PathBuf>) -> Result<PathBuf> {
     let mut config = CvConfig::new(person_name, lang);
+    
+    if let Some(template_str) = template {
+        let template = CvTemplate::from_str(template_str)?;
+        config = config.with_template(template);
+    }
     
     if let Some(dir) = output_dir {
         config = config.with_output_dir(dir);

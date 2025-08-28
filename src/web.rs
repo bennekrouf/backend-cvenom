@@ -8,7 +8,7 @@ use rocket::form::{Form, FromForm};
 use rocket::fs::TempFile;
 use std::path::PathBuf;
 use std::fs;
-use crate::{CvConfig, CvGenerator};
+use crate::{CvConfig, CvGenerator, CvTemplate, list_templates};
 
 pub struct PdfResponse(Vec<u8>);
 
@@ -45,6 +45,7 @@ impl Fairing for Cors {
 pub struct GenerateRequest {
     pub person: String,
     pub lang: Option<String>,
+    pub template: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -85,6 +86,20 @@ pub struct GenerateResponse {
 
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
+pub struct TemplateInfo {
+    pub name: String,
+    pub description: String,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct TemplatesResponse {
+    pub success: bool,
+    pub templates: Vec<TemplateInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
 pub struct ErrorResponse {
     pub success: bool,
     pub error: String,
@@ -102,8 +117,18 @@ pub async fn generate_cv(
     config: &State<ServerConfig>
 ) -> Result<PdfResponse, Status> {
     let lang = request.lang.as_deref().unwrap_or("en");
+    let template_str = request.template.as_deref().unwrap_or("default");
+    
+    let template = match CvTemplate::from_str(template_str) {
+        Ok(t) => t,
+        Err(_) => {
+            eprintln!("Invalid template: {}", template_str);
+            return Err(Status::BadRequest);
+        }
+    };
     
     let cv_config = CvConfig::new(&request.person, lang)
+        .with_template(template)
         .with_data_dir(config.data_dir.clone())
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
@@ -212,6 +237,43 @@ pub async fn upload_picture(
     }
 }
 
+#[get("/templates")]
+pub async fn get_templates(config: &State<ServerConfig>) -> Json<TemplatesResponse> {
+    match list_templates(&config.templates_dir) {
+        Ok(templates) => {
+            let template_infos = templates.into_iter().map(|name| {
+                let description = match name.as_str() {
+                    "default" => "Standard CV layout",
+                    "keyteo" => "CV with Keyteo branding and logo at the top of every page",
+                    _ => "Custom template",
+                };
+                TemplateInfo {
+                    name,
+                    description: description.to_string(),
+                }
+            }).collect();
+
+            Json(TemplatesResponse {
+                success: true,
+                templates: template_infos,
+            })
+        },
+        Err(e) => {
+            eprintln!("Failed to list templates: {}", e);
+            Json(TemplatesResponse {
+                success: false,
+                templates: vec![
+                    TemplateInfo {
+                        name: "default".to_string(),
+                        description: "Standard CV layout".to_string(),
+                    }
+                ],
+            })
+        }
+    }
+}
+
+
 #[get("/health")]
 pub async fn health() -> Json<&'static str> {
     Json("OK")
@@ -231,7 +293,7 @@ pub async fn start_web_server(
     let _rocket = rocket::build()
         .attach(Cors)
         .manage(server_config)
-        .mount("/api", routes![generate_cv, create_person, upload_picture, health])
+        .mount("/api", routes![generate_cv, create_person, upload_picture, get_templates, health])
         .launch()
         .await;
 

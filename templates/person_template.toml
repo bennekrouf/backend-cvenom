@@ -5,6 +5,10 @@ email = ""
 address = ""
 picture = "profile.png"
 
+# Company/Logo information (for logo template)
+company_name = ""
+company_logo = "logo.png"
+
 [links]
 github = ""
 linkedin = ""
