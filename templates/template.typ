@@ -146,6 +146,7 @@
     ]
 
     #content
+    #v(1em)
   ]
 }
 
@@ -173,7 +174,7 @@
     stroke: none,
     ..skills_array,
   )
-  v(-1em)
+  // v(-1em)
 }
 
 /* return text info about a person */
@@ -311,7 +312,7 @@
   show "C++": box
 
   // custom set rules
-  set text(font: font, ligatures: false)
+set text(font: ("Arial", "Helvetica", "Liberation Sans"), ligatures: false)
   set par(justify: true)
 
   set page(

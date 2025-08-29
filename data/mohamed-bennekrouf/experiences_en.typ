@@ -1,7 +1,7 @@
 #import "template.typ": conf, date, dated_experience, experience_details, section
 #let get_work_experience() = {
   [
-    = Work Experience
+    // = Work Experience
     == Mayorana - Rust / an AI startup
     #dated_experience(  
       "Technical Lead Developer",  

@@ -131,6 +131,29 @@
   [No education data found in configuration]
 }
 
+#keyteo_section(if details.at("lang", default: "en") == "fr" { "Langues" } else { "Languages" })
+#if "languages" in details {
+  let lang_items = ()
+  if "native" in details.languages {
+    lang_items = lang_items + details.languages.native
+  }
+  if "fluent" in details.languages {
+    lang_items = lang_items + details.languages.fluent
+  }
+  if "intermediate" in details.languages {
+    lang_items = lang_items + details.languages.intermediate
+  }
+  if "basic" in details.languages {
+    lang_items = lang_items + details.languages.basic
+  }
+  
+  if lang_items.len() > 0 {
+    experience_details(..lang_items)
+  }
+} else {
+  [No language data found in configuration]
+}
+
 #block[
   #keyteo_section(if details.at("lang", default: "en") == "fr" { "Expérience Professionnelle" } else { "Work Experience" })
   #get_work_experience()
