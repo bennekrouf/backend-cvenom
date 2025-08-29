@@ -135,20 +135,8 @@ pub async fn generate_cv(
     
     match CvGenerator::new(cv_config) {
         Ok(generator) => {
-            match generator.generate() {
-                Ok(pdf_path) => {
-                    match fs::read(&pdf_path) {
-                        Ok(pdf_data) => {
-                            // Clean up the generated file after reading
-                            let _ = fs::remove_file(&pdf_path);
-                            Ok(PdfResponse(pdf_data))
-                        },
-                        Err(e) => {
-                            eprintln!("Failed to read PDF file: {}", e);
-                            Err(Status::InternalServerError)
-                        }
-                    }
-                },
+            match generator.generate_pdf_data() {
+                Ok(pdf_data) => Ok(PdfResponse(pdf_data)),
                 Err(e) => {
                     eprintln!("Generation error: {}", e);
                     Err(Status::InternalServerError)

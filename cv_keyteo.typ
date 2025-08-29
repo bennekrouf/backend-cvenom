@@ -15,7 +15,7 @@
       dx: -4pt,
       dy: -4pt,
       block(
-        fill: rgb("#049cb0"),
+        fill: rgb("#14A4E6"),
         width: 100%,
         inset: (x: 15pt, y: 8pt),
         text(size: 14pt, weight: "bold", fill: white, title)
