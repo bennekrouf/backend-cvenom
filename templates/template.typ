@@ -122,11 +122,28 @@
 }
 
 /* experience that has an optional date and an optional description */
-#let dated_experience(title, date: none, description: none, content: none) = {
+#let dated_experience(title, date: none, description: none, content: none, company: none) = {
   [
-    == #title #h(1fr) #text(weight: "regular", size: 10pt, date) <dated_experience_header>
+    #block(
+      stroke: (bottom: 0.5pt + rgb("#14A4E6")),
+      inset: (bottom: 5pt),
+      width: 100%,
+      grid(
+        columns: (1fr, auto),
+        align: (left, right),
+        [
+          #text(size: 9pt, fill: rgb("#757575"), date) \
+          #text(size: 11pt, weight: "bold", title)
+        ],
+        [
+          #text(size: 11pt, weight: "bold", company)
+        ]
+      )
+    )
 
-    #text(weight: "regular", description)<dated_experience_description>
+    #if description != none [
+      #text(weight: "regular", size: 10pt, description)
+    ]
 
     #content
   ]

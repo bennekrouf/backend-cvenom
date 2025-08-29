@@ -22,16 +22,17 @@
       )
     )
   ]
-  v(1em)
+  // v(1em)
 }
 
 // Don't use the default conf layout - we'll create custom layout
 #set page(
  header: [
- #align(center)[
-    #image("keyteo_logo.png", width: 180pt, height: 80pt, fit: "contain")
- ]
-  #line(length: 100%, stroke: 0.5pt + rgb("#14A4E6"))
+  #v(20pt)
+  #align(center)[
+      #image("keyteo_logo.png", width: 160pt, height: 70pt, fit: "contain")
+  ]
+  #v(20pt)
 ],
   footer: [
     #grid(
@@ -48,7 +49,7 @@
       #text(size: 7pt, "www.keyteo.ch")
     ]
   ],
-  header-ascent: 25pt,
+  header-ascent: -20pt,
   footer-descent: 25pt,
   margin: (top: 2.8cm, left: 1.5cm, bottom: 2.8cm, right: 1.5cm),
 )
@@ -88,50 +89,49 @@
 
 #v(0.5em)
 
-#keyteo_section("Key insights")
+#keyteo_section(if details.at("lang", default: "en") == "fr" { "Points clés" } else { "Key insights" })
+#if "key_insights" in details {
+  experience_details(..details.key_insights)
+} else {
+  experience_details(
+    "Experienced technical lead with proven track record in startup environments",
+    "Expert in modern development stacks with focus on Rust and microservices architecture", 
+    "Strong background in AI/ML integration and blockchain development",
+    "Demonstrated ability to scale teams and deliver complex technical solutions"
+  )
+}
 
-
-
-#keyteo_section("Technical Skills")
+#keyteo_section(if details.at("lang", default: "en") == "fr" { "Compétences" } else { "Technical Skills" })
 #if "skills" in details {
   show_skills(details.skills)
 } else {
   [No skills data found in configuration]
 }
 
-#keyteo_section("Certifications & Education")
+#keyteo_section(if details.at("lang", default: "en") == "fr" { "Formation" } else { "Certifications & Education" })
 #if "education" in details {
-  for item in details.education {
-    dated_experience(
-      item.title,
-      date: item.date
-    )
+  // Diplomas section
+  let diplomas = details.education.filter(item => item.at("type", default: "education") == "diploma")
+  if diplomas.len() > 0 {
+    text(weight: "bold", if details.at("lang", default: "en") == "fr" { "Diplômes" } else { "Diplomas" })
+    for item in diplomas {
+      experience_details(item.title + " " + item.date)
+    }
+  }
+  
+  // Certifications section  
+  let certifications = details.education.filter(item => item.at("type", default: "education") != "diploma")
+  if certifications.len() > 0 {
+    text(weight: "bold", if details.at("lang", default: "en") == "fr" { "Certifications" } else { "Certifications" })
+    for item in certifications {
+      experience_details(item.title + " " + item.date)
+    }
   }
 } else {
   [No education data found in configuration]
 }
 
-#keyteo_section("Languages")
-#if "languages" in details {
-  let lang_items = ()
-  if "native" in details.languages {
-    lang_items = lang_items + details.languages.native
-  }
-  if "fluent" in details.languages {
-    lang_items = lang_items + details.languages.fluent
-  }
-  if "intermediate" in details.languages {
-    lang_items = lang_items + details.languages.intermediate
-  }
-  if "basic" in details.languages {
-    lang_items = lang_items + details.languages.basic
-  }
-  
-  if lang_items.len() > 0 {
-    experience_details(..lang_items)
-  }
-} else {
-  [No language data found in configuration]
-}
-
-#get_work_experience()
+#block[
+  #keyteo_section(if details.at("lang", default: "en") == "fr" { "Expérience Professionnelle" } else { "Work Experience" })
+  #get_work_experience()
+]

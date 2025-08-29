@@ -10,6 +10,14 @@ github = "https://github.com/bennekrouf"
 linkedin = "https://www.linkedin.com/in/bennekrouf"
 personal = "https://mayorana.ch"
 
+# Key insights (3-4 bullet points)
+key_insights = [
+  "Senior full-stack developer with 8+ years in fintech",
+  "Specialized in React, Node.js, and cloud-native architectures",
+  "Led teams of 5+ developers in agile environments",
+  "Expert in payment processing and regulatory compliance"
+]
+
 # Technical Skills
 [skills]
 Languages = ["Rust (3y)", "Typescript (5y)", "JavaScript (>10y)", "Java (>10y)"]
@@ -18,16 +26,19 @@ Others = ["gRPC", "Git", "Linux", "OpenShift", "MongoDB", "SQL"]
 
 # Education & Certifications
 [[education]]
-title = "OpenShift - Administration I"
-date = "(2024)"
-
-[[education]]
 title = "Computer Science University Degree (Programming) - Lyon Claude Bernard"
 date = "(1998)"
+type = "diploma"
 
 [[education]]
 title = "Science high-school diploma – Lycée La Pléiade"
-date = "(1996)"
+date = "(1996)" 
+type = "diploma"
+
+[[education]]
+title = "OpenShift - Administration I"
+date = "(2024)"
+type = "certification"
 
 # Languages
 [languages]

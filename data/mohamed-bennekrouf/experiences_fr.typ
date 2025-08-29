@@ -1,66 +1,83 @@
 #import "template.typ": conf, date, dated_experience, experience_details, section
 #let get_work_experience() = {
   [
-    = Expérience Professionnelle
-    == Mayorana
+    // = Work Experience
+    #dated_experience(  
+      "Technical Lead Developer",  
+      date: "From 2022 to Present (2 years and 9 months)",
+      company: "Mayorana - Rust / an AI startup",
+      content: [  
+        #experience_details(  
+          "Developed Rust Substrate smart contracts with frontend for allfeat.com, a blockchain-based music service platform built on Substrate. Created a react-native mobile app for one customer to use these services."
+        )
+        #experience_details(  
+          "Built an NLP/LLM based program that converts sentences to API calls. Based on Rust / Ollama / Deepseek R1 / Iggy messaging and Micro-services. See api0.ai."  
+        )
+        #experience_details(  
+          "Developed a log library based on Rust/gRPC. See crate grpc_logger."  
+        )  
+      ]  
+    )
+    
+    #dated_experience(  
+      "CTO - Founding software engineering - Lead development teams",  
+      date: "From 2016 to 2021 (5 years)",
+      company: "Concreet & eJust - Startup CTO roles",
+      description: "Led technical development for two startups: Concreet (real estate SAAS platform) and eJust (justice arbitration platform)",  
+      content: [  
+        #experience_details(  
+          "Built Concreet's SAAS platform with Node.js for real estate project management, including mobile app for field collaboration tracking."  
+        )  
+        #experience_details(  
+          "Migrated eJust's monolithic Java backend to a multi-tenant architecture for justice arbitration and mediation."  
+        )
+        #experience_details(  
+          "Implemented core backend features, CI/CD pipelines, AWS infrastructure management, and automated deployments."  
+        )  
+      ]  
+    )
+    
     #dated_experience(
-      "Freelance - Développeur Principal",
-      date: "2022 - Présent",
+      "Lead Frontend Developer",
+      date: "From 2012 to 2016 (4 years)",
+      company: "Inpart.io",
+      description: "SASS platform for pharmaceutical professionals",
       content: [
         #experience_details(
-          "Programme Rust pour une migration de données, développement d'un programme d'analyse de dette technique, développement d'un Agent IA (basé sur BERT) soutenu par des micro-services rust (API matcher, messagerie, client mail)"
+          "Led frontend development team using Angular and React for an enterprise application serving 5000+ pharmaceutical professionals."
         )
         #experience_details(
-          "En tant que développeur blockchain expérimenté : intégration de portefeuilles dans une application, interaction avec des smart contracts BNB, développement d'une application de suivi en temps réel du token DAI, développement de pallet substrate et corrections de bugs substrate (blockchain musicale Allfeat), création d'un token SPL Solana (RIBH sur Raydium)"
-        )
-        #experience_details(
-          "Développement d'applications mobiles avec contributions open-source (Voir les dépôts github.com/bennekrouf/mayo*). Développement d'une application d'apprentissage avec un rust / rocket / sled (Cf similar-sled / ribh.io)."
+          "Developed mobile applications using PhoneGap for cross-platform deployment and offline functionality."
         )
       ]
     )
     
-    == Concreet
     #dated_experience(
-      "CTO - Responsable Ingénierie Logicielle",
-      date: "2016 - 2021",
-      description: "Plateforme SAAS utilisée pour gérer des projets immobiliers et suivre les activités des collaborateurs via une application mobile",
+      "Lead Developer - Architect",
+      date: "From 2007 to 2015 (8 years)",
+      company: "CGI",
       content: [
         #experience_details(
-          "Définition de la stack technique et initiation du développement des composants architecturaux de l'application : scaffolding, couche fondamentale backend (authentification, connecteurs de base de données)"
+          "Developed POCs using Beacon and GPS detection technologies for mobile applications."
         )
         #experience_details(
-          "Direction et mentorat de l'équipe de développement : réunion quotidienne, revue de code, discussions techniques, refactoring et optimisation du code. Configuration Devops : Pipelines pour CI/CD, scripting bash, intégration AWS S3, planificateur de processus PM2"
+          "Data analysis and database architecture to build a new credit scoring system (Coface services)."
         )
       ]
     )
     
-    == CGI
-    #dated_experience(
-      "Développeur Principal - Architecte",
-      date: "2007 -- 2015",
-      content: [
-        #experience_details(
-          "Direction d'une équipe frontend pour développer une application d'entreprise utilisée par plus de 5000 professionnels pharmaceutiques (inpart.io), développement de POCs utilisant Beacon, détection GPS pour application mobile"
-        )
-        #experience_details(
-          "Analyse de données et architecture de base de données pour construire un nouveau système de scoring crédit (Services Coface)"
-        )
-      ]
-    )
-    
-    == Accenture
     #dated_experience(
       "Consultant",
-      date: "1998 -- 2006",
+      date: "From 1998 to 2006 (8 years)",
+      company: "Accenture",
       content: [
         #experience_details(
-          "Développement de composants architecturaux (proxy, cache, authentification) et de composants UI (Banques Populaires)"
+          "Developed architectural components (proxy, cache, authentication) and UI components (Banques Populaires)"
         )
         #experience_details(
-          "Développement d'un framework de persistance de données backend utilisant : MQ-Series / WebSphere / programmes COBOL (Banque Générale du Luxembourg)"
+          "Developed a back-end data persistence framework using: MQ-Series / WebSphere / COBOL programs (Banque Générale du Luxembourg)"
         )
       ]
     )
   ]
 }
-
