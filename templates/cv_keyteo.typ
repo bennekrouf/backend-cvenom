@@ -80,8 +80,8 @@
   },
   // Second row  
   text(size: 12pt, weight: "bold", fill: rgb("#14A4E6"), "Keyteo Business Manager"),
-  if "manager_info" in details { 
-    text(size: 11pt, details.manager_info) 
+  if "manager_name" in details and "manager_email" in details and "manager_phone" in details { 
+    text(size: 11pt, details.manager_name + " – " + details.manager_email + " – " + details.manager_phone) 
   } else { 
     text(size: 11pt, "Anthony Levavasseur – alevavasseur@keyteo.ch – 078 230 36 38") 
   }

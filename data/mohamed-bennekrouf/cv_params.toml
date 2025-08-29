@@ -5,6 +5,11 @@ email = "mb@mayorana.ch"
 address = "1162 Saint-Prex - Switzerland"
 picture = "profile.png"
 
+# Manager information
+manager_name = "Anthony Levavasseur"
+manager_email = "alevavasseur@keyteo.ch"
+manager_phone = "078 230 36 38"
+
 [links]
 github = "https://github.com/bennekrouf"
 linkedin = "https://www.linkedin.com/in/bennekrouf"
