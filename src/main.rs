@@ -3,6 +3,12 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use cv_generator::{CvConfig, CvGenerator, CvTemplate, list_persons, list_templates, web::start_web_server};
 
+// mod auth;
+mod database;
+mod tenant_cli;
+
+use tenant_cli::{TenantCli, handle_tenant_command};
+
 #[derive(Parser)]
 #[command(author, version, about)]
 struct Cli {
@@ -38,6 +44,11 @@ enum Commands {
     Server {
         #[arg(short, long, default_value = "8000")]
         port: u16,
+    },
+    /// Manage tenants (add, remove, list, etc.)
+    Tenant {
+        #[command(flatten)]
+        tenant_cli: TenantCli,
     },
 }
 
@@ -105,19 +116,36 @@ async fn main() -> Result<()> {
         }
 
         Commands::Server { port: _ } => {
-            println!("Starting CV generator web server on http://0.0.0.0:8000");
-            println!("Endpoints:");
-            println!("  POST /api/generate      - Generate CV");
-            println!("  POST /api/create        - Create person");
-            println!("  POST /api/upload-picture - Upload profile picture");
-            println!("  GET  /api/templates     - List available templates");
+            println!("Starting Multi-tenant CV Generator API Server on http://0.0.0.0:8000");
+            println!("");
+            println!("Multi-tenancy: Users must be registered in SQLite database");
+            println!("Authentication: Firebase ID tokens + tenant validation required");
+            println!("Database: {}/tenants.db", cli.data_dir.display());
+            println!("");
+            println!("Public Endpoints:");
             println!("  GET  /api/health        - Health check");
+            println!("  GET  /api/templates     - List available templates");
+            println!("");
+            println!("Protected Endpoints (require Firebase auth + tenant registration):");
+            println!("  POST /api/generate      - Generate CV (tenant-isolated)");
+            println!("  POST /api/create        - Create person (tenant-isolated)");  
+            println!("  POST /api/upload-picture - Upload profile picture (tenant-isolated)");
+            println!("  GET  /api/me            - Get current user + tenant info");
+            println!("");
+            println!("Tenant Management:");
+            println!("  Use: cargo run -- tenant add <email> <tenant-name>");
+            println!("  Use: cargo run -- tenant list");
+            println!("");
             
             start_web_server(
                 cli.data_dir,
                 cli.output_dir,
                 cli.templates_dir
             ).await
+        }
+
+        Commands::Tenant { tenant_cli } => {
+            handle_tenant_command(tenant_cli).await
         }
     }
 }

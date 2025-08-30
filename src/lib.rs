@@ -4,6 +4,8 @@ use std::{fs, path::PathBuf};
 use std::process::Command;
 use std::collections::HashMap;
 
+pub mod auth;
+pub mod database;
 pub mod web;
 
 /// Available CV templates
