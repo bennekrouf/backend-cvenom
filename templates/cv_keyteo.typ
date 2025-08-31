@@ -30,7 +30,7 @@
  header: [
   #v(20pt)
   #align(center)[
-      #image("keyteo_logo.png", width: 160pt, height: 70pt, fit: "contain")
+      #image("company_logo.png", width: 160pt, height: 70pt, fit: "contain")
   ]
   #v(20pt)
 ],

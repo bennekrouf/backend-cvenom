@@ -226,7 +226,17 @@
   if details.at("picture", default: "").len() > 0 {
     grid(
       columns: (0.5fr, 1fr, 2.5fr),
-      align(right + horizon, image(details.picture, width: 90%)),
+{
+  let img_result = try {
+    image(details.picture, width: 90%)
+  }
+  if img_result != none {
+    align(right + horizon, img_result)
+  } else {
+    align(right + horizon, rect(width: 90%, height: 100pt, fill: gray.lighten(80%), 
+      align(center + horizon, text(size: 10pt, fill: gray, "No Image"))))
+  }
+},
       h(1fr),
       show_details_text(icons: icons, separator: separator, color: color, details),
     )

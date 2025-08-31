@@ -1,6 +1,6 @@
 # Personal Information
-name = "{{name}}"
-phonenumber = ""
+name = "salma-bennekrouf"
+phonenumber = "54354"
 email = ""
 address = ""
 picture = "profile.png"
@@ -13,15 +13,15 @@ manager_name = "Anthony Levavasseur"
 manager_email = "alevavasseur@keyteo.ch"
 manager_phone = "078 230 36 38"
 
-
 # Consultant information  
-consultant_name = "{{name}}"
+consultant_name = "salma-bennekrouf"
 
 # Manager information
 manager_info = "Anthony Levavasseur – alevavasseur@keyteo.ch – 078 230 36 38"
 
-company_logo = "logo.png"
+# Company/Logo information (for logo template)
 company_name = ""
+company_logo = "logo.png"
 
 [links]
 github = ""

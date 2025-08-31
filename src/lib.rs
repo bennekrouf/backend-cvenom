@@ -331,20 +331,40 @@ impl CvGenerator {
             .context("Failed to create standardized experiences file")?;
         
         // Copy person's profile image
-        let person_image_png = PathBuf::from("..").join(self.config.person_image_path());
-        if person_image_png.exists() {
-            let profile_dest = PathBuf::from("profile.png");
-            println!("Copying profile image from {} to {}", person_image_png.display(), profile_dest.display());
-            fs::copy(&person_image_png, &profile_dest)
-                .context("Failed to copy person image")?;
-        } else {
-            println!("No profile image found at {}", person_image_png.display());
+let person_image_png = PathBuf::from("..").join(self.config.person_image_path());
+if person_image_png.exists() {
+    let profile_dest = PathBuf::from("profile.png");
+    println!("Copying profile image from {} to {}", person_image_png.display(), profile_dest.display());
+    
+    match fs::copy(&person_image_png, &profile_dest) {
+        Ok(_) => {
+            // Verify the copied image is valid
+            match std::process::Command::new("file")
+                .arg(&profile_dest)
+                .output() {
+                Ok(output) => {
+                    let file_type = String::from_utf8_lossy(&output.stdout);
+                    println!("Profile image file type: {}", file_type.trim());
+                    if !file_type.contains("PNG") && !file_type.contains("JPEG") {
+                        println!("Warning: Profile image may not be a valid image format");
+                    }
+                },
+                Err(e) => println!("Could not verify image type: {}", e)
+            }
+        },
+        Err(e) => {
+            println!("Failed to copy profile image: {}", e);
+            // Create a placeholder or skip image
         }
+    }
+} else {
+    println!("No profile image found at {}", person_image_png.display());
+}
         
         // Copy template-specific logo from templates directory
         let template_logo_name = match self.config.template {
-            CvTemplate::Keyteo => "keyteo_logo.png",
-            CvTemplate::Default => "default_logo.png",
+            CvTemplate::Keyteo => "company_logo.png",
+            CvTemplate::Default => "company_logo.png",
         };
         let template_logo_source = PathBuf::from("..").join(&self.config.templates_dir).join(template_logo_name);
         if template_logo_source.exists() {
