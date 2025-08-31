@@ -2,8 +2,8 @@
 use anyhow::{Result, Context};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Row, SqlitePool};
-use tracing::{info, error};
+use sqlx::SqlitePool;
+use tracing::info;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -130,20 +130,20 @@ impl<'a> TenantRepository<'a> {
     }
 
     /// Find tenant by tenant_name
-    pub async fn find_by_tenant_name(&self, tenant_name: &str) -> Result<Option<Tenant>> {
-        let tenant = sqlx::query_as::<_, Tenant>(
-            r#"
-            SELECT id, email, tenant_name, created_at, updated_at, is_active
-            FROM tenants 
-            WHERE tenant_name = ? AND is_active = TRUE
-            "#
-        )
-        .bind(tenant_name)
-        .fetch_optional(self.pool)
-        .await?;
-
-        Ok(tenant)
-    }
+    // pub async fn find_by_tenant_name(&self, tenant_name: &str) -> Result<Option<Tenant>> {
+    //     let tenant = sqlx::query_as::<_, Tenant>(
+    //         r#"
+    //         SELECT id, email, tenant_name, created_at, updated_at, is_active
+    //         FROM tenants 
+    //         WHERE tenant_name = ? AND is_active = TRUE
+    //         "#
+    //     )
+    //     .bind(tenant_name)
+    //     .fetch_optional(self.pool)
+    //     .await?;
+    //
+    //     Ok(tenant)
+    // }
 
     /// Create a new tenant
     pub async fn create(&self, email: &str, tenant_name: &str) -> Result<Tenant> {
@@ -213,22 +213,6 @@ impl<'a> TenantRepository<'a> {
         }
         
         Ok(updated)
-    }
-
-    /// Check if email is allowed (has active tenant)
-    pub async fn is_email_allowed(&self, email: &str) -> Result<bool> {
-        let count: i64 = sqlx::query_scalar(
-            r#"
-            SELECT COUNT(*) 
-            FROM tenants 
-            WHERE email = ? AND is_active = TRUE
-            "#
-        )
-        .bind(email)
-        .fetch_one(self.pool)
-        .await?;
-
-        Ok(count > 0)
     }
 }
 

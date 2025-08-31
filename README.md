@@ -36,7 +36,11 @@ mkdir -p data output templates
 cargo run -- tenant init
 
 # Add tenants manually
-cargo run -- tenant add user@example.com company-name
+cargo run -- tenant add mohamed.bennekrouf@gmail.com keyteo
+
+# Check it is added
+cargo run -- tenant check mohamed.bennekrouf@gmail.com
+
 
 # OR import from CSV
 echo "email,tenant_name

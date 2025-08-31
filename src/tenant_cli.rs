@@ -3,7 +3,7 @@ use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use crate::database::{DatabaseConfig, TenantService, TenantRepository};
-use tracing::{info, error};
+use tracing::error;
 
 #[derive(Parser)]
 #[command(name = "tenant-manager")]

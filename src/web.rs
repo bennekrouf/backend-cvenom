@@ -1,6 +1,7 @@
 // src/web.rs
 use anyhow::Result;
 use rocket::serde::{Deserialize, Serialize, json::Json};
+use rocket::serde::json::serde_json;
 use rocket::{get, post, routes, State, fairing::{Fairing, Info, Kind}};
 use rocket::http::{Status, Header, ContentType};
 use rocket::{Request, Response};
@@ -8,13 +9,18 @@ use rocket::response::{self, Responder};
 use rocket::form::{Form, FromForm};
 use rocket::fs::TempFile;
 use std::path::PathBuf;
-use std::fs;
 use tracing::{info, error, warn};
 use crate::{CvConfig, CvGenerator, CvTemplate, list_templates};
-use crate::auth::{AuthenticatedUser, OptionalAuth, AuthConfig, AuthError};
+use crate::auth::{AuthenticatedUser, OptionalAuth, AuthConfig};
 use crate::database::{DatabaseConfig, TenantService};
+use async_recursion::async_recursion;
+
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{EnvFilter, Registry};
 
 pub struct PdfResponse(Vec<u8>);
+pub struct Cors;
 
 impl<'r> Responder<'r, 'static> for PdfResponse {
     fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
@@ -24,8 +30,6 @@ impl<'r> Responder<'r, 'static> for PdfResponse {
             .ok()
     }
 }
-
-pub struct Cors;
 
 #[rocket::async_trait]
 impl Fairing for Cors {
@@ -139,13 +143,13 @@ pub async fn generate_cv(
 ) -> Result<PdfResponse, Status> {
     let user = auth.user();
     let tenant = auth.tenant();
-    
+
     info!("User {} (tenant: {}) generating CV for {}", 
           user.email, tenant.tenant_name, request.person);
-    
+
     let lang = request.lang.as_deref().unwrap_or("en");
     let template_str = request.template.as_deref().unwrap_or("default");
-    
+
     let template = match CvTemplate::from_str(template_str) {
         Ok(t) => t,
         Err(_) => {
@@ -171,13 +175,13 @@ pub async fn generate_cv(
             return Err(Status::InternalServerError);
         }
     };
-    
+
     let cv_config = CvConfig::new(&request.person, lang)
         .with_template(template)
         .with_data_dir(tenant_data_dir)
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
-    
+
     match CvGenerator::new(cv_config) {
         Ok(generator) => {
             match generator.generate_pdf_data() {
@@ -431,11 +435,16 @@ pub async fn start_web_server(
     output_dir: PathBuf, 
     templates_dir: PathBuf
 ) -> Result<()> {
+    Registry::default()
+        .with(tracing_subscriber::fmt::layer())
+        .with(EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new("DEBUG")))
+        .init();
+
     // Initialize tracing
-    tracing_subscriber::fmt()
-    .with_ansi(false)  // Disable ANSI colors
-    .with_env_filter("info")
-    .init();
+    // tracing_subscriber::fmt()
+    // .with_ansi(false)  // Disable ANSI colors
+    // .with_env_filter("info")
+    // .init();
 
     let server_config = ServerConfig {
         data_dir: data_dir.clone(),
@@ -487,10 +496,219 @@ pub async fn start_web_server(
             get_current_user,
             get_current_user_error,
             health,
+    get_tenant_files,          // Add this
+    get_tenant_file_content,   // Add this  
+    save_tenant_file_content,  // Add this
             options
         ])
         .launch()
         .await;
 
     Ok(())
+}
+
+
+#[get("/files/content?<path>")]
+pub async fn get_tenant_file_content(
+    path: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>
+) -> Result<String, Status> {
+    let tenant = auth.tenant();
+    
+    // Security: Only allow .typ and .toml files
+    if !path.ends_with(".typ") && !path.ends_with(".toml") {
+        warn!("Unauthorized file access attempt: {}", path);
+        return Err(Status::Forbidden);
+    }
+
+    info!("User {} (tenant: {}) requesting file: {}", 
+          auth.user().email, tenant.tenant_name, path);
+
+    // Get tenant-specific data directory
+    let pool = match db_config.pool() {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Database connection failed: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let tenant_service = TenantService::new(pool);
+    let tenant_data_dir = match tenant_service.ensure_tenant_data_dir(&config.data_dir, tenant).await {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to ensure tenant data directory: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let file_path = tenant_data_dir.join(&path);
+    
+    // Security: Ensure the file is within tenant directory
+    if !file_path.starts_with(&tenant_data_dir) {
+        warn!("Path traversal attempt: {}", path);
+        return Err(Status::Forbidden);
+    }
+
+    match tokio::fs::read_to_string(&file_path).await {
+        Ok(content) => {
+            info!("File content served: {} for tenant: {}", path, tenant.tenant_name);
+            Ok(content)
+        },
+        Err(e) => {
+            error!("Failed to read file {}: {}", file_path.display(), e);
+            Err(Status::NotFound)
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct SaveFileRequest {
+    pub path: String,
+    pub content: String,
+}
+
+#[post("/files/save", data = "<request>")]
+pub async fn save_tenant_file_content(
+    request: Json<SaveFileRequest>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>
+) -> Result<Json<serde_json::Value>, Status> {
+    let tenant = auth.tenant();
+    
+    // Security: Only allow .typ and .toml files
+    if !request.path.ends_with(".typ") && !request.path.ends_with(".toml") {
+        warn!("Unauthorized file save attempt: {}", request.path);
+        return Err(Status::Forbidden);
+    }
+
+    info!("User {} (tenant: {}) saving file: {}", 
+          auth.user().email, tenant.tenant_name, request.path);
+
+    // Get tenant-specific data directory
+    let pool = match db_config.pool() {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Database connection failed: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let tenant_service = TenantService::new(pool);
+    let tenant_data_dir = match tenant_service.ensure_tenant_data_dir(&config.data_dir, tenant).await {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to ensure tenant data directory: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let file_path = tenant_data_dir.join(&request.path);
+    
+    // Security: Ensure the file is within tenant directory
+    if !file_path.starts_with(&tenant_data_dir) {
+        warn!("Path traversal attempt: {}", request.path);
+        return Err(Status::Forbidden);
+    }
+
+    // Ensure parent directory exists
+    if let Some(parent) = file_path.parent() {
+        if let Err(e) = tokio::fs::create_dir_all(parent).await {
+            error!("Failed to create directory {}: {}", parent.display(), e);
+            return Err(Status::InternalServerError);
+        }
+    }
+
+    match tokio::fs::write(&file_path, &request.content).await {
+        Ok(_) => {
+            info!("File saved: {} for tenant: {}", request.path, tenant.tenant_name);
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "message": "File saved successfully"
+            })))
+        },
+        Err(e) => {
+            error!("Failed to save file {}: {}", file_path.display(), e);
+            Err(Status::InternalServerError)
+        }
+    }
+}
+
+#[get("/files/tree")]
+pub async fn get_tenant_files(
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>
+) -> Result<Json<serde_json::Value>, Status> {
+    let tenant = auth.tenant();
+    
+    info!("User {} (tenant: {}) requesting file tree", 
+          auth.user().email, tenant.tenant_name);
+
+    // Get tenant-specific data directory
+    let pool = match db_config.pool() {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Database connection failed: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let tenant_service = TenantService::new(pool);
+    let tenant_data_dir = match tenant_service.ensure_tenant_data_dir(&config.data_dir, tenant).await {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to ensure tenant data directory: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    // Build file tree for tenant's directory only
+    match build_file_tree(&tenant_data_dir).await {
+        Ok(tree) => Ok(Json(serde_json::to_value(tree).unwrap_or_default())),
+        Err(e) => {
+            error!("Failed to build file tree for tenant {}: {}", tenant.tenant_name, e);
+            Err(Status::InternalServerError)
+        }
+    }
+}
+
+#[async_recursion]
+async fn build_file_tree(dir_path: &std::path::Path) -> Result<std::collections::HashMap<String, serde_json::Value>, anyhow::Error> {
+    use std::collections::HashMap;
+    use tokio::fs;
+
+    let mut tree = HashMap::new();
+    
+    if !dir_path.exists() {
+        return Ok(tree);
+    }
+
+    let mut entries = fs::read_dir(dir_path).await?;
+    
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        let metadata = entry.metadata().await?;
+
+        if metadata.is_dir() {
+            let children = build_file_tree(&path).await?;
+            tree.insert(name, serde_json::json!({
+                "type": "folder",
+                "children": children
+            }));
+        } else if name.ends_with(".typ") || name.ends_with(".toml") {
+            tree.insert(name, serde_json::json!({
+                "type": "file",
+                "size": metadata.len(),
+                "modified": metadata.modified().ok()
+            }));
+        }
+    }
+
+    Ok(tree)
 }
