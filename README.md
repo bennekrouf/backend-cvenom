@@ -107,6 +107,18 @@ cargo run -- generate person-name --lang en --template keyteo
 
 # Watch mode (auto-recompile on changes)
 cargo run -- generate person-name --lang en --watch
+
+
+# Add domain tenant for keyteo.ch
+cargo run -- tenant add-domain keyteo.ch keyteo
+
+# Test it works
+cargo run -- tenant check mohamed.bennekrouf@keyteo.ch
+cargo run -- tenant check alevavasseur@keyteo.ch  
+cargo run -- tenant check anyone@keyteo.ch
+
+# List all tenants
+cargo run -- tenant list
 ```
 
 ### File Management
