@@ -1,4 +1,3 @@
-
 // global variables
 #let default_primary_color = rgb("#14A4E6")
 #let default_secondary_color = rgb("#757575")
@@ -61,19 +60,40 @@
 /* function that processes links */
 #let process_links(color: none, icons: none, links) = {
   if icons == none {
-    icons = default_icons
+    icons = get_default_icons(color: color)
   } else {
     // if the user supplies a custom dictionary, update the default one
     icons = join_dicts(get_default_icons(color: color), icons)
   }
-  links.pairs().map(
-    it => text(
-      fill: color,
-      link(
-        it.at(1),
-        icons.at(it.at(0), default: (:)).at("logo", default: "") + " " + icons.at(it.at(0), default: (:)).at("displayname", default: ""),
-      ),
-    ),
+  
+  // Handle both array and dictionary formats for links
+  let link_pairs = ()
+  
+  if type(links) == "array" {
+    // If links is an array, treat each item as a URL with default icon
+    for link in links {
+      link_pairs.push(("personal", link))
+    }
+  } else if type(links) == "dictionary" {
+    // If links is a dictionary, use key-value pairs
+    link_pairs = links.pairs()
+  } else {
+    // Fallback: empty links
+    link_pairs = ()
+  }
+  
+  link_pairs.map(
+    it => {
+      let key = it.at(0)
+      let url = it.at(1)
+      text(
+        fill: color,
+        link(
+          url,
+          icons.at(key, default: (:)).at("logo", default: "") + " " + icons.at(key, default: (:)).at("displayname", default: key),
+        ),
+      )
+    }
   )
 }
 
@@ -226,17 +246,14 @@
   if details.at("picture", default: "").len() > 0 {
     grid(
       columns: (0.5fr, 1fr, 2.5fr),
-{
-  let img_result = try {
-    image(details.picture, width: 90%)
-  }
-  if img_result != none {
-    align(right + horizon, img_result)
-  } else {
-    align(right + horizon, rect(width: 90%, height: 100pt, fill: gray.lighten(80%), 
-      align(center + horizon, text(size: 10pt, fill: gray, "No Image"))))
-  }
-},
+      {
+        if sys.inputs.at("picture", default: none) != none {
+          align(right + horizon, image(details.picture, width: 90%))
+        } else {
+          align(right + horizon, rect(width: 90%, height: 100pt, fill: gray.lighten(80%), 
+            align(center + horizon, text(size: 10pt, fill: gray, "No Image"))))
+        }
+      },
       h(1fr),
       show_details_text(icons: icons, separator: separator, color: color, details),
     )
@@ -347,4 +364,3 @@ set text(font: ("Arial", "Helvetica", "Liberation Sans"), ligatures: false)
   // the actual content of the document
   doc
 }
-

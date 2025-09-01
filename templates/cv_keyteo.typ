@@ -25,12 +25,34 @@
   // v(1em)
 }
 
+// Function to handle logo display gracefully
+#let show_logo() = {
+  // Check if company_logo.png was provided as input
+  if sys.inputs.at("company_logo.png", default: none) != none {
+    // Logo exists - display it
+    align(center + horizon)[
+      #image("company_logo.png", width: 150pt, height: 60pt, fit: "contain")
+    ]
+  } else {
+    // Fallback: Show professional text logo
+    rect(
+      width: 160pt,
+      height: 70pt,
+      fill: rgb("#049cb0"),
+      radius: 4pt,
+      align(center + horizon)[
+        #text(size: 18pt, weight: "bold", fill: white, "KEYTEO")
+      ]
+    )
+  }
+}
+
 // Don't use the default conf layout - we'll create custom layout
 #set page(
  header: [
   #v(20pt)
   #align(center)[
-      #image("company_logo.png", width: 160pt, height: 70pt, fit: "contain")
+      #show_logo()
   ]
   #v(20pt)
 ],
