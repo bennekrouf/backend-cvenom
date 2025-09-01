@@ -396,41 +396,25 @@ impl CvGenerator {
             println!("No profile image found at {}", person_image_png.display());
         }
 
-        // Look for company logo in person's directory first, then tenant directory
-        let person_logo_source = PathBuf::from("..")
-            .join(self.config.person_data_dir())
-            .join("company_logo.png");
+        // Look for company logo in tenant directory first (shared), then person directory (override)
         let tenant_logo_source = PathBuf::from("..")
             .join(&self.config.data_dir)
+            .join("company_logo.png");
+        let person_logo_source = PathBuf::from("..")
+            .join(self.config.person_data_dir())
             .join("company_logo.png");
         let logo_dest = PathBuf::from("company_logo.png");
 
         println!(
-            "DEBUG: Looking for logo at person dir: {}",
-            person_logo_source.display()
-        );
-        println!(
             "DEBUG: Looking for logo at tenant dir: {}",
             tenant_logo_source.display()
         );
+        println!(
+            "DEBUG: Looking for logo at person dir: {}",
+            person_logo_source.display()
+        );
 
-        let logo_available = if person_logo_source.exists() {
-            println!(
-                "Copying person logo from {} to {}",
-                person_logo_source.display(),
-                logo_dest.display()
-            );
-            match fs::copy(&person_logo_source, &logo_dest) {
-                Ok(_) => {
-                    println!("Person logo copied successfully");
-                    true
-                }
-                Err(e) => {
-                    println!("Failed to copy person logo: {}", e);
-                    false
-                }
-            }
-        } else if tenant_logo_source.exists() {
+        let logo_available = if tenant_logo_source.exists() {
             println!(
                 "Copying tenant logo from {} to {}",
                 tenant_logo_source.display(),
@@ -446,11 +430,27 @@ impl CvGenerator {
                     false
                 }
             }
+        } else if person_logo_source.exists() {
+            println!(
+                "No tenant logo found, using person logo from {} to {}",
+                person_logo_source.display(),
+                logo_dest.display()
+            );
+            match fs::copy(&person_logo_source, &logo_dest) {
+                Ok(_) => {
+                    println!("Person logo copied successfully");
+                    true
+                }
+                Err(e) => {
+                    println!("Failed to copy person logo: {}", e);
+                    false
+                }
+            }
         } else {
             println!(
                 "No logo found at either {} or {} - will use fallback",
-                person_logo_source.display(),
-                tenant_logo_source.display()
+                tenant_logo_source.display(),
+                person_logo_source.display()
             );
             false
         };
@@ -470,7 +470,7 @@ impl CvGenerator {
                 fs::read_to_string(&template_file).context("Failed to read template file")?;
 
             // Replace the hardcoded import with dynamic language import
-            let mut processed_content = template_content.replace(
+            let processed_content = template_content.replace(
                 "experiences_en.typ",
                 &format!("experiences_{}.typ", self.config.lang),
             );
