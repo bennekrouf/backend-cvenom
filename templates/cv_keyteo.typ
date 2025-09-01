@@ -1,5 +1,5 @@
-#import "template.typ": conf, date, dated_experience, experience_details, section, show_skills
-#import "experiences_en.typ" : get_work_experience
+#import "template.typ": conf, date, dated_experience, experience_details, section, show_skills, get_text
+#import "experiences.typ" : get_work_experience
 
 #let details = toml("cv_params.toml")
 
@@ -22,7 +22,6 @@
       )
     )
   ]
-  // v(1em)
 }
 
 // Function to handle logo display gracefully
@@ -60,15 +59,15 @@
     #grid(
       columns: (1fr, 2fr, 1fr),
       align: (left, center, right),
-      text(size: 9pt, "Skills file"),
-      text(size: 9pt, "Confidential document, reproduction prohibited"),
+      text(size: 9pt, get_text("skills_file")),
+      text(size: 9pt, get_text("confidential_document")),
       context text(size: 9pt, [#counter(page).display()/#counter(page).final().first()])
     )
     #v(-0.2em)
     #line(length: 100%, stroke: 0.5pt + rgb("#14A4E6"))
     #v(-0.2em)
     #align(center)[
-      #text(size: 7pt, "www.keyteo.ch")
+      #text(size: 7pt, get_text("website"))
     ]
   ],
   header-ascent: -20pt,
@@ -111,7 +110,7 @@
 
 #v(0.5em)
 
-#keyteo_section(if details.at("lang", default: "en") == "fr" { "Points clés" } else { "Key insights" })
+#keyteo_section(get_text("key_insights"))
 #if "key_insights" in details {
   experience_details(..details.key_insights)
 } else {
@@ -123,19 +122,19 @@
   )
 }
 
-#keyteo_section(if details.at("lang", default: "en") == "fr" { "Compétences" } else { "Technical Skills" })
+#keyteo_section(get_text("technical_skills"))
 #if "skills" in details {
   show_skills(details.skills)
 } else {
   [No skills data found in configuration]
 }
 
-#keyteo_section(if details.at("lang", default: "en") == "fr" { "Formation" } else { "Certifications & Education" })
+#keyteo_section(get_text("certifications_education"))
 #if "education" in details {
   // Diplomas section
   let diplomas = details.education.filter(item => item.at("type", default: "education") == "diploma")
   if diplomas.len() > 0 {
-    text(weight: "bold", if details.at("lang", default: "en") == "fr" { "Diplômes" } else { "Diplomas" })
+    text(weight: "bold", get_text("diplomas"))
     for item in diplomas {
       experience_details(item.title + " " + item.date)
     }
@@ -144,7 +143,7 @@
   // Certifications section  
   let certifications = details.education.filter(item => item.at("type", default: "education") != "diploma")
   if certifications.len() > 0 {
-    text(weight: "bold", if details.at("lang", default: "en") == "fr" { "Certifications" } else { "Certifications" })
+    text(weight: "bold", get_text("certifications"))
     for item in certifications {
       experience_details(item.title + " " + item.date)
     }
@@ -153,7 +152,7 @@
   [No education data found in configuration]
 }
 
-#keyteo_section(if details.at("lang", default: "en") == "fr" { "Langues" } else { "Languages" })
+#keyteo_section(get_text("languages"))
 #if "languages" in details {
   let lang_items = ()
   if "native" in details.languages {
@@ -177,6 +176,6 @@
 }
 
 #block[
-  #keyteo_section(if details.at("lang", default: "en") == "fr" { "Expérience Professionnelle" } else { "Work Experience" })
+  #keyteo_section(get_text("work_experience"))
   #get_work_experience()
 ]

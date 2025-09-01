@@ -1,7 +1,6 @@
-#import "template.typ": conf, date, dated_experience, experience_details, section
+#import "template.typ": conf, date, dated_experience, experience_details, section, get_text
 #let get_work_experience() = {
   [
-    = Work Experience
     == Company Name
     #dated_experience(
       "Job Title",

@@ -1,5 +1,5 @@
-#import "template.typ": conf, date, dated_experience, experience_details, section, show_skills
-#import "experiences_en.typ" : get_work_experience
+#import "template.typ": conf, date, dated_experience, experience_details, section, show_skills, get_text
+#import "experiences.typ" : get_work_experience
 
 #let details = toml("cv_params.toml")
 
@@ -8,14 +8,14 @@
 
 #get_work_experience()
 
-= Technical Skills
+= #get_text("technical_skills")
 #if "skills" in details {
   show_skills(details.skills)
 } else {
   [No skills data found in configuration]
 }
 
-= Certifications & Education
+= #get_text("certifications_education")
 #if "education" in details {
   for item in details.education {
     dated_experience(
@@ -27,7 +27,7 @@
   [No education data found in configuration]
 }
 
-= Languages
+= #get_text("languages")
 #if "languages" in details {
   let lang_items = ()
   if "native" in details.languages {

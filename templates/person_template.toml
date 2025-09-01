@@ -13,7 +13,6 @@ manager_name = "Anthony Levavasseur"
 manager_email = "alevavasseur@keyteo.ch"
 manager_phone = "078 230 36 38"
 
-
 # Consultant information  
 consultant_name = "{{name}}"
 
@@ -33,6 +32,14 @@ personal = ""
 Languages = [""]
 Frameworks = [""]
 Others = [""]
+
+# Key insights for professional summary
+key_insights = [
+    "Experienced technical lead with proven track record in startup environments",
+    "Expert in modern development stacks with focus on Rust and microservices architecture", 
+    "Strong background in AI/ML integration and blockchain development",
+    "Demonstrated ability to scale teams and deliver complex technical solutions"
+]
 
 # Education & Certifications
 [[education]]

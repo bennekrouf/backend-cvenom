@@ -70,6 +70,7 @@ impl TemplateProcessor {
     }
 
     /// Create person directory with template-based files
+    // Lines to adapt in src/lib.rs - Around line 82, update create_person_from_templates:
     pub fn create_person_from_templates(
         &self,
         person_name: &str,
@@ -78,7 +79,6 @@ impl TemplateProcessor {
         let person_dir = data_dir.join(person_name);
         fs::create_dir_all(&person_dir).context("Failed to create person directory")?;
 
-        // Create variables for template processing
         let mut variables = HashMap::new();
         variables.insert("name".to_string(), person_name.to_string());
 
@@ -110,7 +110,7 @@ impl TemplateProcessor {
         // Create placeholder profile image info
         let readme_path = person_dir.join("README.md");
         let readme_content = format!(
-            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\n\nEdit the following files:\n- `cv_params.toml` - Personal information and skills\n- `experiences_*.typ` - Work experience for each language\n\n## Available Templates:\n- default: Standard CV layout\n- keyteo: CV with Keyteo logo at the top of every page\n",
+            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\nAdd your company logo as `company_logo.png` (optional - uses tenant-wide logo if not provided).\n\nEdit the following files:\n- `cv_params.toml` - Personal information, skills, and key insights\n- `experiences_*.typ` - Work experience for each language (en/fr)\n\nLanguage selection is now done at generation time via API, no need to set it in TOML.\n\n## Available Templates:\n- default: Standard CV layout\n- keyteo: CV with Keyteo logo and professional branding\n",
             person_name
         );
         fs::write(&readme_path, readme_content).context("Failed to write README.md")?;
@@ -346,20 +346,15 @@ impl CvGenerator {
         );
         fs::copy(&config_source, &config_dest).context("Failed to copy person config")?;
 
-        // Copy person's experiences file
+        // Copy person's experiences file for the requested language
         let exp_source = PathBuf::from("..").join(self.config.person_experiences_path());
-        let exp_dest = PathBuf::from(format!("experiences_{}.typ", self.config.lang));
+        let exp_dest = PathBuf::from("experiences.typ"); // Single standardized name
         println!(
             "Copying experiences from {} to {}",
             exp_source.display(),
             exp_dest.display()
         );
         fs::copy(&exp_source, &exp_dest).context("Failed to copy person experiences")?;
-
-        // Create a symlink or copy with standardized name for templates
-        let exp_standard = PathBuf::from("experiences.typ");
-        fs::copy(&exp_dest, &exp_standard)
-            .context("Failed to create standardized experiences file")?;
 
         // Copy person's profile image
         let person_image_png = PathBuf::from("..").join(self.config.person_image_path());
@@ -414,25 +409,9 @@ impl CvGenerator {
             person_logo_source.display()
         );
 
-        let logo_available = if tenant_logo_source.exists() {
+        let logo_available = if person_logo_source.exists() {
             println!(
-                "Copying tenant logo from {} to {}",
-                tenant_logo_source.display(),
-                logo_dest.display()
-            );
-            match fs::copy(&tenant_logo_source, &logo_dest) {
-                Ok(_) => {
-                    println!("Tenant logo copied successfully");
-                    true
-                }
-                Err(e) => {
-                    println!("Failed to copy tenant logo: {}", e);
-                    false
-                }
-            }
-        } else if person_logo_source.exists() {
-            println!(
-                "No tenant logo found, using person logo from {} to {}",
+                "Copying person logo from {} to {}",
                 person_logo_source.display(),
                 logo_dest.display()
             );
@@ -446,6 +425,22 @@ impl CvGenerator {
                     false
                 }
             }
+        } else if tenant_logo_source.exists() {
+            println!(
+                "No person logo found, using tenant logo from {} to {}",
+                tenant_logo_source.display(),
+                logo_dest.display()
+            );
+            match fs::copy(&tenant_logo_source, &logo_dest) {
+                Ok(_) => {
+                    println!("Tenant logo copied successfully");
+                    true
+                }
+                Err(e) => {
+                    println!("Failed to copy tenant logo: {}", e);
+                    false
+                }
+            }
         } else {
             println!(
                 "No logo found at either {} or {} - will use fallback",
@@ -455,7 +450,7 @@ impl CvGenerator {
             false
         };
 
-        // Copy and modify the template file to use correct language
+        // Copy template file directly (no language-specific processing needed)
         let template_file = PathBuf::from("..").join(&self.config.template_file_path());
         let template_dest = PathBuf::from(self.config.template.template_file());
 
@@ -469,19 +464,9 @@ impl CvGenerator {
             let template_content =
                 fs::read_to_string(&template_file).context("Failed to read template file")?;
 
-            // Replace the hardcoded import with dynamic language import
-            let processed_content = template_content.replace(
-                "experiences_en.typ",
-                &format!("experiences_{}.typ", self.config.lang),
-            );
-
-            // For templates that use logos, handle missing logo gracefully
-            if matches!(self.config.template, CvTemplate::Keyteo) && !logo_available {
-                println!("No logo available - template will use fallback logic");
-            }
-
-            // CRITICAL: Write the processed template to workspace
-            fs::write(&template_dest, processed_content)
+            // No need to replace language-specific imports anymore
+            // Templates now use standardized "experiences.typ"
+            fs::write(&template_dest, template_content)
                 .context("Failed to write processed template file")?;
 
             println!(
@@ -554,43 +539,31 @@ impl CvGenerator {
                 self.config.lang
             ));
 
-        println!("Compiling with typst...");
-        println!("Template file: {}", self.config.template.template_file());
-        println!("Output path: {}", output_path.display());
-
         let mut cmd = Command::new("typst");
         cmd.arg("compile")
             .arg(self.config.template.template_file())
             .arg(&output_path);
 
+        // Pass language as input to Typst
+        cmd.arg("--input").arg(format!("lang={}", self.config.lang));
+
         // Add input files so Typst can access them via sys.inputs
         if PathBuf::from("company_logo.png").exists() {
             cmd.arg("--input").arg("company_logo.png=company_logo.png");
-            println!("Added company_logo.png as input to Typst");
         }
 
         if PathBuf::from("profile.png").exists() {
             cmd.arg("--input").arg("profile.png=profile.png");
-            println!("Added profile.png as input to Typst");
         }
 
         let output = cmd.output().context("Failed to execute typst command")?;
 
         if !output.status.success() {
-            println!("Typst compilation failed!");
-            println!("STDERR: {}", String::from_utf8_lossy(&output.stderr));
-            anyhow::bail!("Typst compilation failed");
-        }
-
-        // Check if file actually exists
-        if !output_path.exists() {
             anyhow::bail!(
-                "PDF was not created at expected path: {}",
-                output_path.display()
+                "Typst compilation failed: {}",
+                String::from_utf8_lossy(&output.stderr)
             );
         }
-
-        println!("PDF created successfully at {}", output_path.display());
 
         Ok(output_path)
     }

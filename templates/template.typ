@@ -11,6 +11,53 @@
   " \u{007c} ",
 )
 
+// Get language from system inputs, fallback to 'en'
+#let get_lang() = {
+  sys.inputs.at("lang", default: "en")
+}
+
+// Language-specific text content
+#let get_text(key) = {
+  let lang = get_lang()
+  let texts = (
+    "en": (
+      "technical_skills": "Technical Skills",
+      "certifications_education": "Certifications & Education",
+      "languages": "Languages",
+      "work_experience": "Work Experience",
+      "key_insights": "Key insights",
+      "competences": "Technical Skills",
+      "formation": "Certifications & Education",
+      "langues": "Languages",
+      "experience_professionnelle": "Work Experience",
+      "diplomas": "Diplomas",
+      "certifications": "Certifications",
+      "points_cles": "Key insights",
+      "skills_file": "Skills file",
+      "confidential_document": "Confidential document, reproduction prohibited",
+      "website": "www.keyteo.ch"
+    ),
+    "fr": (
+      "technical_skills": "Compétences techniques",
+      "certifications_education": "Formations & Certifications",
+      "languages": "Langues",
+      "work_experience": "Expérience professionnelle",
+      "key_insights": "Points clés",
+      "competences": "Compétences techniques",
+      "formation": "Formations & Certifications", 
+      "langues": "Langues",
+      "experience_professionnelle": "Expérience professionnelle",
+      "diplomas": "Diplômes",
+      "certifications": "Certifications",
+      "points_cles": "Points clés",
+      "skills_file": "Fiche de compétences",
+      "confidential_document": "Document confidentiel, reproduction interdite",
+      "website": "www.keyteo.ch"
+    )
+  )
+  texts.at(lang, default: texts.en).at(key, default: key)
+}
+
 // dictionary of common icons and values
 #let get_default_icons(color: none) = {
   if color == none {
