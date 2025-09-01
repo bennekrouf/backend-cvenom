@@ -720,7 +720,7 @@ pub async fn get_tenant_files(
         tenant.tenant_name
     );
 
-    // Get tenant-specific data directory
+    // Get tenant-specific data directory (don't create if it doesn't exist)
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
@@ -730,18 +730,9 @@ pub async fn get_tenant_files(
     };
 
     let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
-            return Err(Status::InternalServerError);
-        }
-    };
+    let tenant_data_dir = tenant_service.get_tenant_data_dir(&config.data_dir, tenant);
 
-    // Build file tree for tenant's directory only
+    // Build file tree for tenant's directory only if it exists
     match build_file_tree(&tenant_data_dir).await {
         Ok(tree) => Ok(Json(serde_json::to_value(tree).unwrap_or_default())),
         Err(e) => {

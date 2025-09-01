@@ -339,7 +339,7 @@
   show "C++": box
 
   // custom set rules
-set text(font: ("Arial", "Helvetica", "Liberation Sans"), ligatures: false)
+set text(font: ("Arial", "Helvetica"), ligatures: false)
   set par(justify: true)
 
   set page(
