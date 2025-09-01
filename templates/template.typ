@@ -72,29 +72,38 @@
   if type(links) == "array" {
     // If links is an array, treat each item as a URL with default icon
     for link in links {
-      link_pairs.push(("personal", link))
+      if link != "" and link != none {
+        link_pairs.push(("personal", link))
+      }
     }
   } else if type(links) == "dictionary" {
-    // If links is a dictionary, use key-value pairs
-    link_pairs = links.pairs()
-  } else {
-    // Fallback: empty links
-    link_pairs = ()
+    // If links is a dictionary, filter out empty/none values
+    for (key, value) in links.pairs() {
+      if value != "" and value != none and type(value) == "string" {
+        link_pairs.push((key, value))
+      }
+    }
   }
   
-  link_pairs.map(
-    it => {
-      let key = it.at(0)
-      let url = it.at(1)
-      text(
-        fill: color,
-        link(
-          url,
-          icons.at(key, default: (:)).at("logo", default: "") + " " + icons.at(key, default: (:)).at("displayname", default: key),
-        ),
-      )
-    }
-  )
+  // Only process non-empty links
+  if link_pairs.len() > 0 {
+    link_pairs.map(
+      it => {
+        let key = it.at(0)
+        let url = it.at(1)
+        text(
+          fill: color,
+          link(
+            url,
+            icons.at(key, default: (:)).at("logo", default: "") + " " + icons.at(key, default: (:)).at("displayname", default: key),
+          ),
+        )
+      }
+    )
+  } else {
+    // Return empty array if no valid links
+    ()
+  }
 }
 
 /* the section(s) that are colored and have a line */
@@ -181,20 +190,42 @@
   }
 
   let skills_array = ()
-  for (key, value) in skills.pairs() {
-    skills_array.push([*#key*])
-    skills_array.push(value.map(box).join(text(fill: color, separator)))
+  
+  // Handle case where skills might be empty or malformed
+  if type(skills) == "dictionary" and skills.len() > 0 {
+    for (key, value) in skills.pairs() {
+      if key != "" and value != none {
+        skills_array.push([*#key*])
+        
+        // Handle both string arrays and single strings
+        if type(value) == "array" and value.len() > 0 {
+          let filtered_values = value.filter(v => v != "" and v != none)
+          if filtered_values.len() > 0 {
+            skills_array.push(filtered_values.map(box).join(text(fill: color, separator)))
+          } else {
+            skills_array.push([Not specified])
+          }
+        } else if type(value) == "string" and value != "" {
+          skills_array.push([#value])
+        } else {
+          skills_array.push([Not specified])
+        }
+      }
+    }
   }
 
-  table(
-    columns: 2,
-    column-gutter: 2%,
-    row-gutter: -0.2em,
-    align: (right, left),
-    stroke: none,
-    ..skills_array,
-  )
-  // v(-1em)
+  if skills_array.len() > 0 {
+    table(
+      columns: 2,
+      column-gutter: 2%,
+      row-gutter: -0.2em,
+      align: (right, left),
+      stroke: none,
+      ..skills_array,
+    )
+  } else {
+    [No skills information provided]
+  }
 }
 
 /* return text info about a person */
@@ -206,7 +237,8 @@
   details,
 ) = {
   let show_line_from_dict(dict, key) = {
-    if dict.at(key, default: none) != none [#dict.at(key) \ ]
+    let value = dict.at(key, default: none)
+    if value != none and value != "" [#value \ ]
   }
 
   if separator == none {
@@ -226,16 +258,22 @@
   align(
     alignment,
     [
-      #text(size: 14pt, details.at("name", default: none))\
+      #text(size: 14pt, details.at("name", default: ""))\
       #show_line_from_dict(details, "address")
       #show_line_from_dict(details, "phonenumber")
-      #text(
-        size: 13pt,
-        fill: color,
-        (link("mailto:" + details.email)[#raw(details.email)]),
-      ) \
+      #if details.at("email", default: "") != "" {
+        text(
+          size: 13pt,
+          fill: color,
+          (link("mailto:" + details.email)[#raw(details.email)]),
+        )
+        linebreak()
+      }
       #if details.at("links", default: none) != none {
-        process_links(details.links, color: color, icons: icons).join(text(fill: color, separator))
+        let processed_links = process_links(details.links, color: color, icons: icons)
+        if processed_links.len() > 0 {
+          processed_links.join(text(fill: color, separator))
+        }
       }
     ],
   )
