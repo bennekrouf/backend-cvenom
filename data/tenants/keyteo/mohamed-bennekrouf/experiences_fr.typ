@@ -1,7 +1,6 @@
 #import "template.typ": conf, date, dated_experience, experience_details, section
 #let get_work_experience() = {
   [
-    // = Work Experience
     #dated_experience(  
       "Technical Lead Developer",  
       date: "From 2022 to Present (2 years and 9 months)",
