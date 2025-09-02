@@ -1,4 +1,15 @@
 #import "template.typ": conf, date, structured_experience, experience_details, section, get_text
+
+#let get_key_insights() = {
+  (
+    "Développeur senior full-stack avec 8+ ans d'expérience en fintech",
+    "Spécialisé en React, Node.js et architectures cloud-natives",
+    "Direction d'équipes de 5+ développeurs en environnements agiles", 
+    "Expert en traitement des paiements et conformité réglementaire"
+  )
+}
+
+
 #let get_work_experience() = {
   [
     // == Mayorana - Rust / une startup IA
@@ -19,7 +30,7 @@
     
     // == Concreet & eJust - Rôles CTO Startup
     #structured_experience(  
-      "CTO - Ingénierie logicielle fondatrice - Direction d'équipes de développement",  
+      "CTO - Direction d'équipes de développement",  
       date: "De 2016 à 2021 (5 ans)",
       company: "Concreet & eJust - Rôles CTO Startup",
       context_info: (

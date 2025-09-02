@@ -1,5 +1,5 @@
 #import "template.typ": conf, date, dated_experience, experience_details, section, show_skills, get_text, structured_experience
-#import "experiences.typ" : get_work_experience
+#import "experiences.typ": get_work_experience, get_key_insights
 
 #let details = toml("cv_params.toml")
 
@@ -102,16 +102,19 @@
 #v(0.5em)
 
 #section(get_text("key_insights"))
-#if "key_insights" in details {
-  experience_details(..details.key_insights)
-} else {
-  experience_details(
-    "Experienced technical lead with proven track record in startup environments",
-    "Expert in modern development stacks with focus on Rust and microservices architecture", 
-    "Strong background in AI/ML integration and blockchain development",
-    "Demonstrated ability to scale teams and deliver complex technical solutions"
-  )
-}
+#experience_details(..get_key_insights())
+
+// #section(get_text("key_insights"))
+// #if "key_insights" in details {
+//   experience_details(..details.key_insights)
+// } else {
+//   experience_details(
+//     "Experienced technical lead with proven track record in startup environments",
+//     "Expert in modern development stacks with focus on Rust and microservices architecture", 
+//     "Strong background in AI/ML integration and blockchain development",
+//     "Demonstrated ability to scale teams and deliver complex technical solutions"
+//   )
+// }
 
 #section(get_text("technical_skills"))
 #if "skills" in details {

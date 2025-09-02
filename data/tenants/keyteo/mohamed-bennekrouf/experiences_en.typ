@@ -1,4 +1,14 @@
 #import "template.typ": conf, date, structured_experience, experience_details, section, get_text
+
+#let get_key_insights() = {
+  (
+    "Senior full-stack developer with 8+ years in fintech",
+    "Specialized in React, Node.js, and cloud-native architectures", 
+    "Led teams of 5+ developers in agile environments",
+    "Expert in payment processing and regulatory compliance"
+  )
+}
+
 #let get_work_experience() = {
   [
     == Keyteo SA

@@ -46,7 +46,7 @@ enum Commands {
     List,
     ListTemplates,
     Server {
-        #[arg(short, long, default_value = "8000")]
+        #[arg(short, long, default_value = "4002")]
         port: u16,
     },
     /// Manage tenants (add, remove, list, etc.)
@@ -137,7 +137,7 @@ async fn main() -> Result<()> {
         }
 
         Commands::Server { port: _ } => {
-            println!("Starting Multi-tenant CV Generator API Server on http://0.0.0.0:8000");
+            println!("Starting Multi-tenant CV Generator API Server on http://0.0.0.0:4002");
             println!("");
             println!("Multi-tenancy: Users must be registered in SQLite database");
             println!("Authentication: Firebase ID tokens + tenant validation required");

@@ -58,7 +58,7 @@ cargo run -- tenant list
 cargo run -- server
 ```
 
-The server runs on `http://localhost:8000` with multi-tenant authentication.
+The server runs on `http://localhost:4002` with multi-tenant authentication.
 
 ## Authentication & Authorization
 
@@ -152,10 +152,10 @@ GET  /api/me            # Get current user + tenant info
 ### Example API Usage
 ```bash
 # Get templates (public)
-curl http://localhost:8000/api/templates
+curl http://localhost:4002/api/templates
 
 # Generate CV (requires auth header)
-curl -X POST http://localhost:8000/api/generate \
+curl -X POST http://localhost:4002/api/generate \
   -H "Authorization: Bearer <firebase-id-token>" \
   -H "Content-Type: application/json" \
   -d '{"person": "john-doe", "lang": "en", "template": "default"}' \
