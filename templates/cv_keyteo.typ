@@ -158,7 +158,17 @@
   }
   
   if lang_items.len() > 0 {
-    experience_details(..lang_items)
+    grid(
+      columns: 2,
+      column-gutter: 2em,
+      ..lang_items.map(lang => 
+        list(
+          indent: 5pt,
+          marker: text(fill: rgb("#14A4E6"), sym.bullet),
+          [#lang]
+        )
+      )
+    )
   }
 } else {
   [No language data found in configuration]
