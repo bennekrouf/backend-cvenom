@@ -330,8 +330,13 @@
 #let structured_experience(title, date: none, description: none, company: none, context_info: none, responsibility_list: none) = {
   [
     #block(
-      stroke: (bottom: 0.5pt + rgb("#14A4E6")),
-      inset: (bottom: 5pt),
+      stroke: (
+        top: 0.5pt + rgb("#14A4E6"),
+        left: 0.5pt + rgb("#14A4E6"), 
+        right: 0.5pt + rgb("#14A4E6"),
+        bottom: 0.5pt + rgb("#14A4E6")
+      ),
+      inset: 5pt,
       width: 100%,
       grid(
         columns: (1fr, auto),
