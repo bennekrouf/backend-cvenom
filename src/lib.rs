@@ -93,7 +93,7 @@ impl TemplateProcessor {
             fs::write(&output_path, processed_content).context("Failed to write cv_params.toml")?;
         }
 
-        // Create experience files for all supported languages
+        // Create experience files for all supported languages with new structured format
         let experience_template_path = self.templates_dir.join("experiences_template.typ");
         if experience_template_path.exists() {
             let template_content = fs::read_to_string(&experience_template_path)
@@ -110,7 +110,7 @@ impl TemplateProcessor {
         // Create placeholder profile image info
         let readme_path = person_dir.join("README.md");
         let readme_content = format!(
-            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\nAdd your company logo as `company_logo.png` (optional - uses tenant-wide logo if not provided).\n\nEdit the following files:\n- `cv_params.toml` - Personal information, skills, and key insights\n- `experiences_*.typ` - Work experience for each language (en/fr)\n\nLanguage selection is now done at generation time via API, no need to set it in TOML.\n\n## Available Templates:\n- default: Standard CV layout\n- keyteo: CV with Keyteo logo and professional branding\n",
+            "# {} CV Data\n\nAdd your profile image as `profile.png` in this directory.\nAdd your company logo as `company_logo.png` (optional - uses tenant-wide logo if not provided).\n\nEdit the following files:\n- `cv_params.toml` - Personal information, skills, and key insights\n- `experiences_*.typ` - Work experience for each language (en/fr)\n\n## Experience Structure\nEach role now uses structured_experience() with:\n- **Context**: Background info (company size, tech stack, business domain)\n- **Responsibilities**: Specific achievements and duties with metrics\n\nLanguage selection is done at generation time via API.\n\n## Available Templates:\n- default: Standard CV layout\n- keyteo: CV with Keyteo logo and professional branding\n\n## Tips:\n- Use bullet points for context and responsibilities arrays\n- Include specific metrics and technologies where possible\n- Keep context brief (1-3 points), responsibilities more detailed (3-5 points)\n",
             person_name
         );
         fs::write(&readme_path, readme_content).context("Failed to write README.md")?;

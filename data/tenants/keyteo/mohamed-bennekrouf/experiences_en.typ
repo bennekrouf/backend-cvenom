@@ -1,82 +1,43 @@
-#import "template.typ": conf, date, dated_experience, experience_details, section
+#import "template.typ": conf, date, structured_experience, experience_details, section, get_text
 #let get_work_experience() = {
   [
-    == Mayorana - Rust / an AI startup
-    #dated_experience(  
-      "Technical Lead Developer",  
-      date: "2022 - Present",  
-      content: [  
-        #experience_details(  
-          "Developed Rust Substrate smart contracts with frontend for allfeat.com, a blockchain-based music service platform built on Substrate. Created a react-native mobile app for one customer to use these services."
-        )
-        #experience_details(  
-          "Built an NLP/LLM based program that converts sentences to API calls. Based on Rust / Ollama / Deepseek R1 / Iggy messaging and Micro-services. See api0.ai."  
-        )
-        #experience_details(  
-          "Developed a log library based on Rust/gRPC. See crate grpc_logger."  
-        )  
-      ]  
+    == Keyteo SA
+    #structured_experience(
+      "Senior Technical Lead",
+      date: "2023 - Present",
+      description: "Swiss consulting company specializing in AI and blockchain solutions",
+      company: "Keyteo SA",
+      context: (
+        "Leading technical initiatives in a 25-person consulting firm",
+        "Working with cutting-edge AI/ML and blockchain technologies",
+        "Serving enterprise clients across Switzerland and Europe"
+      ),
+      responsibilities: (
+        "Architected and delivered 5+ AI-powered applications increasing client efficiency by 40%",
+        "Led cross-functional teams of 3-8 developers using Agile methodologies",
+        "Implemented Rust-based microservices architecture handling 10M+ requests/day",
+        "Mentored 6 junior developers and established coding standards across projects",
+        "Drove technical decision-making for $2M+ client engagements"
+      )
     )
     
-    == Concreet & eJust - Startup CTO roles
-    #dated_experience(  
-      "CTO - Founding software engineering - Lead development teams",  
-      date: "2016 - 2021",  
-      description: "Led technical development for two startups: Concreet (real estate SAAS platform) and eJust (justice arbitration platform)",  
-      content: [  
-        #experience_details(  
-          "Built Concreet's SAAS platform with Node.js for real estate project management, including mobile app for field collaboration tracking."  
-        )  
-        #experience_details(  
-          "Migrated eJust's monolithic Java backend to a multi-tenant architecture for justice arbitration and mediation."  
-        )
-        #experience_details(  
-          "Implemented core backend features, CI/CD pipelines, AWS infrastructure management, and automated deployments."  
-        )  
-      ]  
-    )
-    
-    == Inpart.io
-    #dated_experience(
-      "Lead Frontend Developer",
-      date: "2012 - 2016",
-      description: "SASS platform for pharmaceutical professionals",
-      content: [
-        #experience_details(
-          "Led frontend development team using Angular and React for an enterprise application serving 5000+ pharmaceutical professionals."
-        )
-        #experience_details(
-          "Developed mobile applications using PhoneGap for cross-platform deployment and offline functionality."
-        )
-      ]
-    )
-    
-    == CGI
-    #dated_experience(
-      "Lead Developer - Architect",
-      date: "2007 - 2015",
-      content: [
-        #experience_details(
-          "Developed POCs using Beacon and GPS detection technologies for mobile applications."
-        )
-        #experience_details(
-          "Data analysis and database architecture to build a new credit scoring system (Coface services)."
-        )
-      ]
-    )
-    
-    == Accenture
-    #dated_experience(
-      "Consultant",
-      date: "1998 - 2006",
-      content: [
-        #experience_details(
-          "Developed architectural components (proxy, cache, authentication) and UI components (Banques Populaires)"
-        )
-        #experience_details(
-          "Developed a back-end data persistence framework using: MQ-Series / WebSphere / COBOL programs (Banque Générale du Luxembourg)"
-        )
-      ]
+    == Previous Startup
+    #structured_experience(
+      "Full Stack Engineer", 
+      date: "2021 - 2023",
+      description: "Fast-growing fintech startup in blockchain payments",
+      company: "TechCorp Inc.",
+      context: (
+        "Early-stage startup environment with rapid product iteration",
+        "Building financial infrastructure serving 100K+ users",
+        "Remote-first team across 8 countries"
+      ),
+      responsibilities: (
+        "Built end-to-end payment processing system handling $50M+ transactions",
+        "Developed React frontend and Node.js backend with 99.9% uptime",
+        "Integrated with 12+ blockchain networks and traditional payment providers",
+        "Reduced API response times by 60% through optimization and caching strategies"
+      )
     )
   ]
 }

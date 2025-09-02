@@ -1,82 +1,81 @@
-#import "template.typ": conf, date, dated_experience, experience_details, section
+#import "template.typ": conf, date, structured_experience, experience_details, section, get_text
 #let get_work_experience() = {
   [
-    #dated_experience(  
-      "Technical Lead Developer",  
-      date: "From 2022 to Present (2 years and 9 months)",
-      company: "Mayorana - Rust / an AI startup",
-      content: [  
-        #experience_details(  
-          "Developed Rust Substrate smart contracts with frontend for allfeat.com, a blockchain-based music service platform built on Substrate. Created a react-native mobile app for one customer to use these services."
-        )
-        #experience_details(  
-          "Built an NLP/LLM based program that converts sentences to API calls. Based on Rust / Ollama / Deepseek R1 / Iggy messaging and Micro-services. See api0.ai."  
-        )
-        #experience_details(  
-          "Developed a log library based on Rust/gRPC. See crate grpc_logger."  
-        )  
-      ]  
+    == Mayorana - Rust / une startup IA
+    #structured_experience(  
+      "Développeur Technical Lead",  
+      date: "De 2022 à aujourd'hui (2 ans et 9 mois)",
+      company: "Mayorana - Rust / une startup IA",
+      context_info: (
+        "Startup IA spécialisée dans les services musicaux blockchain et les solutions NLP/LLM",
+        "Direction du développement technique utilisant Rust, Substrate et les technologies IA modernes"
+      ),
+      responsibility_list: (
+        "Développement de smart contracts Rust Substrate avec frontend pour allfeat.com, une plateforme de services musicaux basée sur blockchain Substrate. Création d'une application mobile react-native pour un client utilisant ces services.",
+        "Construction d'un programme basé sur NLP/LLM qui convertit les phrases en appels API. Basé sur Rust / Ollama / Deepseek R1 / messagerie Iggy et Micro-services. Voir api0.ai.",
+        "Développement d'une bibliothèque de logs basée sur Rust/gRPC. Voir crate grpc_logger."
+      )
     )
     
-    #dated_experience(  
-      "CTO - Founding software engineering - Lead development teams",  
-      date: "From 2016 to 2021 (5 years)",
-      company: "Concreet & eJust - Startup CTO roles",
-      description: "Led technical development for two startups: Concreet (real estate SAAS platform) and eJust (justice arbitration platform)",  
-      content: [  
-        #experience_details(  
-          "Built Concreet's SAAS platform with Node.js for real estate project management, including mobile app for field collaboration tracking."  
-        )  
-        #experience_details(  
-          "Migrated eJust's monolithic Java backend to a multi-tenant architecture for justice arbitration and mediation."  
-        )
-        #experience_details(  
-          "Implemented core backend features, CI/CD pipelines, AWS infrastructure management, and automated deployments."  
-        )  
-      ]  
+    == Concreet & eJust - Rôles CTO Startup
+    #structured_experience(  
+      "CTO - Ingénierie logicielle fondatrice - Direction d'équipes de développement",  
+      date: "De 2016 à 2021 (5 ans)",
+      company: "Concreet & eJust - Rôles CTO Startup",
+      context_info: (
+        "Rôle de CTO gérant la stratégie technique pour deux startups SAAS B2B",
+        "Responsabilité full-stack de la conception architecturale au déploiement et à la mise à l'échelle"
+      ),
+      responsibility_list: (
+        "Construction de la plateforme SAAS de Concreet avec Node.js pour la gestion de projets immobiliers, incluant une application mobile pour le suivi collaboratif sur le terrain.",
+        "Migration du backend Java monolithique d'eJust vers une architecture multi-tenant pour l'arbitrage et la médiation judiciaires.",
+        "Implémentation des fonctionnalités backend principales, pipelines CI/CD, gestion d'infrastructure AWS et déploiements automatisés."
+      )
     )
     
-    #dated_experience(
-      "Lead Frontend Developer",
-      date: "From 2012 to 2016 (4 years)",
+    == Inpart.io
+    #structured_experience(
+      "Développeur Frontend Lead",
+      date: "De 2012 à 2016 (4 ans)",
       company: "Inpart.io",
-      description: "SASS platform for pharmaceutical professionals",
-      content: [
-        #experience_details(
-          "Led frontend development team using Angular and React for an enterprise application serving 5000+ pharmaceutical professionals."
-        )
-        #experience_details(
-          "Developed mobile applications using PhoneGap for cross-platform deployment and offline functionality."
-        )
-      ]
+      context_info: (
+        "Plateforme SAAS d'entreprise servant plus de 5000 professionnels pharmaceutiques",
+        "Direction d'équipe de développement frontend dans un environnement startup en croissance rapide"
+      ),
+      responsibility_list: (
+        "Direction de l'équipe de développement frontend utilisant Angular et React pour une application d'entreprise servant plus de 5000 professionnels pharmaceutiques.",
+        "Développement d'applications mobiles utilisant PhoneGap pour le déploiement multi-plateforme et les fonctionnalités hors ligne."
+      )
     )
     
-    #dated_experience(
-      "Lead Developer - Architect",
-      date: "From 2007 to 2015 (8 years)",
+    == CGI
+    #structured_experience(
+      "Développeur Lead - Architecte",
+      date: "De 2007 à 2015 (8 ans)",
       company: "CGI",
-      content: [
-        #experience_details(
-          "Developed POCs using Beacon and GPS detection technologies for mobile applications."
-        )
-        #experience_details(
-          "Data analysis and database architecture to build a new credit scoring system (Coface services)."
-        )
-      ]
+      context_info: (
+        "Environnement de conseil à grande échelle travaillant sur des projets clients d'entreprise",
+        "Spécialisation dans le secteur des services financiers avec systèmes de scoring crédit"
+      ),
+      responsibility_list: (
+        "Développement de POCs utilisant les technologies de détection Beacon et GPS pour les applications mobiles.",
+        "Analyse de données et architecture de base de données pour construire un nouveau système de scoring crédit (services Coface)."
+      )
     )
     
-    #dated_experience(
+    == Accenture
+    #structured_experience(
       "Consultant",
-      date: "From 1998 to 2006 (8 years)",
+      date: "De 1998 à 2006 (8 ans)",
       company: "Accenture",
-      content: [
-        #experience_details(
-          "Developed architectural components (proxy, cache, authentication) and UI components (Banques Populaires)"
-        )
-        #experience_details(
-          "Developed a back-end data persistence framework using: MQ-Series / WebSphere / COBOL programs (Banque Générale du Luxembourg)"
-        )
-      ]
+      context_info: (
+        "Cabinet de conseil mondial travaillant avec de grandes institutions financières",
+        "Projets d'intégration système et d'architecture de niveau entreprise"
+      ),
+      responsibility_list: (
+        "Développement de composants architecturaux (proxy, cache, authentification) et composants UI (Banques Populaires)",
+        "Développement d'un framework de persistance de données back-end utilisant : MQ-Series / WebSphere / programmes COBOL (Banque Générale du Luxembourg)"
+      )
     )
   ]
 }

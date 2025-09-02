@@ -1,10 +1,10 @@
-#import "template.typ": conf, date, dated_experience, experience_details, section, show_skills, get_text
+#import "template.typ": conf, date, dated_experience, experience_details, section, show_skills, get_text, structured_experience
 #import "experiences.typ" : get_work_experience
 
 #let details = toml("cv_params.toml")
 
-// Custom section function with layered rectangle effect
-#let keyteo_section(title) = {
+// Override section function for this template's visual style
+#let section(title) = {
   block(
     fill: gray,
     width: 100%,
@@ -24,16 +24,13 @@
   ]
 }
 
-// Function to handle logo display gracefully
+// Logo display function
 #let show_logo() = {
-  // Check if company_logo.png was provided as input
   if sys.inputs.at("company_logo.png", default: none) != none {
-    // Logo exists - display it
     align(center + horizon)[
       #image("company_logo.png", width: 150pt, height: 60pt, fit: "contain")
     ]
   } else {
-    // Fallback: Show professional text logo
     rect(
       width: 160pt,
       height: 70pt,
@@ -46,7 +43,6 @@
   }
 }
 
-// Don't use the default conf layout - we'll create custom layout
 #set page(
  header: [
   #v(20pt)
@@ -75,10 +71,8 @@
   margin: (top: 2.8cm, left: 1.5cm, bottom: 2.8cm, right: 1.5cm),
 )
 
-// Custom first page layout for Keyteo template
 #v(1em)
 
-// Job title centered
 #align(center)[
   #text(size: 18pt, weight: "bold", 
     if "job_title" in details { details.job_title } else { "Technical Lead" }
@@ -87,19 +81,16 @@
 
 #v(1.5em)
 
-// Two rows layout for consultant info
 #grid(
   columns: 2,
   column-gutter: 4em,
   row-gutter: 1em,
-  // First row
   text(size: 12pt, weight: "bold", fill: rgb("#14A4E6"), "Consultant"),
   if "consultant_name" in details { 
     text(size: 11pt, details.consultant_name) 
   } else { 
     text(size: 11pt, details.at("name", default: "")) 
   },
-  // Second row  
   text(size: 12pt, weight: "bold", fill: rgb("#14A4E6"), "Keyteo Business Manager"),
   if "manager_name" in details and "manager_email" in details and "manager_phone" in details { 
     text(size: 11pt, details.manager_name + " – " + details.manager_email + " – " + details.manager_phone) 
@@ -110,7 +101,7 @@
 
 #v(0.5em)
 
-#keyteo_section(get_text("key_insights"))
+#section(get_text("key_insights"))
 #if "key_insights" in details {
   experience_details(..details.key_insights)
 } else {
@@ -122,16 +113,15 @@
   )
 }
 
-#keyteo_section(get_text("technical_skills"))
+#section(get_text("technical_skills"))
 #if "skills" in details {
   show_skills(details.skills)
 } else {
   [No skills data found in configuration]
 }
 
-#keyteo_section(get_text("certifications_education"))
+#section(get_text("certifications_education"))
 #if "education" in details {
-  // Diplomas section
   let diplomas = details.education.filter(item => item.at("type", default: "education") == "diploma")
   if diplomas.len() > 0 {
     text(weight: "bold", get_text("diplomas"))
@@ -140,7 +130,6 @@
     }
   }
   
-  // Certifications section  
   let certifications = details.education.filter(item => item.at("type", default: "education") != "diploma")
   if certifications.len() > 0 {
     text(weight: "bold", get_text("certifications"))
@@ -152,7 +141,7 @@
   [No education data found in configuration]
 }
 
-#keyteo_section(get_text("languages"))
+#section(get_text("languages"))
 #if "languages" in details {
   let lang_items = ()
   if "native" in details.languages {
@@ -176,6 +165,6 @@
 }
 
 #block[
-  #keyteo_section(get_text("work_experience"))
+  #section(get_text("work_experience"))
   #get_work_experience()
 ]

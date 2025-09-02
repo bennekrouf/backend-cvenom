@@ -116,17 +116,17 @@
   // Handle both array and dictionary formats for links
   let link_pairs = ()
   
-  if type(links) == "array" {
+  if type(links) == array {
     // If links is an array, treat each item as a URL with default icon
     for link in links {
       if link != "" and link != none {
         link_pairs.push(("personal", link))
       }
     }
-  } else if type(links) == "dictionary" {
+  } else if type(links) == dictionary {
     // If links is a dictionary, filter out empty/none values
     for (key, value) in links.pairs() {
-      if value != "" and value != none and type(value) == "string" {
+      if value != "" and value != none and type(value) == str {
         link_pairs.push((key, value))
       }
     }
@@ -239,20 +239,20 @@
   let skills_array = ()
   
   // Handle case where skills might be empty or malformed
-  if type(skills) == "dictionary" and skills.len() > 0 {
+  if type(skills) == dictionary and skills.len() > 0 {
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
         skills_array.push([*#key*])
         
         // Handle both string arrays and single strings
-        if type(value) == "array" and value.len() > 0 {
+        if type(value) == array and value.len() > 0 {
           let filtered_values = value.filter(v => v != "" and v != none)
           if filtered_values.len() > 0 {
             skills_array.push(filtered_values.map(box).join(text(fill: color, separator)))
           } else {
             skills_array.push([Not specified])
           }
-        } else if type(value) == "string" and value != "" {
+        } else if type(value) == str and value != "" {
           skills_array.push([#value])
         } else {
           skills_array.push([Not specified])
@@ -325,6 +325,47 @@
     ],
   )
 }
+
+// Structured experience function for context/responsibilities format
+#let structured_experience(title, date: none, description: none, company: none, context_info: none, responsibility_list: none) = {
+  [
+    #block(
+      stroke: (bottom: 0.5pt + rgb("#14A4E6")),
+      inset: (bottom: 5pt),
+      width: 100%,
+      grid(
+        columns: (1fr, auto),
+        align: (left, right),
+        [
+          #text(size: 9pt, fill: rgb("#757575"), date) \
+          #text(size: 11pt, weight: "bold", title)
+        ],
+        [
+          #text(size: 11pt, weight: "bold", company)
+        ]
+      )
+    )
+
+    #if description != none [
+      #text(weight: "regular", size: 10pt, description)
+      #v(0.3em)
+    ]
+
+    #if context_info != none [
+      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), "Context")
+      #experience_details(..context_info)
+      #v(0.3em)
+    ]
+
+    #if responsibility_list != none [
+      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), "Responsibilities")  
+      #experience_details(..responsibility_list)
+    ]
+
+    #v(1em)
+  ]
+}
+
 
 /* the main info about the person (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
