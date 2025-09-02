@@ -1,7 +1,7 @@
 #import "template.typ": conf, date, structured_experience, experience_details, section, get_text
 #let get_work_experience() = {
   [
-    == Mayorana - Rust / une startup IA
+    // == Mayorana - Rust / une startup IA
     #structured_experience(  
       "Développeur Technical Lead",  
       date: "De 2022 à aujourd'hui (2 ans et 9 mois)",
@@ -17,7 +17,7 @@
       )
     )
     
-    == Concreet & eJust - Rôles CTO Startup
+    // == Concreet & eJust - Rôles CTO Startup
     #structured_experience(  
       "CTO - Ingénierie logicielle fondatrice - Direction d'équipes de développement",  
       date: "De 2016 à 2021 (5 ans)",
@@ -33,7 +33,7 @@
       )
     )
     
-    == Inpart.io
+    // == Inpart.io
     #structured_experience(
       "Développeur Frontend Lead",
       date: "De 2012 à 2016 (4 ans)",
@@ -48,7 +48,7 @@
       )
     )
     
-    == CGI
+    // == CGI
     #structured_experience(
       "Développeur Lead - Architecte",
       date: "De 2007 à 2015 (8 ans)",
@@ -63,7 +63,7 @@
       )
     )
     
-    == Accenture
+    // == Accenture
     #structured_experience(
       "Consultant",
       date: "De 1998 à 2006 (8 ans)",
