@@ -495,3 +495,81 @@ set text(font: ("Arial", "Helvetica"), ligatures: false)
   // the actual content of the document
   doc
 }
+
+// Enhanced experience function with structured context and responsibilities for keyteo_full template
+#let structured_experience_full(title, date: none, description: none, company: none, context_info: none, responsibilities: none) = {
+  [
+    #block(
+      stroke: (bottom: 0.5pt + rgb("#14A4E6")),
+      inset: (bottom: 5pt),
+      width: 100%,
+      grid(
+        columns: (1fr, auto),
+        align: (left, right),
+        [
+          #text(size: 9pt, fill: rgb("#757575"), date) \
+          #text(size: 11pt, weight: "bold", title)
+        ],
+        [
+          #text(size: 11pt, weight: "bold", company)
+        ]
+      )
+    )
+
+    #if description != none [
+      #text(weight: "regular", size: 10pt, description)
+      #v(0.3em)
+    ]
+
+    #if context_info != none [
+      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
+        if get_lang() == "fr" { "Contexte" } else { "Context" })
+      #v(0.2em)
+      
+      // Handle context as array of bullet points or single text
+      #if type(context_info) == array [
+        #list(
+          indent: 5pt,
+          marker: text(fill: rgb("#14A4E6"), sym.bullet),
+          ..context_info.map(item => text(size: 10pt, item))
+        )
+      ] else [
+        #text(size: 10pt, context_info)
+      ]
+      #v(0.4em)
+    ]
+
+    #if responsibilities != none [
+      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
+        if get_lang() == "fr" { "Responsabilités" } else { "Responsibilities" })
+      #v(0.2em)
+      
+      // Handle responsibilities as dictionary with subsections
+      #if type(responsibilities) == dictionary [
+        #for (subsection, items) in responsibilities.pairs() [
+          #text(size: 10pt, weight: "bold", [• #subsection])
+          #v(0.1em)
+          #if type(items) == array [
+            #list(
+              indent: 15pt,
+              marker: text(fill: rgb("#14A4E6"), "◦"),
+              ..items.map(item => text(size: 9pt, item))
+            )
+          ] else [
+            #text(size: 9pt, indent: 15pt, items)
+          ]
+          #v(0.2em)
+        ]
+      ] else if type(responsibilities) == array [
+        // Fallback to simple list if not structured
+        #list(
+          indent: 5pt,
+          marker: text(fill: rgb("#14A4E6"), sym.bullet),
+          ..responsibilities.map(item => text(size: 10pt, item))
+        )
+      ]
+    ]
+
+    #v(1em)
+  ]
+}

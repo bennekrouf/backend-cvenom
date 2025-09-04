@@ -13,6 +13,7 @@ pub mod web;
 pub enum CvTemplate {
     Default,
     Keyteo,
+    KeyteoFull,
 }
 
 impl CvTemplate {
@@ -20,6 +21,7 @@ impl CvTemplate {
         match self {
             CvTemplate::Default => "default",
             CvTemplate::Keyteo => "keyteo",
+            CvTemplate::KeyteoFull => "keyteo_full",
         }
     }
 
@@ -27,6 +29,7 @@ impl CvTemplate {
         match s {
             "default" => Ok(CvTemplate::Default),
             "keyteo" => Ok(CvTemplate::Keyteo),
+            "keyteo_full" => Ok(CvTemplate::KeyteoFull),
             _ => anyhow::bail!("Unsupported template: {}. Use default, keyteo", s),
         }
     }
@@ -35,11 +38,12 @@ impl CvTemplate {
         match self {
             CvTemplate::Default => "cv.typ",
             CvTemplate::Keyteo => "cv_keyteo.typ",
+            CvTemplate::KeyteoFull => "cv_keyteo_full.typ",
         }
     }
 
     pub fn all() -> Vec<&'static str> {
-        vec!["default", "keyteo"]
+        vec!["default", "keyteo", "keyteo_full"]
     }
 }
 
@@ -649,6 +653,7 @@ pub fn list_templates(templates_dir: &PathBuf) -> Result<Vec<String>> {
         let template_path = templates_dir.join(match template {
             "default" => "cv.typ",
             "keyteo" => "cv_keyteo.typ",
+            "keyteo_full" => "cv_keyteo_full.typ",
             _ => continue,
         });
 

@@ -422,6 +422,7 @@ pub async fn get_templates(config: &State<ServerConfig>) -> Json<TemplatesRespon
                     let description = match name.as_str() {
                         "default" => "Standard CV layout",
                         "keyteo" => "CV with Keyteo branding and logo at the top of every page",
+                        "keyteo_full" => "CV with Keyteo branding featuring structured context and detailed responsibilities sections",
                         _ => "Custom template",
                     };
                     TemplateInfo {
