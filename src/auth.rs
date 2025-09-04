@@ -1,4 +1,5 @@
 // src/auth.rs
+use crate::database::{DatabaseConfig, Tenant, TenantService};
 use anyhow::Result;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use rocket::http::Status;
@@ -6,8 +7,7 @@ use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{error, warn, info};
-use crate::database::{DatabaseConfig, TenantService, Tenant};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FirebaseUser {
@@ -20,15 +20,15 @@ pub struct FirebaseUser {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub aud: String,          // Firebase project ID
-    pub iss: String,          // Firebase issuer
-    pub sub: String,          // User ID (uid)
+    pub aud: String, // Firebase project ID
+    pub iss: String, // Firebase issuer
+    pub sub: String, // User ID (uid)
     pub email: String,
     pub name: Option<String>,
     pub picture: Option<String>,
     pub email_verified: bool,
-    pub exp: usize,           // Expiration timestamp
-    pub iat: usize,           // Issued at timestamp
+    pub exp: usize, // Expiration timestamp
+    pub iat: usize, // Issued at timestamp
 }
 
 impl From<Claims> for FirebaseUser {
@@ -55,17 +55,17 @@ impl AuthConfig {
             firebase_keys: HashMap::new(),
         }
     }
-    
+
     /// Fetch Firebase public keys for JWT verification
     pub async fn update_firebase_keys(&mut self) -> Result<()> {
         let url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
-        
+
         let response = reqwest::get(url).await?;
         let keys: HashMap<String, String> = response.json().await?;
-        
+
         self.firebase_keys = keys;
         tracing::info!("Updated Firebase public keys");
-        
+
         Ok(())
     }
 }
@@ -80,7 +80,7 @@ impl AuthenticatedUser {
     pub fn user(&self) -> &FirebaseUser {
         &self.firebase_user
     }
-    
+
     pub fn tenant(&self) -> &Tenant {
         &self.tenant
     }
@@ -101,13 +101,17 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let auth_config = match req.guard::<&State<AuthConfig>>().await {
             Outcome::Success(config) => config,
-            Outcome::Error((status, _)) => return Outcome::Error((status, AuthError::DatabaseError)),
+            Outcome::Error((status, _)) => {
+                return Outcome::Error((status, AuthError::DatabaseError))
+            }
             Outcome::Forward(f) => return Outcome::Forward(f),
         };
 
         let db_config = match req.guard::<&State<DatabaseConfig>>().await {
             Outcome::Success(config) => config,
-            Outcome::Error((status, _)) => return Outcome::Error((status, AuthError::DatabaseError)),
+            Outcome::Error((status, _)) => {
+                return Outcome::Error((status, AuthError::DatabaseError))
+            }
             Outcome::Forward(f) => return Outcome::Forward(f),
         };
 
@@ -143,17 +147,26 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         };
 
         let tenant_service = TenantService::new(pool);
-        let tenant = match tenant_service.validate_user_access(&firebase_user.email).await {
-            Ok(Some(tenant)) => tenant,
-            Ok(None) => {
-                info!("Access denied for email: {} - not authorized for this tenant", firebase_user.email);
-                return Outcome::Error((Status::Forbidden, AuthError::NotAuthorized));
-            },
+
+        // Try to get existing tenant, or create new one
+        let tenant = match tenant_service
+            .get_or_create_tenant(&firebase_user.email)
+            .await
+        {
+            Ok(tenant) => tenant,
             Err(e) => {
-                error!("Tenant validation failed: {}", e);
+                error!(
+                    "Failed to get or create tenant for {}: {}",
+                    firebase_user.email, e
+                );
                 return Outcome::Error((Status::InternalServerError, AuthError::DatabaseError));
             }
         };
+
+        info!(
+            "User {} authenticated for tenant: {}",
+            firebase_user.email, tenant.tenant_name
+        );
 
         Outcome::Success(AuthenticatedUser {
             firebase_user,
@@ -188,21 +201,27 @@ impl AuthError {
 async fn verify_firebase_token(token: &str, auth_config: &AuthConfig) -> Result<FirebaseUser> {
     // Decode header to get the key ID
     let header = jsonwebtoken::decode_header(token)?;
-    let kid = header.kid.ok_or_else(|| anyhow::anyhow!("Missing kid in token header"))?;
-    
+    let kid = header
+        .kid
+        .ok_or_else(|| anyhow::anyhow!("Missing kid in token header"))?;
+
     // Get the public key for this kid
-    let public_key = auth_config.firebase_keys
+    let public_key = auth_config
+        .firebase_keys
         .get(&kid)
         .ok_or_else(|| anyhow::anyhow!("Unknown key ID: {}", kid))?;
-    
+
     // Verify the token
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_audience(&[&auth_config.project_id]);
-    validation.set_issuer(&[format!("https://securetoken.google.com/{}", auth_config.project_id)]);
-    
+    validation.set_issuer(&[format!(
+        "https://securetoken.google.com/{}",
+        auth_config.project_id
+    )]);
+
     let decoding_key = DecodingKey::from_rsa_pem(public_key.as_bytes())?;
     let token_data = decode::<Claims>(token, &decoding_key, &validation)?;
-    
+
     Ok(token_data.claims.into())
 }
 
@@ -217,9 +236,7 @@ impl<'r> FromRequest<'r> for OptionalAuth {
 
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         match AuthenticatedUser::from_request(req).await {
-            Outcome::Success(auth) => Outcome::Success(OptionalAuth {
-                user: Some(auth),
-            }),
+            Outcome::Success(auth) => Outcome::Success(OptionalAuth { user: Some(auth) }),
             _ => Outcome::Success(OptionalAuth { user: None }),
         }
     }

@@ -409,7 +409,7 @@ impl CvGenerator {
             person_logo_source.display()
         );
 
-        let logo_available = if person_logo_source.exists() {
+        let _logo_available = if person_logo_source.exists() {
             println!(
                 "Copying person logo from {} to {}",
                 person_logo_source.display(),
@@ -450,8 +450,28 @@ impl CvGenerator {
             false
         };
 
-        // Copy template file directly (no language-specific processing needed)
-        let template_file = PathBuf::from("..").join(&self.config.template_file_path());
+        // Use tenant-specific template if available, fallback to default template
+        let tenant = &self
+            .config
+            .data_dir
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("default");
+
+        let tenant_template = PathBuf::from("..")
+            .join(&self.config.templates_dir)
+            .join(format!("cv_{}.typ", tenant));
+        let template_file = if tenant_template.exists() {
+            println!(
+                "Using tenant-specific template: {}",
+                tenant_template.display()
+            );
+            tenant_template
+        } else {
+            println!("Using default template");
+            PathBuf::from("..").join(&self.config.template_file_path())
+        };
+
         let template_dest = PathBuf::from(self.config.template.template_file());
 
         println!(
@@ -464,8 +484,6 @@ impl CvGenerator {
             let template_content =
                 fs::read_to_string(&template_file).context("Failed to read template file")?;
 
-            // No need to replace language-specific imports anymore
-            // Templates now use standardized "experiences.typ"
             fs::write(&template_dest, template_content)
                 .context("Failed to write processed template file")?;
 
