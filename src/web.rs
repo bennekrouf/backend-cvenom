@@ -509,14 +509,11 @@ pub async fn start_web_server(
 ) -> Result<()> {
     Registry::default()
         .with(tracing_subscriber::fmt::layer())
-        .with(EnvFilter::try_from_default_env().unwrap_or(EnvFilter::new("DEBUG")))
+        .with(
+            EnvFilter::try_from_default_env()
+                .unwrap_or(EnvFilter::new("cv_generator=INFO,rocket::server=OFF")),
+        )
         .init();
-
-    // Initialize tracing
-    // tracing_subscriber::fmt()
-    // .with_ansi(false)  // Disable ANSI colors
-    // .with_env_filter("info")
-    // .init();
 
     let server_config = ServerConfig {
         data_dir: data_dir.clone(),
