@@ -1,5 +1,15 @@
 #import "template.typ": conf, date, dated_experience, experience_details, section, get_text
 
+
+#let get_key_insights() = {
+  (
+    "Experienced technical professional with proven track record",
+    "Expert in modern development technologies and methodologies", 
+    "Strong background in project delivery and team collaboration",
+    "Passionate about innovative solutions and continuous learning"
+  )
+}
+
 #let get_work_experience() = {
   [
     == Company Name
