@@ -54,6 +54,32 @@ impl Fairing for Cors {
     }
 }
 
+impl AuthenticatedUser {
+    /// Ensure person directory exists for this user
+    pub async fn ensure_person_exists(
+        &self,
+        config: &ServerConfig,
+        db_config: &DatabaseConfig,
+    ) -> Result<(), anyhow::Error> {
+        let pool = db_config.pool()?;
+        let tenant_service = TenantService::new(pool);
+
+        // Extract person name from email (before @)
+        let person_name = self.firebase_user.email.split('@').next().unwrap_or("user");
+
+        tenant_service
+            .create_default_person(
+                &config.data_dir,
+                &config.templates_dir,
+                &self.tenant,
+                person_name,
+            )
+            .await?;
+
+        Ok(())
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct GenerateRequest {
@@ -712,6 +738,10 @@ pub async fn get_tenant_files(
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<serde_json::Value>, Status> {
+    // Auto-create person if doesn't exist
+    if let Err(e) = auth.ensure_person_exists(config, db_config).await {
+        error!("Failed to ensure person exists: {}", e);
+    }
     let tenant = auth.tenant();
 
     info!(

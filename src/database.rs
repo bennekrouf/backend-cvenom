@@ -357,4 +357,80 @@ impl<'a> TenantService<'a> {
 
         Ok(tenant_dir)
     }
+
+    /// Get template file for tenant (tenant-specific or default)
+    pub fn get_tenant_template(&self, templates_dir: &PathBuf, tenant: &Tenant) -> PathBuf {
+        let tenant_template = templates_dir.join(format!("cv_{}.typ", tenant.tenant_name));
+        if tenant_template.exists() {
+            tenant_template
+        } else {
+            templates_dir.join("cv.typ")
+        }
+    }
+
+    /// Create default person structure for new tenant users
+    pub async fn create_default_person(
+        &self,
+        base_data_dir: &PathBuf,
+        templates_dir: &PathBuf,
+        tenant: &Tenant,
+        person_name: &str,
+    ) -> Result<()> {
+        let tenant_data_dir = self.ensure_tenant_data_dir(base_data_dir, tenant).await?;
+        let person_dir = tenant_data_dir.join(person_name);
+
+        if person_dir.exists() {
+            return Ok(()); // Already exists
+        }
+
+        tokio::fs::create_dir_all(&person_dir).await?;
+
+        // Copy default templates
+        let person_template = templates_dir.join("person_template.toml");
+        let experience_template = templates_dir.join("experiences_template.typ");
+
+        if person_template.exists() {
+            let template_content = tokio::fs::read_to_string(&person_template).await?;
+            let processed = template_content.replace("{{name}}", person_name);
+            tokio::fs::write(person_dir.join("cv_params.toml"), processed).await?;
+        }
+
+        if experience_template.exists() {
+            let exp_content = tokio::fs::read_to_string(&experience_template).await?;
+            tokio::fs::write(person_dir.join("experiences_en.typ"), &exp_content).await?;
+            tokio::fs::write(person_dir.join("experiences_fr.typ"), &exp_content).await?;
+        }
+
+        info!(
+            "Created default person structure for {} in tenant {}",
+            person_name, tenant.tenant_name
+        );
+        Ok(())
+    }
+
+    /// Auto-create tenant for new user based on email
+    pub async fn auto_create_tenant(&self, email: &str) -> Result<Tenant> {
+        // Extract username from email (before @)
+        let username = email.split('@').next().unwrap_or("user");
+        let tenant_name = username.to_string();
+
+        info!(
+            "Auto-creating tenant '{}' for new user: {}",
+            tenant_name, email
+        );
+
+        let tenant_repo = TenantRepository::new(self.repo.pool);
+        tenant_repo.create_email_tenant(email, &tenant_name).await
+    }
+
+    /// Get or create tenant for user
+    pub async fn get_or_create_tenant(&self, email: &str) -> Result<Tenant> {
+        // First try to find existing tenant
+        if let Some(tenant) = self.validate_user_access(email).await? {
+            return Ok(tenant);
+        }
+
+        // If none found, auto-create
+        self.auto_create_tenant(email).await
+    }
 }
