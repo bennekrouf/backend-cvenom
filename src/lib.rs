@@ -559,9 +559,18 @@ impl CvGenerator {
         let output = cmd.output().context("Failed to execute typst command")?;
 
         if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+
+            eprintln!("Typst compilation failed:");
+            eprintln!("STDERR: {}", stderr);
+            eprintln!("STDOUT: {}", stdout);
+            eprintln!("Command: {:?}", cmd);
+
             anyhow::bail!(
-                "Typst compilation failed: {}",
-                String::from_utf8_lossy(&output.stderr)
+                "Typst compilation failed: stderr={}, stdout={}",
+                stderr,
+                stdout
             );
         }
 

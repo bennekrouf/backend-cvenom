@@ -2,7 +2,7 @@
 
 #let get_key_insights() = {
   (
-    "Senior full-stack developer with 8+ years in fintech",
+    "Senior full-stack developer with 9+ years in front end",
     "Specialized in React, Node.js, and cloud-native architectures", 
     "Led teams of 5+ developers in agile environments",
     "Expert in payment processing and regulatory compliance"
