@@ -1,0 +1,7 @@
+name = "keyteo_full"
+description = "CV with Keyteo branding featuring structured context and detailed responsibilities sections"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["header_logo", "branded_footer", "structured_experience"]
+languages = ["en", "fr"]
+version = "1.0.0"

@@ -358,16 +358,6 @@ impl<'a> TenantService<'a> {
         Ok(tenant_dir)
     }
 
-    /// Get template file for tenant (tenant-specific or default)
-    pub fn get_tenant_template(&self, templates_dir: &PathBuf, tenant: &Tenant) -> PathBuf {
-        let tenant_template = templates_dir.join(format!("cv_{}.typ", tenant.tenant_name));
-        if tenant_template.exists() {
-            tenant_template
-        } else {
-            templates_dir.join("cv.typ")
-        }
-    }
-
     /// Create default person structure for new tenant users
     pub async fn create_default_person(
         &self,

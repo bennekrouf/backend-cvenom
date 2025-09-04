@@ -1,7 +1,8 @@
 // src/web.rs
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::{DatabaseConfig, TenantService};
-use crate::{list_templates, CvConfig, CvGenerator, CvTemplate};
+use crate::template_system::TemplateManager;
+use crate::{CvConfig, CvGenerator};
 use anyhow::Result;
 use async_recursion::async_recursion;
 use rocket::form::{Form, FromForm};
@@ -182,15 +183,21 @@ pub async fn generate_cv(
     );
 
     let lang = request.lang.as_deref().unwrap_or("en");
-    let template_str = request.template.as_deref().unwrap_or("default");
+    let template_id = request.template.as_deref().unwrap_or("default");
 
-    let template = match CvTemplate::from_str(template_str) {
-        Ok(t) => t,
-        Err(_) => {
-            warn!("Invalid template: {}", template_str);
-            return Err(Status::BadRequest);
+    // Validate template exists using template manager
+    let template_manager = match TemplateManager::new(config.templates_dir.clone()) {
+        Ok(manager) => manager,
+        Err(e) => {
+            error!("Failed to initialize template manager: {}", e);
+            return Err(Status::InternalServerError);
         }
     };
+
+    if !template_manager.template_exists(template_id) {
+        warn!("Template not found: {}", template_id);
+        return Err(Status::BadRequest);
+    }
 
     // Get tenant-specific data directory
     let pool = match db_config.pool() {
@@ -214,7 +221,7 @@ pub async fn generate_cv(
     };
 
     let cv_config = CvConfig::new(&request.person, lang)
-        .with_template(template)
+        .with_template(template_id.to_string())
         .with_data_dir(tenant_data_dir)
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
@@ -245,7 +252,6 @@ pub async fn generate_cv(
         }
     }
 }
-
 // Protected endpoint - requires authentication and tenant validation
 #[post("/create", data = "<request>")]
 pub async fn create_person(
@@ -288,7 +294,13 @@ pub async fn create_person(
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
 
-    let generator = CvGenerator { config: cv_config };
+    let generator = match CvGenerator::new(cv_config) {
+        Ok(generator) => generator,
+        Err(e) => {
+            error!("Failed to create CV generator: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
 
     match generator.create_person() {
         Ok(_) => {
@@ -414,21 +426,14 @@ pub async fn upload_picture(
 // Public endpoint - no authentication required
 #[get("/templates")]
 pub async fn get_templates(config: &State<ServerConfig>) -> Json<TemplatesResponse> {
-    match list_templates(&config.templates_dir) {
-        Ok(templates) => {
-            let template_infos = templates
+    match TemplateManager::new(config.templates_dir.clone()) {
+        Ok(template_manager) => {
+            let template_infos = template_manager
+                .list_templates()
                 .into_iter()
-                .map(|name| {
-                    let description = match name.as_str() {
-                        "default" => "Standard CV layout",
-                        "keyteo" => "CV with Keyteo branding and logo at the top of every page",
-                        "keyteo_full" => "CV with Keyteo branding featuring structured context and detailed responsibilities sections",
-                        _ => "Custom template",
-                    };
-                    TemplateInfo {
-                        name,
-                        description: description.to_string(),
-                    }
+                .map(|template| TemplateInfo {
+                    name: template.id.clone(),
+                    description: template.manifest.description.clone(),
                 })
                 .collect();
 
@@ -438,7 +443,7 @@ pub async fn get_templates(config: &State<ServerConfig>) -> Json<TemplatesRespon
             })
         }
         Err(e) => {
-            error!("Failed to list templates: {}", e);
+            error!("Failed to initialize template manager: {}", e);
             Json(TemplatesResponse {
                 success: false,
                 templates: vec![TemplateInfo {
@@ -568,9 +573,9 @@ pub async fn start_web_server(
                 get_current_user,
                 get_current_user_error,
                 health,
-                get_tenant_files,         // Add this
-                get_tenant_file_content,  // Add this
-                save_tenant_file_content, // Add this
+                get_tenant_files,         // Make sure this is here
+                get_tenant_file_content,  // And this
+                save_tenant_file_content, // And this
                 options
             ],
         )

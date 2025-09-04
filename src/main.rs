@@ -1,12 +1,11 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use cv_generator::{
-    list_persons, list_templates, web::start_web_server, CvConfig, CvGenerator, CvTemplate,
-};
+use cv_generator::{list_persons, list_templates, web::start_web_server, CvConfig, CvGenerator};
 use std::path::PathBuf;
 
 // mod auth;
 mod database;
+mod template_system;
 mod tenant_cli;
 
 use tenant_cli::{handle_tenant_command, TenantCli};
@@ -68,10 +67,8 @@ async fn main() -> Result<()> {
             watch,
             tenant,
         } => {
-            let cv_template = CvTemplate::from_str(&template)?;
-
             let mut config = CvConfig::new(&person, &lang)
-                .with_template(cv_template)
+                .with_template(template)
                 .with_output_dir(cli.output_dir)
                 .with_templates_dir(cli.templates_dir);
 
@@ -102,8 +99,43 @@ async fn main() -> Result<()> {
                 .with_output_dir(cli.output_dir)
                 .with_templates_dir(cli.templates_dir);
 
-            let generator = CvGenerator { config };
+            let generator = CvGenerator::new(config)?;
             generator.create_person_unchecked()
+        }
+
+        Commands::Generate {
+            person,
+            lang,
+            template,
+            watch,
+            tenant,
+        } => {
+            let template_id = template; // Now just a string
+
+            let mut config = CvConfig::new(&person, &lang)
+                .with_template(template_id)
+                .with_output_dir(cli.output_dir)
+                .with_templates_dir(cli.templates_dir);
+
+            // If tenant is specified, use tenant-specific data directory
+            if let Some(tenant_name) = tenant {
+                let tenant_data_dir = cli.data_dir.join("tenants").join(&tenant_name);
+                config = config.with_data_dir(tenant_data_dir.clone());
+                println!(
+                    "Using tenant-specific data directory: {}",
+                    tenant_data_dir.display()
+                );
+            } else {
+                config = config.with_data_dir(cli.data_dir);
+            }
+
+            let generator = CvGenerator::new(config)?;
+
+            if watch {
+                generator.watch()
+            } else {
+                generator.generate().map(|_| ())
+            }
         }
 
         Commands::List => {

@@ -2,3 +2,7 @@
 port = 4002
 address = "0.0.0.0"
 secret_key = "KeQu6g9OeNcF5JwvAKTTS6JDTG8lgP3RrGkw1icsEW4="
+
+[debug]
+port = 4002
+address = "127.0.0.1"
