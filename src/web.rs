@@ -2,6 +2,7 @@
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::{DatabaseConfig, TenantService};
 use crate::template_system::TemplateManager;
+use crate::TemplateProcessor;
 use crate::{CvConfig, CvGenerator};
 use anyhow::Result;
 use async_recursion::async_recursion;
@@ -289,22 +290,12 @@ pub async fn create_person(
         }
     };
 
-    let cv_config = CvConfig::new(&request.person, "en")
-        .with_data_dir(tenant_data_dir)
-        .with_output_dir(config.output_dir.clone())
-        .with_templates_dir(config.templates_dir.clone());
+    // Use TemplateProcessor directly instead of CvGenerator
+    let template_processor = TemplateProcessor::new(config.templates_dir.clone());
 
-    let generator = match CvGenerator::new(cv_config) {
-        Ok(generator) => generator,
-        Err(e) => {
-            error!("Failed to create CV generator: {}", e);
-            return Err(Status::InternalServerError);
-        }
-    };
-
-    match generator.create_person() {
+    match template_processor.create_person_from_templates(&request.person, &tenant_data_dir) {
         Ok(_) => {
-            let person_dir = generator.config.person_data_dir();
+            let person_dir = tenant_data_dir.join(&request.person);
             info!(
                 "Person directory created for {} by {} (tenant: {})",
                 request.person, user.email, tenant.tenant_name
