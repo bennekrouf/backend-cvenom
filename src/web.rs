@@ -88,6 +88,21 @@ impl AuthenticatedUser {
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
+pub struct DeletePersonRequest {
+    pub person: String,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct DeletePersonResponse {
+    pub success: bool,
+    pub message: String,
+    pub deleted_person: String,
+    pub tenant: String,
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
 pub struct GenerateRequest {
     pub person: String,
     pub lang: Option<String>,
@@ -183,6 +198,80 @@ fn normalize_template(template: Option<&str>, template_manager: &TemplateManager
 
     // Fallback to default
     "default".to_string()
+}
+
+#[post("/delete-person", data = "<request>")]
+pub async fn delete_person(
+    request: Json<DeletePersonRequest>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<DeletePersonResponse>, Status> {
+    let user = auth.user();
+    let tenant = auth.tenant();
+    let normalized_person = crate::utils::normalize_person_name(&request.person);
+
+    info!(
+        "User {} (tenant: {}) deleting person: {}",
+        user.email, tenant.tenant_name, normalized_person
+    );
+
+    // Get tenant-specific data directory
+    let pool = match db_config.pool() {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Database connection failed: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let tenant_service = TenantService::new(pool);
+    let tenant_data_dir = match tenant_service
+        .ensure_tenant_data_dir(&config.data_dir, tenant)
+        .await
+    {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to ensure tenant data directory: {}", e);
+            return Err(Status::InternalServerError);
+        }
+    };
+
+    let person_dir = tenant_data_dir.join(&normalized_person);
+
+    // Check if person directory exists
+    if !person_dir.exists() {
+        return Ok(Json(DeletePersonResponse {
+            success: false,
+            message: format!("Person '{}' not found", request.person),
+            deleted_person: request.person.clone(),
+            tenant: tenant.tenant_name.clone(),
+        }));
+    }
+
+    // Delete the person directory and all its contents
+    match tokio::fs::remove_dir_all(&person_dir).await {
+        Ok(_) => {
+            info!(
+                "Person directory deleted: {} by {} (tenant: {})",
+                normalized_person, user.email, tenant.tenant_name
+            );
+            Ok(Json(DeletePersonResponse {
+                success: true,
+                message: format!("Person '{}' deleted successfully", request.person),
+                deleted_person: request.person.clone(),
+                tenant: tenant.tenant_name.clone(),
+            }))
+        }
+        Err(e) => {
+            error!(
+                "Failed to delete person directory {}: {}",
+                person_dir.display(),
+                e
+            );
+            Err(Status::InternalServerError)
+        }
+    }
 }
 
 // Protected endpoint - requires authentication and tenant validation
@@ -579,6 +668,7 @@ pub async fn start_web_server(
             "/api",
             routes![
                 generate_cv,
+                delete_person,
                 create_person,
                 upload_picture,
                 get_templates,
