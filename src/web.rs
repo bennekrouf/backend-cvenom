@@ -2,8 +2,10 @@
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::{DatabaseConfig, TenantService};
 use crate::template_system::TemplateManager;
+use crate::utils::{normalize_language, normalize_person_name};
 use crate::TemplateProcessor;
 use crate::{CvConfig, CvGenerator};
+
 use anyhow::Result;
 use async_recursion::async_recursion;
 use rocket::form::{Form, FromForm};
@@ -68,13 +70,15 @@ impl AuthenticatedUser {
 
         // Extract person name from email (before @)
         let person_name = self.firebase_user.email.split('@').next().unwrap_or("user");
+        let normalized_person = crate::utils::normalize_person_name(person_name);
 
         tenant_service
             .create_default_person(
                 &config.data_dir,
                 &config.templates_dir,
                 &self.tenant,
-                person_name,
+                &normalized_person,
+                Some(person_name), // Pass original name for display
             )
             .await?;
 
@@ -167,6 +171,20 @@ pub struct ServerConfig {
     pub templates_dir: PathBuf,
 }
 
+fn normalize_template(template: Option<&str>, template_manager: &TemplateManager) -> String {
+    let requested = template.unwrap_or("default").to_lowercase();
+
+    // Check if any available template matches (case-insensitive)
+    for available_template in template_manager.list_templates() {
+        if available_template.id.to_lowercase() == requested {
+            return available_template.id.clone();
+        }
+    }
+
+    // Fallback to default
+    "default".to_string()
+}
+
 // Protected endpoint - requires authentication and tenant validation
 #[post("/generate", data = "<request>")]
 pub async fn generate_cv(
@@ -178,15 +196,6 @@ pub async fn generate_cv(
     let user = auth.user();
     let tenant = auth.tenant();
 
-    info!(
-        "User {} (tenant: {}) generating CV for {}",
-        user.email, tenant.tenant_name, request.person
-    );
-
-    let lang = request.lang.as_deref().unwrap_or("en");
-    let template_id = request.template.as_deref().unwrap_or("default");
-
-    // Validate template exists using template manager
     let template_manager = match TemplateManager::new(config.templates_dir.clone()) {
         Ok(manager) => manager,
         Err(e) => {
@@ -195,10 +204,13 @@ pub async fn generate_cv(
         }
     };
 
-    if !template_manager.template_exists(template_id) {
-        warn!("Template not found: {}", template_id);
-        return Err(Status::BadRequest);
-    }
+    let lang = normalize_language(request.lang.as_deref());
+    let template_id = normalize_template(request.template.as_deref(), &template_manager);
+
+    info!(
+        "User {} (tenant: {}) generating CV for {}",
+        user.email, tenant.tenant_name, request.person
+    );
 
     // Get tenant-specific data directory
     let pool = match db_config.pool() {
@@ -221,7 +233,9 @@ pub async fn generate_cv(
         }
     };
 
-    let cv_config = CvConfig::new(&request.person, lang)
+    let normalized_person = normalize_person_name(&request.person);
+
+    let cv_config = CvConfig::new(&normalized_person, &lang)
         .with_template(template_id.to_string())
         .with_data_dir(tenant_data_dir)
         .with_output_dir(config.output_dir.clone())
@@ -264,6 +278,8 @@ pub async fn create_person(
     let user = auth.user();
     let tenant = auth.tenant();
 
+    let normalized_person = normalize_person_name(&request.person);
+
     info!(
         "User {} (tenant: {}) creating person: {}",
         user.email, tenant.tenant_name, request.person
@@ -293,9 +309,13 @@ pub async fn create_person(
     // Use TemplateProcessor directly instead of CvGenerator
     let template_processor = TemplateProcessor::new(config.templates_dir.clone());
 
-    match template_processor.create_person_from_templates(&request.person, &tenant_data_dir) {
+    match template_processor.create_person_from_templates(
+        &normalized_person,
+        &tenant_data_dir,
+        Some(&request.person),
+    ) {
         Ok(_) => {
-            let person_dir = tenant_data_dir.join(&request.person);
+            let person_dir = tenant_data_dir.join(&normalized_person);
             info!(
                 "Person directory created for {} by {} (tenant: {})",
                 request.person, user.email, tenant.tenant_name
@@ -332,6 +352,7 @@ pub async fn upload_picture(
 ) -> Result<Json<UploadResponse>, Status> {
     let user = auth.user();
     let tenant = auth.tenant();
+    let normalized_person = normalize_person_name(&upload.person);
 
     info!(
         "User {} (tenant: {}) uploading picture for {}",
@@ -360,7 +381,7 @@ pub async fn upload_picture(
     };
 
     // Check if person directory exists in tenant's space
-    let person_dir = tenant_data_dir.join(&upload.person);
+    let person_dir = tenant_data_dir.join(&normalized_person);
     if !person_dir.exists() {
         return Ok(Json(UploadResponse {
             success: false,

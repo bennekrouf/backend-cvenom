@@ -8,6 +8,7 @@ use template_system::TemplateManager;
 pub mod auth;
 pub mod database;
 pub mod template_system;
+pub mod utils;
 pub mod web;
 
 /// Template processing for creating new persons
@@ -42,12 +43,16 @@ impl TemplateProcessor {
         &self,
         person_name: &str,
         data_dir: &PathBuf,
+        display_name: Option<&str>,
     ) -> Result<()> {
         let person_dir = data_dir.join(person_name);
         fs::create_dir_all(&person_dir).context("Failed to create person directory")?;
 
         let mut variables = HashMap::new();
-        variables.insert("name".to_string(), person_name.to_string());
+        variables.insert(
+            "name".to_string(),
+            display_name.unwrap_or(person_name).to_string(),
+        );
 
         // Process and create cv_params.toml
         let toml_template_path = self.templates_dir.join("person_template.toml");
@@ -98,9 +103,15 @@ pub struct CvConfig {
 
 impl CvConfig {
     pub fn new(person_name: &str, lang: &str) -> Self {
+        let normalized_lang = match lang.to_lowercase().as_str() {
+            "fr" | "french" | "français" => "fr",
+            "en" | "english" | "anglais" => "en",
+            _ => "en",
+        };
+
         Self {
             person_name: person_name.to_string(),
-            lang: lang.to_string(),
+            lang: normalized_lang.to_string(),
             template: "default".to_string(),
             output_dir: PathBuf::from("output"),
             data_dir: PathBuf::from("data"),
@@ -109,7 +120,7 @@ impl CvConfig {
     }
 
     pub fn with_template(mut self, template: String) -> Self {
-        self.template = template;
+        self.template = template; // Accept any string, validation happens in CvGenerator
         self
     }
 
@@ -156,8 +167,22 @@ pub struct CvGenerator {
     template_manager: TemplateManager,
 }
 
+fn normalize_template_for_generator(template: &str, template_manager: &TemplateManager) -> String {
+    let requested = template.to_lowercase();
+
+    // Check if any available template matches (case-insensitive)
+    for available_template in template_manager.list_templates() {
+        if available_template.id.to_lowercase() == requested {
+            return available_template.id.clone();
+        }
+    }
+
+    // Fallback to default
+    "default".to_string()
+}
+
 impl CvGenerator {
-    pub fn new(config: CvConfig) -> Result<Self> {
+    pub fn new(mut config: CvConfig) -> Result<Self> {
         let template_manager = TemplateManager::new(config.templates_dir.clone())
             .context("Failed to initialize template manager")?;
         let person_dir = config.person_data_dir();
@@ -187,6 +212,9 @@ impl CvGenerator {
         if !experiences_path.exists() {
             anyhow::bail!("Experiences file not found: {}", experiences_path.display());
         }
+
+        // Normalize template name against available templates
+        config.template = normalize_template_for_generator(&config.template, &template_manager);
 
         Ok(Self {
             config,
@@ -249,13 +277,20 @@ impl CvGenerator {
     /// Create person's data directory structure using templates (bypassing validation)
     pub fn create_person_unchecked(&self) -> Result<()> {
         let template_processor = TemplateProcessor::new(self.config.templates_dir.clone());
-        template_processor
-            .create_person_from_templates(&self.config.person_name, &self.config.data_dir)?;
+
+        // Use the original person name for display in CV content
+        let display_name = &self.config.person_name;
+
+        template_processor.create_person_from_templates(
+            &self.config.person_name,
+            &self.config.data_dir,
+            Some(display_name),
+        )?;
 
         let person_dir = self.config.person_data_dir();
         println!(
             "Created person directory structure for: {}",
-            self.config.person_name
+            display_name // Show the original name in output
         );
         println!("  Directory: {}", person_dir.display());
         println!("  Files created:");

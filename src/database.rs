@@ -365,6 +365,7 @@ impl<'a> TenantService<'a> {
         templates_dir: &PathBuf,
         tenant: &Tenant,
         person_name: &str,
+        display_name: Option<&str>,
     ) -> Result<()> {
         let tenant_data_dir = self.ensure_tenant_data_dir(base_data_dir, tenant).await?;
         let person_dir = tenant_data_dir.join(person_name);
@@ -381,7 +382,9 @@ impl<'a> TenantService<'a> {
 
         if person_template.exists() {
             let template_content = tokio::fs::read_to_string(&person_template).await?;
-            let processed = template_content.replace("{{name}}", person_name);
+            // Use display_name if provided, otherwise use person_name
+            let name_for_template = display_name.unwrap_or(person_name);
+            let processed = template_content.replace("{{name}}", name_for_template);
             tokio::fs::write(person_dir.join("cv_params.toml"), processed).await?;
         }
 
@@ -392,8 +395,10 @@ impl<'a> TenantService<'a> {
         }
 
         info!(
-            "Created default person structure for {} in tenant {}",
-            person_name, tenant.tenant_name
+            "Created default person structure for {} (display: {}) in tenant {}",
+            person_name,
+            display_name.unwrap_or(person_name),
+            tenant.tenant_name
         );
         Ok(())
     }

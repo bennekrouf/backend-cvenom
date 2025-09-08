@@ -1,5 +1,6 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
+use cv_generator::utils::normalize_person_name;
 use cv_generator::{list_persons, list_templates, web::start_web_server, CvConfig, CvGenerator};
 use std::path::PathBuf;
 
@@ -94,7 +95,9 @@ async fn main() -> Result<()> {
         }
 
         Commands::Create { person } => {
-            let config = CvConfig::new(&person, "en")
+            let normalized_person = normalize_person_name(&person);
+
+            let config = CvConfig::new(&normalized_person, "en")
                 .with_data_dir(cli.data_dir)
                 .with_output_dir(cli.output_dir)
                 .with_templates_dir(cli.templates_dir);
