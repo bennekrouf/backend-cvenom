@@ -373,6 +373,22 @@ impl CvGenerator {
 
             // Copy person's profile image if it exists
             let person_image_png = PathBuf::from("..").join(self.config.person_image_path());
+            println!(
+                "DEBUG: config.data_dir = {}",
+                self.config.data_dir.display()
+            );
+            println!(
+                "DEBUG: person_data_dir = {}",
+                self.config.person_data_dir().display()
+            );
+            println!(
+                "DEBUG: person_image_path = {}",
+                self.config.person_image_path().display()
+            );
+            println!(
+                "DEBUG: looking for image at = {}",
+                person_image_png.display()
+            );
             if person_image_png.exists() {
                 let profile_dest = PathBuf::from("profile.png");
                 println!(
@@ -568,7 +584,7 @@ impl CvGenerator {
         }
 
         if PathBuf::from("profile.png").exists() {
-            cmd.arg("--input").arg("profile.png=profile.png");
+            cmd.arg("--input").arg("picture=profile.png");
         }
 
         let output = cmd.output().context("Failed to execute typst command")?;
