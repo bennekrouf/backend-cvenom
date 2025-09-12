@@ -1,5 +1,5 @@
-#import "font_config.typ": font_config, get_icon
 
+#import "font_config.typ": font_config, get_icon
 // global variables
 #let default_primary_color = rgb("#14A4E6")
 #let default_secondary_color = rgb("#757575")
@@ -373,16 +373,17 @@
   ]
 }
 
-
 /* the main info about the person (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
   if details.at("picture", default: "").len() > 0 {
     grid(
       columns: (0.5fr, 1fr, 2.5fr),
       {
+        // Safe image handling - only load if input is provided and valid
         if sys.inputs.at("picture", default: none) != none {
           align(right + horizon, image(details.picture, width: 90%))
         } else {
+          // Show placeholder when no image is provided
           align(right + horizon, rect(width: 90%, height: 100pt, fill: gray.lighten(80%), 
             align(center + horizon, text(size: 10pt, fill: gray, "No Image"))))
         }
@@ -392,7 +393,6 @@
     )
   } else {
     show_details_text(
-      // TODO figure out why the `center + horizon` alignment causes issues
       alignment: center + top,
       icons: icons,
       separator: separator,

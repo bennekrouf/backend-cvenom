@@ -1,0 +1,35 @@
+# font_validation.yaml - Font requirements configuration
+
+validation_enabled: true
+strict_mode: true  # If true, server won't start with missing required fonts
+
+fonts:
+  - name: "Font Awesome 6 Brands"
+    display_name: "FontAwesome Brands"
+    required: false  # Optional - server will warn but continue
+    alternatives:
+      - "Font Awesome 7 Brands"
+      - "Font Awesome 5 Brands"
+      
+  - name: "Font Awesome 6 Free Solid"  
+    display_name: "FontAwesome Solid"
+    required: false
+    alternatives:
+      - "Font Awesome 7 Free"
+      - "Font Awesome 5 Free Solid"
+      
+  - name: "Carlito"
+    display_name: "Carlito (body font)"
+    required: true  # Required - server will fail if missing and no alternatives
+    alternatives:
+      - "Arial"
+      - "Helvetica"
+      - "DejaVu Sans"
+      
+  - name: "Times"
+    display_name: "Times (math font)" 
+    required: true
+    alternatives:
+      - "Times New Roman"
+      - "Liberation Serif"
+      - "DejaVu Serif"

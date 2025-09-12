@@ -1,10 +1,12 @@
 // src/web.rs
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::{DatabaseConfig, TenantService};
+use crate::image_validator::ImageValidator;
 use crate::template_system::TemplateManager;
 use crate::utils::{normalize_language, normalize_person_name};
 use crate::TemplateProcessor;
 use crate::{CvConfig, CvGenerator};
+
 use anyhow::Result;
 use async_recursion::async_recursion;
 use rocket::catchers;
@@ -47,6 +49,16 @@ pub struct ValidationError {
     pub error_code: String,
     pub missing_person: String,
     pub tenant: String,
+    pub suggestions: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ImageValidationErrorResponse {
+    pub success: bool,
+    pub error: String,
+    pub error_code: String,
+    pub image_path: String,
     pub suggestions: Vec<String>,
 }
 
@@ -354,6 +366,28 @@ pub async fn generate_cv(
     };
 
     let normalized_person = normalize_person_name(&request.person);
+    let person_dir = tenant_data_dir.join(&normalized_person);
+
+    // VALIDATE PROFILE IMAGE BEFORE PROCEEDING
+    let profile_image_path = person_dir.join("profile.png");
+    if let Err(validation_error) = ImageValidator::validate_profile_image(&profile_image_path).await
+    {
+        error!(
+            "Image validation failed for {} (tenant: {}): {}",
+            request.person, tenant.tenant_name, validation_error.message
+        );
+
+        return Err(Json(ErrorResponse {
+            success: false,
+            error: validation_error.message,
+            error_code: validation_error.error_type.code().to_string(),
+            suggestions: vec![
+                validation_error.suggestion,
+                "You can also generate CV without a profile picture".to_string(),
+                "Use the upload endpoint to replace the corrupted image".to_string(),
+            ],
+        }));
+    }
 
     let cv_config = CvConfig::new(&normalized_person, &lang)
         .with_template(template_id.to_string())
@@ -376,7 +410,7 @@ pub async fn generate_cv(
                     request.person, tenant.tenant_name, e
                 );
 
-                // Parse different error types and provide specific responses
+                // Handle specific error types
                 let error_msg = e.to_string();
                 if error_msg.contains("Person directory not found") {
                     Err(Json(ErrorResponse {
@@ -389,32 +423,6 @@ pub async fn generate_cv(
                                 request.person
                             ),
                             "Check the person name spelling".to_string(),
-                            "List available persons to see what exists".to_string(),
-                        ],
-                    }))
-                } else if error_msg.contains("Experiences file not found") {
-                    Err(Json(ErrorResponse {
-                        success: false,
-                        error: format!(
-                            "Experience file missing for {} in language {}",
-                            request.person, lang
-                        ),
-                        error_code: "EXPERIENCES_FILE_MISSING".to_string(),
-                        suggestions: vec![
-                            format!("Create the experiences_{}. typ file", lang),
-                            "Use the file editor to add your work experience".to_string(),
-                        ],
-                    }))
-                } else if error_msg.contains("Typst compilation failed") {
-                    Err(Json(ErrorResponse {
-                        success: false,
-                        error: "CV compilation failed due to template or content issues"
-                            .to_string(),
-                        error_code: "COMPILATION_ERROR".to_string(),
-                        suggestions: vec![
-                            "Check your CV content for syntax errors".to_string(),
-                            "Verify all required fonts are installed".to_string(),
-                            "Try a different template".to_string(),
                         ],
                     }))
                 } else {
@@ -435,30 +443,15 @@ pub async fn generate_cv(
                 "Config error for {} (tenant: {}): {}",
                 request.person, tenant.tenant_name, e
             );
-
-            let error_msg = e.to_string();
-            if error_msg.contains("Person directory not found") {
-                Err(Json(ErrorResponse {
-                    success: false,
-                    error: format!("Person '{}' not found in your account", request.person),
-                    error_code: "PERSON_NOT_FOUND".to_string(),
-                    suggestions: vec![
-                        format!("Create person '{}' first", request.person),
-                        "Use the create endpoint to set up the person directory".to_string(),
-                        "Check if the person name is spelled correctly".to_string(),
-                    ],
-                }))
-            } else {
-                Err(Json(ErrorResponse {
-                    success: false,
-                    error: "Invalid CV configuration".to_string(),
-                    error_code: "CONFIG_ERROR".to_string(),
-                    suggestions: vec![
-                        "Check your request parameters".to_string(),
-                        "Verify the person exists".to_string(),
-                    ],
-                }))
-            }
+            Err(Json(ErrorResponse {
+                success: false,
+                error: "Invalid CV configuration".to_string(),
+                error_code: "CONFIG_ERROR".to_string(),
+                suggestions: vec![
+                    "Check your request parameters".to_string(),
+                    "Verify the person exists".to_string(),
+                ],
+            }))
         }
     }
 }

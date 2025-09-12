@@ -1,6 +1,7 @@
 // src/workspace.rs
 use crate::config::CvConfig;
 use crate::template_system::TemplateManager;
+
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::{fs, process::Command};
@@ -29,6 +30,14 @@ impl<'a> WorkspaceManager<'a> {
 
             self.copy_person_files()?;
             self.copy_logo_files()?;
+
+            // ADD THESE 5 LINES:
+            let font_config_source = self.config.templates_dir.join("font_config.typ");
+            if font_config_source.exists() {
+                let font_config_dest = PathBuf::from("font_config.typ");
+                fs::copy(&font_config_source, &font_config_dest)?;
+            }
+
             self.prepare_template_files()?;
 
             Ok(())
@@ -47,29 +56,85 @@ impl<'a> WorkspaceManager<'a> {
         }
     }
 
+    fn validate_image_sync(&self, image_path: &PathBuf) -> Result<(), String> {
+        let metadata = fs::metadata(image_path).map_err(|_| "Cannot read image file")?;
+
+        if metadata.len() == 0 {
+            return Err("Image file is empty".to_string());
+        }
+
+        let header = fs::read(image_path).map_err(|_| "Cannot read image file")?;
+
+        if header.len() < 8 {
+            return Err("Image file too small or corrupted".to_string());
+        }
+
+        let file_name = image_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_lowercase();
+
+        if file_name.ends_with(".png") {
+            // Check PNG signature
+            const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+            if !header.starts_with(PNG_SIGNATURE) {
+                if header.starts_with(&[0xFF, 0xD8, 0xFF]) {
+                    return Err("File is JPEG but has .png extension".to_string());
+                }
+                return Err("Invalid PNG file - corrupted or wrong format".to_string());
+            }
+        } else if file_name.ends_with(".jpg") || file_name.ends_with(".jpeg") {
+            // Check JPEG signature
+            if !header.starts_with(&[0xFF, 0xD8, 0xFF]) {
+                return Err("Invalid JPEG file - corrupted or wrong format".to_string());
+            }
+        } else {
+            return Err("Unsupported image format - use PNG or JPEG only".to_string());
+        }
+
+        Ok(())
+    }
+
     fn copy_person_files(&self) -> Result<()> {
-        // Copy config
+        // Copy config (existing code)
         let config_source = self.config.person_config_path();
         let config_dest = PathBuf::from("cv_params.toml");
 
-        // Debug output
         println!("DEBUG: config_source = {}", config_source.display());
         println!("DEBUG: config_source exists = {}", config_source.exists());
-        println!("DEBUG: current dir = {:?}", std::env::current_dir());
 
         fs::copy(&config_source, &config_dest).context("Failed to copy person config")?;
 
-        // Copy experiences
+        // Copy experiences (existing code)
         let exp_source = self.config.person_experiences_path();
         let exp_dest = PathBuf::from("experiences.typ");
         fs::copy(&exp_source, &exp_dest).context("Failed to copy person experiences")?;
 
-        // Copy profile image if exists
+        // Copy profile image with validation
         let person_image_png = self.config.person_image_path();
+
+        println!(
+            "DEBUG: Looking for image at: {}",
+            person_image_png.display()
+        );
+        println!("DEBUG: Image exists: {}", person_image_png.exists());
+
         if person_image_png.exists() {
-            let profile_dest = PathBuf::from("profile.png");
-            fs::copy(&person_image_png, &profile_dest)?;
-            println!("Copied profile image");
+            // Validate the image before copying
+            match self.validate_image_sync(&person_image_png) {
+                Ok(_) => {
+                    let profile_dest = PathBuf::from("profile.png");
+                    fs::copy(&person_image_png, &profile_dest)?;
+                    println!("✅ Copied valid profile image");
+                }
+                Err(error_msg) => {
+                    println!("❌ Skipping corrupted image: {}", error_msg);
+                    // Don't copy the corrupted file - let CV generate without photo
+                }
+            }
+        } else {
+            println!("No profile image found - CV will generate without photo");
         }
 
         Ok(())
@@ -149,8 +214,26 @@ impl<'a> WorkspaceManager<'a> {
             cmd.arg("--input").arg("company_logo.png=company_logo.png");
         }
 
+        // ONLY add picture input if file exists AND is valid
         if PathBuf::from("profile.png").exists() {
-            cmd.arg("--input").arg("picture=profile.png");
+            println!("DEBUG: profile.png exists in workspace, checking validity...");
+            if let Ok(header) = fs::read("profile.png") {
+                let is_valid = if header.len() >= 8 {
+                    header.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) || // PNG
+                header.starts_with(&[0xFF, 0xD8, 0xFF]) // JPEG
+                } else {
+                    false
+                };
+
+                if is_valid {
+                    cmd.arg("--input").arg("picture=profile.png");
+                    println!("✅ Added valid picture input to Typst command");
+                } else {
+                    println!("❌ Skipping invalid picture file");
+                }
+            }
+        } else {
+            println!("ℹ️  No profile.png in workspace - generating without photo");
         }
 
         let output = cmd.output().context("Failed to execute typst command")?;

@@ -6,7 +6,9 @@ use std::path::PathBuf;
 pub mod auth;
 pub mod config;
 pub mod database;
+pub mod font_validator;
 pub mod generator;
+pub mod image_validator;
 pub mod template_processor;
 pub mod template_system;
 pub mod utils;
@@ -76,4 +78,3 @@ pub fn generate_cv(
     let generator = CvGenerator::new(config)?;
     generator.generate()
 }
-

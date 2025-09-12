@@ -64,18 +64,18 @@
     color = default_primary_color
   }
   (
-    "github": ("displayname": "GitHub", "logo": text(font: "Font Awesome 6 Brands", "\u{f09b}")),
+    "github": (
+      "displayname": "GitHub", 
+      "logo": get_icon("github", font_type: "brands")
+    ),
     "linkedin": (
       "displayname": "LinkedIn",
-      "logo": text(font: "Font Awesome 6 Brands", "\u{f08c}"),
+      "logo": get_icon("linkedin", font_type: "brands")
     ),
     "personal": (
       "displayname": "Personal",
-      "logo": text(font: "Font Awesome 6 Free Solid", "\u{f268}"),
+      "logo": get_icon("personal", font_type: "solid")
     ),
-    // annoyingly, Debian does not ship a version of FontAwesome which supports
-    // the ORCID logo, hence here I draw my own approximation of it using Typst
-    //  primitives
     "orcid": ("displayname": "ORCID", "logo": box(baseline: 0.2em, circle(
       radius: 0.5em,
       fill: color,

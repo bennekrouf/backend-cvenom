@@ -1,0 +1,22 @@
+# config.yaml - Environment-specific configuration
+
+# Local development
+local:
+  tenant_data_path: "./data/tenants"  # Relative to project root
+  output_path: "./output" 
+  templates_path: "./templates"
+  database_path: "./data/tenants.db"
+
+# Production server
+production:
+  tenant_data_path: "/var/cvenom/tenant-data"  # Absolute server path
+  output_path: "/var/cvenom/output"
+  templates_path: "/opt/cvenom/templates"
+  database_path: "/var/cvenom/tenants.db"
+
+# Staging
+staging:
+  tenant_data_path: "/tmp/cvenom-staging/tenants"
+  output_path: "/tmp/cvenom-staging/output"
+  templates_path: "./templates"
+  database_path: "/tmp/cvenom-staging/tenants.db"
