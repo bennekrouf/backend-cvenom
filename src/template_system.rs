@@ -204,6 +204,14 @@ impl TemplateManager {
 
         info!("Looking for main template at: {}", main_template.display());
 
+        let font_config_source = self.templates_dir.join("font_config.typ");
+        if font_config_source.exists() {
+            let font_config_dest = workspace_dir.join("font_config.typ");
+            fs::copy(&font_config_source, &font_config_dest)
+                .context("Failed to copy font_config.typ")?;
+            info!("Copied font configuration file");
+        }
+
         if main_template.exists() {
             fs::copy(&main_template, &main_dest).context("Failed to copy main template file")?;
             info!(

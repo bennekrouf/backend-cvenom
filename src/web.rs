@@ -5,9 +5,9 @@ use crate::template_system::TemplateManager;
 use crate::utils::{normalize_language, normalize_person_name};
 use crate::TemplateProcessor;
 use crate::{CvConfig, CvGenerator};
-
 use anyhow::Result;
 use async_recursion::async_recursion;
+use rocket::catchers;
 use rocket::form::{Form, FromForm};
 use rocket::fs::TempFile;
 use rocket::http::{ContentType, Header, Status};
@@ -28,6 +28,27 @@ use tracing_subscriber::{EnvFilter, Registry};
 
 pub struct PdfResponse(Vec<u8>);
 pub struct Cors;
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ErrorResponse {
+    pub success: bool,
+    pub error: String,
+    pub error_code: String,
+    pub suggestions: Vec<String>,
+    // pub signup_required: Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ValidationError {
+    pub success: bool,
+    pub error: String,
+    pub error_code: String,
+    pub missing_person: String,
+    pub tenant: String,
+    pub suggestions: Vec<String>,
+}
 
 impl<'r> Responder<'r, 'static> for PdfResponse {
     fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
@@ -172,14 +193,6 @@ pub struct AuthResponse {
     pub message: String,
 }
 
-#[derive(Serialize)]
-#[serde(crate = "rocket::serde")]
-pub struct ErrorResponse {
-    pub success: bool,
-    pub error: String,
-    pub signup_required: Option<bool>,
-}
-
 pub struct ServerConfig {
     pub data_dir: PathBuf,
     pub output_dir: PathBuf,
@@ -281,7 +294,7 @@ pub async fn generate_cv(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<PdfResponse, Status> {
+) -> Result<PdfResponse, Json<ErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
 
@@ -289,7 +302,15 @@ pub async fn generate_cv(
         Ok(manager) => manager,
         Err(e) => {
             error!("Failed to initialize template manager: {}", e);
-            return Err(Status::InternalServerError);
+            return Err(Json(ErrorResponse {
+                success: false,
+                error: "Template system initialization failed".to_string(),
+                error_code: "TEMPLATE_INIT_ERROR".to_string(),
+                suggestions: vec![
+                    "Check if templates directory exists".to_string(),
+                    "Contact system administrator".to_string(),
+                ],
+            }));
         }
     };
 
@@ -306,7 +327,12 @@ pub async fn generate_cv(
         Ok(pool) => pool,
         Err(e) => {
             error!("Database connection failed: {}", e);
-            return Err(Status::InternalServerError);
+            return Err(Json(ErrorResponse {
+                success: false,
+                error: "Database connection failed".to_string(),
+                error_code: "DATABASE_ERROR".to_string(),
+                suggestions: vec!["Try again in a few moments".to_string()],
+            }));
         }
     };
 
@@ -318,7 +344,12 @@ pub async fn generate_cv(
         Ok(dir) => dir,
         Err(e) => {
             error!("Failed to ensure tenant data directory: {}", e);
-            return Err(Status::InternalServerError);
+            return Err(Json(ErrorResponse {
+                success: false,
+                error: "Failed to access tenant data directory".to_string(),
+                error_code: "TENANT_DIR_ERROR".to_string(),
+                suggestions: vec!["Contact system administrator".to_string()],
+            }));
         }
     };
 
@@ -344,7 +375,59 @@ pub async fn generate_cv(
                     "Generation error for {} (tenant: {}): {}",
                     request.person, tenant.tenant_name, e
                 );
-                Err(Status::InternalServerError)
+
+                // Parse different error types and provide specific responses
+                let error_msg = e.to_string();
+                if error_msg.contains("Person directory not found") {
+                    Err(Json(ErrorResponse {
+                        success: false,
+                        error: format!("Person '{}' not found in your account", request.person),
+                        error_code: "PERSON_NOT_FOUND".to_string(),
+                        suggestions: vec![
+                            format!(
+                                "Create person '{}' first using the create endpoint",
+                                request.person
+                            ),
+                            "Check the person name spelling".to_string(),
+                            "List available persons to see what exists".to_string(),
+                        ],
+                    }))
+                } else if error_msg.contains("Experiences file not found") {
+                    Err(Json(ErrorResponse {
+                        success: false,
+                        error: format!(
+                            "Experience file missing for {} in language {}",
+                            request.person, lang
+                        ),
+                        error_code: "EXPERIENCES_FILE_MISSING".to_string(),
+                        suggestions: vec![
+                            format!("Create the experiences_{}. typ file", lang),
+                            "Use the file editor to add your work experience".to_string(),
+                        ],
+                    }))
+                } else if error_msg.contains("Typst compilation failed") {
+                    Err(Json(ErrorResponse {
+                        success: false,
+                        error: "CV compilation failed due to template or content issues"
+                            .to_string(),
+                        error_code: "COMPILATION_ERROR".to_string(),
+                        suggestions: vec![
+                            "Check your CV content for syntax errors".to_string(),
+                            "Verify all required fonts are installed".to_string(),
+                            "Try a different template".to_string(),
+                        ],
+                    }))
+                } else {
+                    Err(Json(ErrorResponse {
+                        success: false,
+                        error: "CV generation failed".to_string(),
+                        error_code: "GENERATION_ERROR".to_string(),
+                        suggestions: vec![
+                            "Try again in a few moments".to_string(),
+                            "Check your CV data for any issues".to_string(),
+                        ],
+                    }))
+                }
             }
         },
         Err(e) => {
@@ -352,10 +435,34 @@ pub async fn generate_cv(
                 "Config error for {} (tenant: {}): {}",
                 request.person, tenant.tenant_name, e
             );
-            Err(Status::BadRequest)
+
+            let error_msg = e.to_string();
+            if error_msg.contains("Person directory not found") {
+                Err(Json(ErrorResponse {
+                    success: false,
+                    error: format!("Person '{}' not found in your account", request.person),
+                    error_code: "PERSON_NOT_FOUND".to_string(),
+                    suggestions: vec![
+                        format!("Create person '{}' first", request.person),
+                        "Use the create endpoint to set up the person directory".to_string(),
+                        "Check if the person name is spelled correctly".to_string(),
+                    ],
+                }))
+            } else {
+                Err(Json(ErrorResponse {
+                    success: false,
+                    error: "Invalid CV configuration".to_string(),
+                    error_code: "CONFIG_ERROR".to_string(),
+                    suggestions: vec![
+                        "Check your request parameters".to_string(),
+                        "Verify the person exists".to_string(),
+                    ],
+                }))
+            }
         }
     }
 }
+
 // Protected endpoint - requires authentication and tenant validation
 #[post("/create", data = "<request>")]
 pub async fn create_person(
@@ -584,7 +691,12 @@ pub async fn get_current_user_error() -> Json<ErrorResponse> {
     Json(ErrorResponse {
         success: false,
         error: "Authentication required or user not authorized for any tenant".to_string(),
-        signup_required: Some(true),
+        error_code: "AUTHORIZATION_ERROR".to_string(),
+        suggestions: vec![
+            "Login is required".to_string(),
+            "Contact administrator and ask authorization to this tenant".to_string(),
+        ],
+        // signup_required: Some(true),
     })
 }
 
@@ -664,6 +776,7 @@ pub async fn start_web_server(
         .manage(server_config)
         .manage(auth_config)
         .manage(db_config)
+        .register("/api", catchers![bad_request, internal_error])
         .mount(
             "/api",
             routes![
@@ -922,4 +1035,30 @@ async fn build_file_tree(
     }
 
     Ok(tree)
+}
+
+#[rocket::catch(400)]
+pub fn bad_request() -> Json<ErrorResponse> {
+    Json(ErrorResponse {
+        success: false,
+        error: "Invalid request format".to_string(),
+        error_code: "BAD_REQUEST".to_string(),
+        suggestions: vec![
+            "Check your request JSON format".to_string(),
+            "Verify all required fields are present".to_string(),
+        ],
+    })
+}
+
+#[rocket::catch(500)]
+pub fn internal_error() -> Json<ErrorResponse> {
+    Json(ErrorResponse {
+        success: false,
+        error: "Internal server error".to_string(),
+        error_code: "INTERNAL_ERROR".to_string(),
+        suggestions: vec![
+            "Try again in a few moments".to_string(),
+            "Contact support if the problem persists".to_string(),
+        ],
+    })
 }
