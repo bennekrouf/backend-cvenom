@@ -25,14 +25,8 @@ impl EnvironmentConfig {
         let environment = Self::get_environment();
         info!("Loading configuration for environment: {}", environment);
 
-        // Try to load from config.yaml first
-        if let Ok(config) = Self::load_from_file(&environment) {
-            info!("Configuration loaded from config.yaml");
-            return Ok(config);
-        }
-
-        // Fallback to environment variables
-        Self::load_from_env()
+        // Remove the fallback - require config.yaml to exist
+        Self::load_from_file(&environment)
     }
 
     fn get_environment() -> String {
@@ -45,7 +39,7 @@ impl EnvironmentConfig {
     fn load_from_file(environment: &str) -> Result<Self> {
         let config_path = PathBuf::from("config.yaml");
         if !config_path.exists() {
-            anyhow::bail!("config.yaml not found");
+            anyhow::bail!("config.yaml not found in current directory. Server cannot start without configuration.");
         }
 
         let config_content =
@@ -66,28 +60,6 @@ impl EnvironmentConfig {
             output_path: Self::resolve_path(&env_config.output_path)?,
             templates_path: Self::resolve_path(&env_config.templates_path)?,
             database_path: Self::resolve_path(&env_config.database_path)?,
-        })
-    }
-
-    fn load_from_env() -> Result<Self> {
-        info!("Loading configuration from environment variables");
-
-        Ok(Self {
-            tenant_data_path: Self::resolve_path(&PathBuf::from(
-                std::env::var("CVENOM_TENANT_DATA_PATH")
-                    .unwrap_or_else(|_| "./data/tenants".to_string()),
-            ))?,
-            output_path: Self::resolve_path(&PathBuf::from(
-                std::env::var("CVENOM_OUTPUT_PATH").unwrap_or_else(|_| "./output".to_string()),
-            ))?,
-            templates_path: Self::resolve_path(&PathBuf::from(
-                std::env::var("CVENOM_TEMPLATES_PATH")
-                    .unwrap_or_else(|_| "./templates".to_string()),
-            ))?,
-            database_path: Self::resolve_path(&PathBuf::from(
-                std::env::var("CVENOM_DATABASE_PATH")
-                    .unwrap_or_else(|_| "./data/tenants.db".to_string()),
-            ))?,
         })
     }
 
