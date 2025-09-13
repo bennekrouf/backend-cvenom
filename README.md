@@ -41,6 +41,9 @@ cargo run -- tenant add mohamed.bennekrouf@gmail.com keyteo
 # Check it is added
 cargo run -- tenant check mohamed.bennekrouf@gmail.com
 
+# Add a tenant keyteo and authorize all @keyteo.ch address on it 
+cargo run --release -- tenant add-domain keyteo.ch keyteo
+
 
 # OR import from CSV
 echo "email,tenant_name
