@@ -718,6 +718,7 @@ pub async fn start_web_server(
     data_dir: PathBuf,
     output_dir: PathBuf,
     templates_dir: PathBuf,
+    database_path: PathBuf,
 ) -> Result<()> {
     Registry::default()
         .with(tracing_subscriber::fmt::layer())
@@ -736,8 +737,7 @@ pub async fn start_web_server(
     // Ensure data directory exists BEFORE creating database
     tokio::fs::create_dir_all(&data_dir).await?;
 
-    // Initialize database
-    let database_path = data_dir.join("tenants.db");
+    // Use the passed database path directly
     let mut db_config = DatabaseConfig::new(database_path);
 
     // Initialize database pool and run migrations

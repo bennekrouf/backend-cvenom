@@ -202,6 +202,7 @@ async fn main() -> Result<()> {
                 env_config.tenant_data_path,
                 env_config.output_path,
                 env_config.templates_path,
+                env_config.database_path,
             )
             .await
         }
