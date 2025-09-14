@@ -1,7 +1,7 @@
 // src/main.rs - Updated to use environment configuration
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use cv_generator::font_validator;
+// use cv_generator::font_validator;
 use cv_generator::utils::normalize_person_name;
 use cv_generator::{list_persons, list_templates, web::start_web_server, CvConfig, CvGenerator};
 use std::path::PathBuf;
@@ -192,8 +192,8 @@ async fn main() -> Result<()> {
             println!();
 
             // Validate fonts before starting server
-            let font_config_path = Some(PathBuf::from("font_validation.yaml"));
-            crate::font_validator::validate_fonts_or_exit(font_config_path).await?;
+            // let font_config_path = Some(PathBuf::from("font_validation.yaml"));
+            // crate::font_validator::validate_fonts_or_exit(font_config_path).await?;
 
             println!("Server: http://0.0.0.0:4002");
             println!();
