@@ -16,7 +16,6 @@ pub struct EnvironmentConfig {
 struct ConfigFile {
     local: EnvironmentConfig,
     production: EnvironmentConfig,
-    staging: EnvironmentConfig,
 }
 
 impl EnvironmentConfig {
@@ -50,7 +49,6 @@ impl EnvironmentConfig {
 
         let env_config = match environment {
             "production" => config_file.production,
-            "staging" => config_file.staging,
             _ => config_file.local,
         };
 

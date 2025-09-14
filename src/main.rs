@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
             println!("  --templates-dir <path>");
             println!();
             println!("Override with environment variables:");
-            println!("  CVENOM_ENV=production|staging|local");
+            println!("  CVENOM_ENV=production|local");
             println!("  CVENOM_TENANT_DATA_PATH=/path/to/tenant/data");
             println!("  CVENOM_OUTPUT_PATH=/path/to/output");
             println!("  CVENOM_TEMPLATES_PATH=/path/to/templates");
