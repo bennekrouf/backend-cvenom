@@ -31,6 +31,7 @@ impl Default for TemplateManifest {
     }
 }
 
+// #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Template {
     pub id: String,
@@ -38,6 +39,7 @@ pub struct Template {
     pub path: PathBuf,
 }
 
+#[allow(dead_code)]
 impl Template {
     pub fn load_from_dir(template_dir: &PathBuf) -> Result<Self> {
         let id = template_dir
@@ -81,14 +83,6 @@ impl Template {
     pub fn main_template_file(&self) -> PathBuf {
         self.path.join(&self.manifest.main_file)
     }
-
-    pub fn get_dependencies(&self) -> Vec<PathBuf> {
-        self.manifest
-            .dependencies
-            .iter()
-            .map(|dep| self.path.join(dep))
-            .collect()
-    }
 }
 
 pub struct TemplateManager {
@@ -96,6 +90,7 @@ pub struct TemplateManager {
     templates: HashMap<String, Template>,
 }
 
+#[allow(dead_code)]
 impl TemplateManager {
     pub fn new(templates_dir: PathBuf) -> Result<Self> {
         let mut manager = Self {

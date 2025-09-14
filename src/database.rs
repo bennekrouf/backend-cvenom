@@ -295,6 +295,7 @@ pub struct TenantService<'a> {
 }
 
 // Update TenantService in src/database.rs
+#[allow(dead_code)]
 impl<'a> TenantService<'a> {
     pub fn new(pool: &'a SqlitePool) -> Self {
         Self {
