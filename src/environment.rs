@@ -29,10 +29,7 @@ impl EnvironmentConfig {
     }
 
     fn get_environment() -> String {
-        std::env::var("CVENOM_ENV")
-            .or_else(|_| std::env::var("ENVIRONMENT"))
-            .or_else(|_| std::env::var("ENV"))
-            .unwrap_or_else(|_| "local".to_string())
+        std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string())
     }
 
     fn load_from_file(environment: &str) -> Result<Self> {

@@ -82,7 +82,7 @@ async fn main() -> Result<()> {
             println!("Current configuration:");
             println!(
                 "  Environment: {}",
-                std::env::var("CVENOM_ENV").unwrap_or_else(|_| "local".to_string())
+                std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string())
             );
             println!(
                 "  Tenant Data Path: {}",
@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
             println!("  --templates-dir <path>");
             println!();
             println!("Override with environment variables:");
-            println!("  CVENOM_ENV=production|local");
+            println!("  ENVIRONMENT=production|local");
             println!("  CVENOM_TENANT_DATA_PATH=/path/to/tenant/data");
             println!("  CVENOM_OUTPUT_PATH=/path/to/output");
             println!("  CVENOM_TEMPLATES_PATH=/path/to/templates");
@@ -185,7 +185,7 @@ async fn main() -> Result<()> {
             println!("Starting Multi-tenant CV Generator API Server");
             println!(
                 "Environment: {}",
-                std::env::var("CVENOM_ENV").unwrap_or_else(|_| "local".to_string())
+                std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string())
             );
             println!("Tenant Data: {}", env_config.tenant_data_path.display());
             println!("Database: {}", env_config.database_path.display());

@@ -4,7 +4,10 @@ set -e
 echo "Starting CVenom backend server..."
 cd /opt/cvenom/backend
 
-# Create directories (without sudo since they should exist)
+# Set production environment - single ENV variable
+export ENVIRONMENT=production
+
+# Create directories
 echo "Ensuring directories exist..."
 mkdir -p /var/cvenom/tenant-data /var/cvenom/output /opt/cvenom/templates
 
