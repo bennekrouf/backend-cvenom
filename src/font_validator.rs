@@ -81,6 +81,15 @@ impl FontValidator {
     }
 
     async fn load_config(path: &PathBuf) -> Result<FontValidationConfig> {
+        println!(
+            "DEBUG: Attempting to load font config from: {}",
+            path.display()
+        );
+        println!("DEBUG: Path exists: {}", path.exists());
+        println!(
+            "DEBUG: Current working directory: {:?}",
+            std::env::current_dir()
+        );
         if !path.exists() {
             info!(
                 "Font validation config not found at {}, using defaults",

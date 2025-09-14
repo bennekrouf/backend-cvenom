@@ -13,10 +13,3 @@ production:
   output_path: "/var/cvenom/output"
   templates_path: "/opt/cvenom/templates"
   database_path: "/var/cvenom/tenants.db"
-
-# Staging
-staging:
-  tenant_data_path: "/tmp/cvenom-staging/tenants"
-  output_path: "/tmp/cvenom-staging/output"
-  templates_path: "./templates"
-  database_path: "/tmp/cvenom-staging/tenants.db"
