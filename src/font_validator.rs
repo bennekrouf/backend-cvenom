@@ -69,7 +69,13 @@ impl FontValidator {
         let config = if let Some(path) = config_path {
             Self::load_config(&path).await?
         } else {
-            FontValidationConfig::default()
+            // Use same default location pattern as config.yaml
+            let default_path = PathBuf::from("font_validation.yaml");
+            if default_path.exists() {
+                Self::load_config(&default_path).await?
+            } else {
+                FontValidationConfig::default()
+            }
         };
 
         let available_fonts = Self::get_system_fonts().await?;
@@ -81,15 +87,6 @@ impl FontValidator {
     }
 
     async fn load_config(path: &PathBuf) -> Result<FontValidationConfig> {
-        println!(
-            "DEBUG: Attempting to load font config from: {}",
-            path.display()
-        );
-        println!("DEBUG: Path exists: {}", path.exists());
-        println!(
-            "DEBUG: Current working directory: {:?}",
-            std::env::current_dir()
-        );
         if !path.exists() {
             info!(
                 "Font validation config not found at {}, using defaults",
@@ -321,7 +318,12 @@ impl FontValidator {
 }
 
 pub async fn validate_fonts_or_exit(config_path: Option<PathBuf>) -> Result<()> {
-    let validator = FontValidator::new(config_path).await?;
+    let font_config_path = config_path.unwrap_or_else(|| {
+        // Use same pattern as config.yaml - look in current directory
+        PathBuf::from("font_validation.yaml")
+    });
+
+    let validator = FontValidator::new(Some(font_config_path)).await?;
     let result = validator.validate().await?;
 
     validator.print_validation_report(&result);
