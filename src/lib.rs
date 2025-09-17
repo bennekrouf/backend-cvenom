@@ -3,6 +3,7 @@ use anyhow::Result;
 use std::fs;
 use std::path::PathBuf;
 
+pub use web::start_web_server;
 pub mod auth;
 pub mod config;
 pub mod database;
@@ -15,6 +16,7 @@ pub mod utils;
 pub mod web;
 pub mod workspace;
 
+pub mod linkedin_analysis;
 // Re-export main types
 pub use config::CvConfig;
 pub use generator::CvGenerator;

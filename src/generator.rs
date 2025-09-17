@@ -126,7 +126,7 @@ fn normalize_template_for_generator(template: &str, template_manager: &TemplateM
     let requested = template.to_lowercase();
     for available_template in template_manager.list_templates() {
         if available_template.id.to_lowercase() == requested {
-            return available_template.id.clone();
+            return available_template.id.to_lowercase(); // Force lowercase return
         }
     }
     "default".to_string()

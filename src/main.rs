@@ -1,9 +1,8 @@
 // src/main.rs - Updated to use environment configuration
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-// use cv_generator::font_validator;
 use cv_generator::utils::normalize_person_name;
-use cv_generator::{list_persons, list_templates, web::start_web_server, CvConfig, CvGenerator};
+use cv_generator::{list_persons, list_templates, start_web_server, CvConfig, CvGenerator};
 use std::path::PathBuf;
 
 mod database;
@@ -113,8 +112,9 @@ async fn main() -> Result<()> {
             watch,
             tenant,
         } => {
+            let normalized_template = template.to_lowercase();
             let mut config = CvConfig::new(&person, &lang)
-                .with_template(template)
+                .with_template(normalized_template)
                 .with_output_dir(output_dir)
                 .with_templates_dir(templates_dir);
 

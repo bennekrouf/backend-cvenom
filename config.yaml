@@ -13,3 +13,12 @@ production:
   output_path: "/var/cvenom/output"
   templates_path: "/opt/cvenom/templates"
   database_path: "/var/cvenom/tenants.db"
+
+linkedin_analysis:
+  semantic_api_url: "https://api0.ai"
+  scraper_timeout_seconds: 30
+  analysis_timeout_seconds: 60
+  max_description_length: 10000  # Limit scraped content size
+  
+# Environment variables needed:
+# SEMANTIC_API_KEY=your_semantic_api_key

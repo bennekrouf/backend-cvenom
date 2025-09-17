@@ -104,18 +104,6 @@
 #section(get_text("key_insights"))
 #experience_details(..get_key_insights())
 
-// #section(get_text("key_insights"))
-// #if "key_insights" in details {
-//   experience_details(..details.key_insights)
-// } else {
-//   experience_details(
-//     "Experienced technical lead with proven track record in startup environments",
-//     "Expert in modern development stacks with focus on Rust and microservices architecture", 
-//     "Strong background in AI/ML integration and blockchain development",
-//     "Demonstrated ability to scale teams and deliver complex technical solutions"
-//   )
-// }
-
 #section(get_text("technical_skills"))
 #if "skills" in details {
   show_skills(details.skills)
