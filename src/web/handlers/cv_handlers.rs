@@ -1,4 +1,5 @@
-// src/web/cv_handlers.rs
+// src/web/handlers/cv_handlers.rs - REPLACE with this corrected version
+
 use crate::auth::AuthenticatedUser;
 use crate::database::{DatabaseConfig, TenantService};
 use crate::image_validator::ImageValidator;
@@ -14,48 +15,49 @@ use rocket::State;
 use tracing::{error, info};
 
 pub async fn generate_cv_handler(
-    request: Json<GenerateRequest>,
+    request: Json<StandardRequest<GenerateRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<PdfResponse, Json<ErrorResponse>> {
+) -> Result<PdfResponse, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
+    let conversation_id = request.conversation_id();
 
     let template_manager = match TemplateManager::new(config.templates_dir.clone()) {
         Ok(manager) => manager,
         Err(e) => {
             error!("Failed to initialize template manager: {}", e);
-            return Err(Json(ErrorResponse {
-                success: false,
-                error: "Template system initialization failed".to_string(),
-                error_code: "TEMPLATE_INIT_ERROR".to_string(),
-                suggestions: vec![
+            return Err(Json(StandardErrorResponse::new(
+                "Template system initialization failed".to_string(),
+                "TEMPLATE_INIT_ERROR".to_string(),
+                vec![
                     "Check if templates directory exists".to_string(),
                     "Contact system administrator".to_string(),
                 ],
-            }));
+                conversation_id,
+            )));
         }
     };
 
-    let lang = normalize_language(request.lang.as_deref());
-    let template_id = normalize_template(request.template.as_deref(), &template_manager);
+    let lang = normalize_language(request.data.lang.as_deref());
+    let template_id = normalize_template(request.data.template.as_deref(), &template_manager);
 
     info!(
         "User {} (tenant: {}) generating CV for {}",
-        user.email, tenant.tenant_name, request.person
+        user.email, tenant.tenant_name, request.data.person
     );
 
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
             error!("Database connection failed: {}", e);
-            return Err(Json(ErrorResponse {
-                success: false,
-                error: "Database connection failed".to_string(),
-                error_code: "DATABASE_ERROR".to_string(),
-                suggestions: vec!["Try again in a few moments".to_string()],
-            }));
+            return Err(Json(StandardErrorResponse::new(
+                "Database connection failed".to_string(),
+                "DATABASE_ERROR".to_string(),
+                vec!["Try again in a few moments".to_string()],
+                conversation_id,
+            )));
         }
     };
 
@@ -67,16 +69,16 @@ pub async fn generate_cv_handler(
         Ok(dir) => dir,
         Err(e) => {
             error!("Failed to ensure tenant data directory: {}", e);
-            return Err(Json(ErrorResponse {
-                success: false,
-                error: "Failed to access tenant data directory".to_string(),
-                error_code: "TENANT_DIR_ERROR".to_string(),
-                suggestions: vec!["Contact system administrator".to_string()],
-            }));
+            return Err(Json(StandardErrorResponse::new(
+                "Failed to access tenant data directory".to_string(),
+                "TENANT_DIR_ERROR".to_string(),
+                vec!["Contact system administrator".to_string()],
+                conversation_id,
+            )));
         }
     };
 
-    let normalized_person = normalize_person_name(&request.person);
+    let normalized_person = normalize_person_name(&request.data.person);
     let person_dir = tenant_data_dir.join(&normalized_person);
 
     let profile_image_path = person_dir.join("profile.png");
@@ -84,19 +86,19 @@ pub async fn generate_cv_handler(
     {
         error!(
             "Image validation failed for {} (tenant: {}): {}",
-            request.person, tenant.tenant_name, validation_error.message
+            request.data.person, tenant.tenant_name, validation_error.message
         );
 
-        return Err(Json(ErrorResponse {
-            success: false,
-            error: validation_error.message,
-            error_code: validation_error.error_type.code().to_string(),
-            suggestions: vec![
+        return Err(Json(StandardErrorResponse::new(
+            validation_error.message,
+            validation_error.error_type.code().to_string(),
+            vec![
                 validation_error.suggestion,
                 "You can also generate CV without a profile picture".to_string(),
                 "Use the upload endpoint to replace the corrupted image".to_string(),
             ],
-        }));
+            conversation_id,
+        )));
     }
 
     let cv_config = CvConfig::new(&normalized_person, &lang)
@@ -110,57 +112,57 @@ pub async fn generate_cv_handler(
             Ok(pdf_data) => {
                 info!(
                     "Successfully generated CV for {} by {} (tenant: {})",
-                    request.person, user.email, tenant.tenant_name
+                    request.data.person, user.email, tenant.tenant_name
                 );
                 Ok(PdfResponse(pdf_data))
             }
             Err(e) => {
                 error!(
                     "Generation error for {} (tenant: {}): {}",
-                    request.person, tenant.tenant_name, e
+                    request.data.person, tenant.tenant_name, e
                 );
 
                 let error_msg = e.to_string();
                 if error_msg.contains("Person directory not found") {
-                    Err(Json(ErrorResponse {
-                        success: false,
-                        error: format!("Person '{}' not found in your account", request.person),
-                        error_code: "PERSON_NOT_FOUND".to_string(),
-                        suggestions: vec![
+                    Err(Json(StandardErrorResponse::new(
+                        format!("Person '{}' not found in your account", request.data.person),
+                        "PERSON_NOT_FOUND".to_string(),
+                        vec![
                             format!(
                                 "Create person '{}' first using the create endpoint",
-                                request.person
+                                request.data.person
                             ),
                             "Check the person name spelling".to_string(),
                         ],
-                    }))
+                        conversation_id,
+                    )))
                 } else {
-                    Err(Json(ErrorResponse {
-                        success: false,
-                        error: "CV generation failed".to_string(),
-                        error_code: "GENERATION_ERROR".to_string(),
-                        suggestions: vec![
+                    Err(Json(StandardErrorResponse::new(
+                        "CV generation failed".to_string(),
+                        "GENERATION_ERROR".to_string(),
+                        vec![
                             "Try again in a few moments".to_string(),
                             "Check your CV data for any issues".to_string(),
                         ],
-                    }))
+                        conversation_id,
+                    )))
                 }
             }
         },
         Err(e) => {
             error!(
                 "Config error for {} (tenant: {}): {}",
-                request.person, tenant.tenant_name, e
+                request.data.person, tenant.tenant_name, e
             );
-            Err(Json(ErrorResponse {
-                success: false,
-                error: "Invalid CV configuration".to_string(),
-                error_code: "CONFIG_ERROR".to_string(),
-                suggestions: vec![
+            Err(Json(StandardErrorResponse::new(
+                "Invalid CV configuration".to_string(),
+                "CONFIG_ERROR".to_string(),
+                vec![
                     "Check your request parameters".to_string(),
                     "Verify the person exists".to_string(),
                 ],
-            }))
+                conversation_id,
+            )))
         }
     }
 }
@@ -170,7 +172,7 @@ pub async fn upload_and_convert_cv_handler(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<CvConvertResponse>, Json<ErrorResponse>> {
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
 
@@ -182,7 +184,6 @@ pub async fn upload_and_convert_cv_handler(
     // Extract all file information BEFORE calling persist_to()
     let content_type = upload.cv_file.content_type();
     let file_size = upload.cv_file.len();
-    // let ucf = upload.cv_file;
 
     let original_filename = upload
         .cv_file
@@ -222,37 +223,32 @@ pub async fn upload_and_convert_cv_handler(
             .map(|ct| ct.to_string())
             .unwrap_or_else(|| "unknown".to_string());
 
-        return Err(Json(ErrorResponse {
-            success: false,
-            error: format!(
+        return Err(Json(StandardErrorResponse::new(
+            format!(
                 "Only PDF and Word documents (.docx) are supported. Received content type: {}",
                 received_type
             ),
-            error_code: "INVALID_FORMAT".to_string(),
-            suggestions: vec![
+            "INVALID_FORMAT".to_string(),
+            vec![
                 "Upload a PDF file (.pdf)".to_string(),
                 "Upload a Word document (.docx)".to_string(),
             ],
-        }));
+            None,
+        )));
     }
-
-    info!(
-        "Processing file: {} (content-type: {:?})",
-        original_filename, content_type
-    );
 
     // Check file size (10MB limit)
     const MAX_SIZE: u64 = 10 * 1024 * 1024;
     if file_size > MAX_SIZE {
-        return Err(Json(ErrorResponse {
-            success: false,
-            error: "File size exceeds 10MB limit".to_string(),
-            error_code: "FILE_TOO_LARGE".to_string(),
-            suggestions: vec![
+        return Err(Json(StandardErrorResponse::new(
+            "File size exceeds 10MB limit".to_string(),
+            "FILE_TOO_LARGE".to_string(),
+            vec![
                 "Compress your CV file".to_string(),
                 "Use a smaller file size (max 10MB)".to_string(),
             ],
-        }));
+            None,
+        )));
     }
 
     // Database setup...
@@ -260,12 +256,12 @@ pub async fn upload_and_convert_cv_handler(
         Ok(pool) => pool,
         Err(e) => {
             error!("Database connection failed: {}", e);
-            return Err(Json(ErrorResponse {
-                success: false,
-                error: "Database connection failed".to_string(),
-                error_code: "DATABASE_ERROR".to_string(),
-                suggestions: vec!["Try again in a few moments".to_string()],
-            }));
+            return Err(Json(StandardErrorResponse::new(
+                "Database connection failed".to_string(),
+                "DATABASE_ERROR".to_string(),
+                vec!["Try again in a few moments".to_string()],
+                None,
+            )));
         }
     };
 
@@ -277,12 +273,12 @@ pub async fn upload_and_convert_cv_handler(
         Ok(dir) => dir,
         Err(e) => {
             error!("Failed to ensure tenant data directory: {}", e);
-            return Err(Json(ErrorResponse {
-                success: false,
-                error: "Failed to access tenant data directory".to_string(),
-                error_code: "TENANT_DIR_ERROR".to_string(),
-                suggestions: vec!["Contact system administrator".to_string()],
-            }));
+            return Err(Json(StandardErrorResponse::new(
+                "Failed to access tenant data directory".to_string(),
+                "TENANT_DIR_ERROR".to_string(),
+                vec!["Contact system administrator".to_string()],
+                None,
+            )));
         }
     };
 
@@ -291,12 +287,12 @@ pub async fn upload_and_convert_cv_handler(
     // NOW call persist_to() after extracting all needed info
     if let Err(e) = upload.cv_file.persist_to(&temp_path).await {
         error!("Failed to save uploaded file: {}", e);
-        return Err(Json(ErrorResponse {
-            success: false,
-            error: "Failed to process uploaded file".to_string(),
-            error_code: "FILE_SAVE_ERROR".to_string(),
-            suggestions: vec!["Try uploading the file again".to_string()],
-        }));
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to process uploaded file".to_string(),
+            "FILE_SAVE_ERROR".to_string(),
+            vec!["Try uploading the file again".to_string()],
+            None,
+        )));
     }
 
     let conversion_service = CvConversionService::new();
@@ -309,16 +305,16 @@ pub async fn upload_and_convert_cv_handler(
             let _ = tokio::fs::remove_file(&temp_path).await;
 
             error!("CV conversion failed: {}", error_msg);
-            return Err(Json(ErrorResponse {
-                success: false,
-                error: format!("CV conversion failed: {}", error_msg),
-                error_code: "PARSE_ERROR".to_string(),
-                suggestions: vec![
+            return Err(Json(StandardErrorResponse::new(
+                format!("CV conversion failed: {}", error_msg),
+                "PARSE_ERROR".to_string(),
+                vec![
                     "Ensure your CV has clear, readable text".to_string(),
                     "Try uploading a different file format".to_string(),
                     "Check if the file is not corrupted".to_string(),
                 ],
-            }));
+                None,
+            )));
         }
     };
 
@@ -341,34 +337,40 @@ pub async fn upload_and_convert_cv_handler(
         .await
     {
         Ok(_) => {
-            let person_dir = tenant_data_dir.join(&normalized_person);
             info!(
                 "CV converted and person created: {} by {} (tenant: {})",
                 normalized_person, user.email, tenant.tenant_name
             );
 
-            Ok(Json(CvConvertResponse {
-                success: true,
-                message: format!(
-                    "CV successfully converted and person '{}' created",
+            let next_actions = vec![
+                format!("Upload profile picture for {}", person_name),
+                format!("Edit CV parameters for {}", person_name),
+                format!("Generate CV PDF for {}", person_name),
+            ];
+
+            let response = ActionResponse::success(
+                format!(
+                    "CV successfully converted and collaborator '{}' created",
                     person_name
                 ),
-                person_name: normalized_person.clone(),
-                tenant: tenant.tenant_name.clone(),
-                person_dir: person_dir.to_string_lossy().to_string(),
-            }))
+                "created".to_string(),
+                None,
+            )
+            .with_next_actions(next_actions);
+
+            Ok(Json(response))
         }
         Err(e) => {
             error!("Failed to create person from converted CV: {}", e);
-            Err(Json(ErrorResponse {
-                success: false,
-                error: "Failed to create person directory".to_string(),
-                error_code: "PERSON_CREATE_ERROR".to_string(),
-                suggestions: vec![
+            Err(Json(StandardErrorResponse::new(
+                "Failed to create collaborator directory".to_string(),
+                "PERSON_CREATE_ERROR".to_string(),
+                vec![
                     "Try again in a few moments".to_string(),
                     "Contact support if the problem persists".to_string(),
                 ],
-            }))
+                None,
+            )))
         }
     }
 }
@@ -384,3 +386,4 @@ fn normalize_template(template: Option<&str>, template_manager: &TemplateManager
 
     "default".to_string()
 }
+

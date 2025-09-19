@@ -1,4 +1,5 @@
-// src/web/types.rs
+// src/web/types.rs - Add missing types and ensure all are properly exported
+
 use rocket::form::FromForm;
 use rocket::fs::TempFile;
 use rocket::http::ContentType;
@@ -18,6 +19,7 @@ impl<'r> Responder<'r, 'static> for PdfResponse {
     }
 }
 
+// Keep existing ErrorResponse for v1 compatibility
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct ErrorResponse {
@@ -27,6 +29,7 @@ pub struct ErrorResponse {
     pub suggestions: Vec<String>,
 }
 
+// Keep existing response types for v1 compatibility
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct ValidationError {
@@ -161,3 +164,197 @@ pub struct ServerConfig {
     pub output_dir: PathBuf,
     pub templates_dir: PathBuf,
 }
+
+// NEW STANDARD RESPONSE TYPES FOR V2 API
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct StandardResponse {
+    #[serde(rename = "type")]
+    pub response_type: ResponseType,
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct TextResponse {
+    #[serde(rename = "type")]
+    pub response_type: ResponseType,
+    pub success: bool,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct DataResponse<T> {
+    #[serde(rename = "type")]
+    pub response_type: ResponseType,
+    pub success: bool,
+    pub message: String,
+    pub data: T,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_format: Option<DisplayFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ActionResponse {
+    #[serde(rename = "type")]
+    pub response_type: ResponseType,
+    pub success: bool,
+    pub message: String,
+    pub action: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub next_actions: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct StandardErrorResponse {
+    #[serde(rename = "type")]
+    pub response_type: ResponseType,
+    pub success: bool,
+    pub error: String,
+    pub error_code: String,
+    pub suggestions: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde", rename_all = "lowercase")]
+pub enum ResponseType {
+    Text,
+    File,
+    Data,
+    Action,
+    Error,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct DisplayFormat {
+    #[serde(rename = "type")]
+    pub format_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sections: Option<Vec<DisplaySection>>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct DisplaySection {
+    pub title: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub score: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub points: Option<Vec<String>>,
+}
+
+// Request types with conversation_id support
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct StandardRequest<T> {
+    #[serde(flatten)]
+    pub data: T,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
+}
+
+// Helper trait for extracting conversation_id
+pub trait WithConversationId {
+    fn conversation_id(&self) -> Option<String>;
+}
+
+impl<T> WithConversationId for StandardRequest<T> {
+    fn conversation_id(&self) -> Option<String> {
+        self.conversation_id.clone()
+    }
+}
+
+// Job analysis response data structure
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct JobAnalysisData {
+    pub job_content: Option<crate::linkedin_analysis::JobContent>,
+    pub person_experiences: Option<String>,
+    pub fit_analysis: Option<String>,
+    pub raw_job_content: Option<String>,
+}
+
+// Helper functions to create standard responses
+impl TextResponse {
+    pub fn success(message: String, conversation_id: Option<String>) -> Self {
+        Self {
+            response_type: ResponseType::Text,
+            success: true,
+            message,
+            conversation_id,
+        }
+    }
+}
+
+impl<T> DataResponse<T> {
+    pub fn success(message: String, data: T, conversation_id: Option<String>) -> Self {
+        Self {
+            response_type: ResponseType::Data,
+            success: true,
+            message,
+            data,
+            display_format: None,
+            conversation_id,
+        }
+    }
+
+    pub fn with_display_format(mut self, display_format: DisplayFormat) -> Self {
+        self.display_format = Some(display_format);
+        self
+    }
+}
+
+impl ActionResponse {
+    pub fn success(message: String, action: String, conversation_id: Option<String>) -> Self {
+        Self {
+            response_type: ResponseType::Action,
+            success: true,
+            message,
+            action,
+            next_actions: None,
+            conversation_id,
+        }
+    }
+
+    pub fn with_next_actions(mut self, next_actions: Vec<String>) -> Self {
+        self.next_actions = Some(next_actions);
+        self
+    }
+}
+
+impl StandardErrorResponse {
+    pub fn new(
+        error: String,
+        error_code: String,
+        suggestions: Vec<String>,
+        conversation_id: Option<String>,
+    ) -> Self {
+        Self {
+            response_type: ResponseType::Error,
+            success: false,
+            error,
+            error_code,
+            suggestions,
+            conversation_id,
+        }
+    }
+}
+

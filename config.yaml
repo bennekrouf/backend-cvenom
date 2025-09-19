@@ -19,6 +19,10 @@ linkedin_analysis:
   scraper_timeout_seconds: 30
   analysis_timeout_seconds: 60
   max_description_length: 10000  # Limit scraped content size
+
+job_matching:
+  api_url: "http://127.0.0.1:6666"  # Job matching service URL
+  timeout_seconds: 60
   
 # Environment variables needed:
-# SEMANTIC_API_KEY=your_semantic_api_key
+# JOB_MATCHING_API_URL=http://127.0.0.1:6666  # Optional override

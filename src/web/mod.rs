@@ -1,4 +1,5 @@
-// src/web/mod.rs
+// src/web/mod.rs - REPLACE with this clean version (no v1 compatibility needed)
+
 pub mod file_handlers;
 pub mod handlers;
 pub mod services;
@@ -10,7 +11,6 @@ pub use types::*;
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::DatabaseConfig;
 use anyhow::Result;
-// use linkedin_handlers::analyze_job_fit_handler;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::form::Form;
 use rocket::http::{Header, Status};
@@ -45,45 +45,46 @@ impl Fairing for Cors {
     }
 }
 
+// Standard API Routes (clean, no v1/v2 confusion)
+
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit(
-    request: Json<crate::linkedin_analysis::JobAnalysisRequest>,
+    request: Json<StandardRequest<crate::linkedin_analysis::JobAnalysisRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<crate::linkedin_analysis::JobAnalysisResponse>, Json<ErrorResponse>> {
+) -> Result<Json<DataResponse<JobAnalysisData>>, Json<StandardErrorResponse>> {
     handlers::analyze_job_fit_handler(request, auth, config, db_config).await
 }
 
-// Route handlers - delegate to handler modules
 #[post("/generate", data = "<request>")]
 pub async fn generate_cv(
-    request: Json<GenerateRequest>,
+    request: Json<StandardRequest<GenerateRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<PdfResponse, Json<ErrorResponse>> {
+) -> Result<PdfResponse, Json<StandardErrorResponse>> {
     handlers::generate_cv_handler(request, auth, config, db_config).await
-}
-
-#[post("/delete-person", data = "<request>")]
-pub async fn delete_person(
-    request: Json<DeletePersonRequest>,
-    auth: AuthenticatedUser,
-    config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
-) -> Result<Json<DeletePersonResponse>, Status> {
-    handlers::delete_person_handler(request, auth, config, db_config).await
 }
 
 #[post("/create", data = "<request>")]
 pub async fn create_person(
-    request: Json<CreatePersonRequest>,
+    request: Json<StandardRequest<CreatePersonRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<CreatePersonResponse>, Status> {
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     handlers::create_person_handler(request, auth, config, db_config).await
+}
+
+#[post("/delete-person", data = "<request>")]
+pub async fn delete_person(
+    request: Json<StandardRequest<DeletePersonRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    handlers::delete_person_handler(request, auth, config, db_config).await
 }
 
 #[post("/upload-picture", data = "<upload>")]
@@ -92,7 +93,7 @@ pub async fn upload_picture(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<UploadResponse>, Status> {
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     handlers::upload_picture_handler(upload, auth, config, db_config).await
 }
 
@@ -102,27 +103,27 @@ pub async fn upload_and_convert_cv(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<CvConvertResponse>, Json<ErrorResponse>> {
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     handlers::upload_and_convert_cv_handler(upload, auth, config, db_config).await
 }
 
 #[get("/templates")]
-pub async fn get_templates(config: &State<ServerConfig>) -> Json<TemplatesResponse> {
+pub async fn get_templates(config: &State<ServerConfig>) -> Json<DataResponse<Vec<TemplateInfo>>> {
     handlers::get_templates_handler(config).await
 }
 
 #[get("/me")]
-pub async fn get_current_user(auth: AuthenticatedUser) -> Json<AuthResponse> {
+pub async fn get_current_user(auth: AuthenticatedUser) -> Json<DataResponse<UserInfo>> {
     handlers::get_current_user_handler(auth).await
 }
 
 #[get("/me", rank = 2)]
-pub async fn get_current_user_error() -> Json<ErrorResponse> {
+pub async fn get_current_user_error() -> Json<StandardErrorResponse> {
     handlers::get_current_user_error_handler().await
 }
 
 #[get("/health")]
-pub async fn health(auth: OptionalAuth) -> Json<&'static str> {
+pub async fn health(auth: OptionalAuth) -> Json<TextResponse> {
     handlers::health_handler(auth).await
 }
 
@@ -138,11 +139,11 @@ pub async fn get_tenant_file_content(
 
 #[post("/files/save", data = "<request>")]
 pub async fn save_tenant_file_content(
-    request: Json<SaveFileRequest>,
+    request: Json<StandardRequest<SaveFileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<serde_json::Value>, Status> {
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     file_handlers::save_tenant_file_content_handler(request, auth, config, db_config).await
 }
 
@@ -152,6 +153,7 @@ pub async fn get_tenant_files(
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<serde_json::Value>, Status> {
+    // Changed return type
     file_handlers::get_tenant_files_handler(auth, config, db_config).await
 }
 
@@ -162,29 +164,29 @@ pub async fn options() -> Status {
 
 // Error catchers
 #[rocket::catch(400)]
-pub fn bad_request() -> Json<ErrorResponse> {
-    Json(ErrorResponse {
-        success: false,
-        error: "Invalid request format".to_string(),
-        error_code: "BAD_REQUEST".to_string(),
-        suggestions: vec![
+pub fn bad_request() -> Json<StandardErrorResponse> {
+    Json(StandardErrorResponse::new(
+        "Invalid request format".to_string(),
+        "BAD_REQUEST".to_string(),
+        vec![
             "Check your request JSON format".to_string(),
             "Verify all required fields are present".to_string(),
         ],
-    })
+        None,
+    ))
 }
 
 #[rocket::catch(500)]
-pub fn internal_error() -> Json<ErrorResponse> {
-    Json(ErrorResponse {
-        success: false,
-        error: "Internal server error".to_string(),
-        error_code: "INTERNAL_ERROR".to_string(),
-        suggestions: vec![
+pub fn internal_error() -> Json<StandardErrorResponse> {
+    Json(StandardErrorResponse::new(
+        "Internal server error".to_string(),
+        "INTERNAL_ERROR".to_string(),
+        vec![
             "Try again in a few moments".to_string(),
             "Contact support if the problem persists".to_string(),
         ],
-    })
+        None,
+    ))
 }
 
 // Main server start function
@@ -208,13 +210,10 @@ pub async fn start_web_server(
         templates_dir,
     };
 
-    // Ensure data directory exists BEFORE creating database
     tokio::fs::create_dir_all(&data_dir).await?;
 
-    // Use the passed database path directly
     let mut db_config = DatabaseConfig::new(database_path);
 
-    // Initialize database pool and run migrations
     if let Err(e) = db_config.init_pool().await {
         error!("Failed to initialize database: {}", e);
         return Err(e);
@@ -225,18 +224,16 @@ pub async fn start_web_server(
         return Err(e);
     }
 
-    // Initialize auth config with your Firebase project ID
     let mut auth_config = AuthConfig::new("semantic-27923".to_string());
 
-    // Fetch Firebase public keys
     if let Err(e) = auth_config.update_firebase_keys().await {
         error!("Failed to fetch Firebase keys: {}", e);
         return Err(e);
     }
 
-    info!("Starting Multi-tenant CV Generator API server");
+    info!("Starting CVenom Multi-tenant API server");
     info!("Database: {}", db_config.database_path.display());
-    info!("Protected endpoints require Firebase Authentication + Tenant Authorization");
+    info!("All endpoints use standard response format with conversation_id support");
 
     let _rocket = rocket::build()
         .attach(Cors)
@@ -247,9 +244,10 @@ pub async fn start_web_server(
         .mount(
             "/api",
             routes![
+                analyze_job_fit,
                 generate_cv,
-                delete_person,
                 create_person,
+                delete_person,
                 upload_picture,
                 upload_and_convert_cv,
                 get_templates,
@@ -257,10 +255,9 @@ pub async fn start_web_server(
                 get_current_user_error,
                 health,
                 get_tenant_files,
-                analyze_job_fit,
                 get_tenant_file_content,
                 save_tenant_file_content,
-                options
+                options,
             ],
         )
         .launch()
@@ -268,4 +265,3 @@ pub async fn start_web_server(
 
     Ok(())
 }
-

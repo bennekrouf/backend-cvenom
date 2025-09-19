@@ -1,13 +1,16 @@
-// src/web/system_handlers.rs
+// src/web/handlers/system_handlers.rs
 use crate::auth::{AuthenticatedUser, OptionalAuth};
 use crate::template_system::TemplateManager;
-use crate::web::types::*;
-
+use crate::web::types::{
+    DataResponse, StandardErrorResponse, TemplateInfo, TextResponse, UserInfo,
+};
 use rocket::serde::json::Json;
 use rocket::State;
-use tracing::{error, info};
+use tracing::error;
 
-pub async fn get_templates_handler(config: &State<ServerConfig>) -> Json<TemplatesResponse> {
+pub async fn get_templates_handler(
+    config: &State<crate::web::types::ServerConfig>,
+) -> Json<DataResponse<Vec<TemplateInfo>>> {
     match TemplateManager::new(config.templates_dir.clone()) {
         Ok(template_manager) => {
             let template_infos = template_manager
@@ -19,65 +22,66 @@ pub async fn get_templates_handler(config: &State<ServerConfig>) -> Json<Templat
                 })
                 .collect();
 
-            Json(TemplatesResponse {
-                success: true,
-                templates: template_infos,
-            })
+            Json(DataResponse::success(
+                "Templates retrieved successfully".to_string(),
+                template_infos,
+                None,
+            ))
         }
         Err(e) => {
             error!("Failed to initialize template manager: {}", e);
-            Json(TemplatesResponse {
-                success: false,
-                templates: vec![TemplateInfo {
-                    name: "default".to_string(),
-                    description: "Standard CV layout".to_string(),
-                }],
-            })
+            let default_templates = vec![TemplateInfo {
+                name: "default".to_string(),
+                description: "Standard CV layout".to_string(),
+            }];
+
+            Json(DataResponse::success(
+                "Templates retrieved (default only)".to_string(),
+                default_templates,
+                None,
+            ))
         }
     }
 }
 
-pub async fn get_current_user_handler(auth: AuthenticatedUser) -> Json<AuthResponse> {
+pub async fn get_current_user_handler(auth: AuthenticatedUser) -> Json<DataResponse<UserInfo>> {
     let user = auth.user();
     let tenant = auth.tenant();
 
-    Json(AuthResponse {
-        success: true,
-        user: Some(UserInfo {
-            uid: user.uid.clone(),
-            email: user.email.clone(),
-            name: user.name.clone(),
-            picture: user.picture.clone(),
-            tenant_name: tenant.tenant_name.clone(),
-        }),
-        message: format!(
-            "User authenticated successfully for tenant: {}",
-            tenant.tenant_name
-        ),
-    })
+    let user_info = UserInfo {
+        uid: user.uid.clone(),
+        email: user.email.clone(),
+        name: user.name.clone(),
+        picture: user.picture.clone(),
+        tenant_name: tenant.tenant_name.clone(),
+    };
+
+    Json(DataResponse::success(
+        format!("User authenticated for tenant: {}", tenant.tenant_name),
+        user_info,
+        None,
+    ))
 }
 
-pub async fn get_current_user_error_handler() -> Json<ErrorResponse> {
-    Json(ErrorResponse {
-        success: false,
-        error: "Authentication required or user not authorized for any tenant".to_string(),
-        error_code: "AUTHORIZATION_ERROR".to_string(),
-        suggestions: vec![
+pub async fn get_current_user_error_handler() -> Json<StandardErrorResponse> {
+    Json(StandardErrorResponse::new(
+        "Authentication required or user not authorized for any tenant".to_string(),
+        "AUTHORIZATION_ERROR".to_string(),
+        vec![
             "Login is required".to_string(),
-            "Contact administrator and ask authorization to this tenant".to_string(),
+            "Contact administrator for tenant access".to_string(),
         ],
-    })
+        None,
+    ))
 }
 
-pub async fn health_handler(auth: OptionalAuth) -> Json<&'static str> {
-    if let Some(user) = auth.user {
-        info!(
-            "Health check by authenticated user: {} (tenant: {})",
-            user.user().email,
-            user.tenant().tenant_name
-        );
+pub async fn health_handler(auth: OptionalAuth) -> Json<TextResponse> {
+    let message = if auth.user.is_some() {
+        "System is healthy (authenticated user)".to_string()
     } else {
-        info!("Health check by anonymous user");
-    }
-    Json("OK")
+        "System is healthy".to_string()
+    };
+
+    Json(TextResponse::success(message, None))
 }
+

@@ -1,57 +1,14 @@
-// src/linkedin_analysis/types.rs
 use serde::{Deserialize, Serialize};
 
+// Internal request format for the job matching API
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobContent {
-    pub title: String,
-    pub company: String,
-    pub location: String,
-    pub description: String,
-}
-
-impl JobContent {
-    pub fn to_llm_prompt(&self) -> String {
-        format!(
-            "Job Title: {}\nCompany: {}\nLocation: {}\n\nJob Description:\n{}",
-            self.title, self.company, self.location, self.description
-        )
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobAnalysisRequest {
+pub(crate) struct JobMatchApiRequest {
+    pub cv_json: String,
     pub job_url: String,
-    pub person_name: String,
 }
 
+// Error response format from the job matching API
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct JobAnalysisResponse {
-    pub success: bool,
-    pub job_content: Option<JobContent>,
-    pub person_experiences: Option<String>,
-    pub fit_analysis: Option<String>,
-    pub raw_job_content: Option<String>,
-    pub error: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticRequest {
-    pub messages: Vec<SemanticMessage>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticMessage {
-    pub context: String,
-    pub content: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticResponse {
-    pub message: String,
-    pub usage: Option<SemanticUsage>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct SemanticUsage {
-    pub tokens: u32,
+pub(crate) struct JobMatchApiError {
+    pub error: String,
 }

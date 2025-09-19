@@ -4,6 +4,8 @@ A multi-tenant CV generator written in Rust using Typst for PDF compilation with
 
 ## Features
 
+JOB_MATCHING_API_URL=http://127.0.0.1:6666 cargo run -- server
+
 - **Multi-tenant**: Complete data isolation between tenants using SQLite
 - **Firebase Authentication**: Google sign-in with JWT token verification
 - **Multi-language**: English and French support
