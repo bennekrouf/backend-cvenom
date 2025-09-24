@@ -46,14 +46,14 @@ impl Fairing for Cors {
 }
 
 // Standard API Routes (clean, no v1/v2 confusion)
-
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit(
     request: Json<StandardRequest<crate::linkedin_analysis::JobAnalysisRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<DataResponse<JobAnalysisData>>, Json<StandardErrorResponse>> {
+) -> Result<Json<TextResponse>, Json<StandardErrorResponse>> {
+    // Changed return type
     handlers::analyze_job_fit_handler(request, auth, config, db_config).await
 }
 
@@ -265,3 +265,4 @@ pub async fn start_web_server(
 
     Ok(())
 }
+

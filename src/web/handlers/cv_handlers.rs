@@ -43,9 +43,12 @@ pub async fn generate_cv_handler(
     let lang = normalize_language(request.data.lang.as_deref());
     let template_id = normalize_template(request.data.template.as_deref(), &template_manager);
 
+    // ADD THIS LINE: Normalize the person name
+    let normalized_person = normalize_person_name(&request.data.person);
+
     info!(
-        "User {} (tenant: {}) generating CV for {}",
-        user.email, tenant.tenant_name, request.data.person
+        "User {} (tenant: {}) generating CV for {} (normalized: {})",
+        user.email, tenant.tenant_name, request.data.person, normalized_person
     );
 
     let pool = match db_config.pool() {
@@ -78,7 +81,7 @@ pub async fn generate_cv_handler(
         }
     };
 
-    let normalized_person = normalize_person_name(&request.data.person);
+    // CHANGE THIS LINE: Use normalized_person instead of request.data.person
     let person_dir = tenant_data_dir.join(&normalized_person);
 
     let profile_image_path = person_dir.join("profile.png");
@@ -101,6 +104,7 @@ pub async fn generate_cv_handler(
         )));
     }
 
+    // CHANGE THIS LINE: Use normalized_person instead of request.data.person
     let cv_config = CvConfig::new(&normalized_person, &lang)
         .with_template(template_id.to_string())
         .with_data_dir(tenant_data_dir)
@@ -386,4 +390,3 @@ fn normalize_template(template: Option<&str>, template_manager: &TemplateManager
 
     "default".to_string()
 }
-

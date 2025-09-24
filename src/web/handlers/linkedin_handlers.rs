@@ -5,9 +5,9 @@ use crate::database::{DatabaseConfig, TenantService};
 use crate::linkedin_analysis::job_analyzer::JobAnalyzer;
 use crate::linkedin_analysis::{JobAnalysisRequest, JobAnalysisResponse};
 use crate::web::types::{
-    DataResponse, DisplayFormat, DisplaySection, JobAnalysisData, StandardErrorResponse,
-    StandardRequest, WithConversationId,
+    DisplayFormat, DisplaySection, StandardErrorResponse, StandardRequest, WithConversationId,
 };
+use crate::web::TextResponse;
 
 use rocket::serde::json::Json;
 use rocket::State;
@@ -18,7 +18,8 @@ pub async fn analyze_job_fit_handler(
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<Json<DataResponse<JobAnalysisData>>, Json<StandardErrorResponse>> {
+) -> Result<Json<TextResponse>, Json<StandardErrorResponse>> {
+    // Changed return type
     let user = auth.user();
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
@@ -86,25 +87,12 @@ pub async fn analyze_job_fit_handler(
             request.data.person_name, user.email, tenant.tenant_name
         );
 
-        // Create display format for rich UI rendering
-        let display_format = create_job_analysis_display_format(&analysis_response);
+        // Return simple text response for chat frontend
+        let analysis_text = analysis_response.fit_analysis.unwrap_or_else(|| {
+            "Job analysis completed but no detailed analysis was returned.".to_string()
+        });
 
-        // Create structured data response
-        let job_analysis_data = JobAnalysisData {
-            job_content: analysis_response.job_content,
-            person_experiences: analysis_response.person_experiences,
-            fit_analysis: analysis_response.fit_analysis.clone(),
-            raw_job_content: analysis_response.raw_job_content,
-        };
-
-        let response = DataResponse::success(
-            "Job fit analysis completed successfully".to_string(),
-            job_analysis_data,
-            conversation_id,
-        )
-        .with_display_format(display_format);
-
-        Ok(Json(response))
+        Ok(Json(TextResponse::success(analysis_text, conversation_id)))
     } else {
         let error_msg = analysis_response
             .error
