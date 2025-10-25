@@ -1,34 +1,32 @@
-// src/web/handlers/linkedin_handlers.rs - Updated for standard responses
-
+// src/web/handlers/linkedin_handlers.rs
 use crate::auth::AuthenticatedUser;
-use crate::database::{DatabaseConfig, TenantService};
+use crate::database::TenantService;
 use crate::linkedin_analysis::job_analyzer::JobAnalyzer;
-use crate::linkedin_analysis::{JobAnalysisRequest, JobAnalysisResponse};
-use crate::web::types::{
-    DisplayFormat, DisplaySection, StandardErrorResponse, StandardRequest, WithConversationId,
-};
-use crate::web::TextResponse;
-
+use crate::linkedin_analysis::JobAnalysisRequest;
+use crate::web::types::{StandardErrorResponse, StandardRequest, TextResponse, WithConversationId};
+use crate::web::{DatabaseConfig, ServerConfig};
+use anyhow::Result;
 use rocket::serde::json::Json;
-use rocket::State;
+use rocket::{post, State};
 use tracing::{error, info};
 
+#[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit_handler(
     request: Json<StandardRequest<JobAnalysisRequest>>,
     auth: AuthenticatedUser,
-    config: &State<crate::web::types::ServerConfig>,
+    config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<TextResponse>, Json<StandardErrorResponse>> {
-    // Changed return type
     let user = auth.user();
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
     info!(
-        "User {} (tenant: {}) analyzing job fit for person: {}",
+        "User {} (tenant: {}) requesting job fit analysis for {}",
         user.email, tenant.tenant_name, request.data.person_name
     );
 
+    // Database setup
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
@@ -114,73 +112,6 @@ pub async fn analyze_job_fit_handler(
     }
 }
 
-fn create_job_analysis_display_format(response: &JobAnalysisResponse) -> DisplayFormat {
-    let mut sections = Vec::new();
-
-    // Job content section
-    if let Some(job_content) = &response.job_content {
-        sections.push(DisplaySection {
-            title: "Job Position".to_string(),
-            content: format!(
-                "{} at {} ({})",
-                job_content.title, job_content.company, job_content.location
-            ),
-            score: None,
-            points: None,
-        });
-    }
-
-    // Analysis section with key points extraction
-    if let Some(analysis) = &response.fit_analysis {
-        let analysis_points = extract_key_points(analysis);
-
-        sections.push(DisplaySection {
-            title: "Fit Analysis".to_string(),
-            content: if analysis.len() > 200 {
-                format!("{}...", &analysis[..200])
-            } else {
-                analysis.clone()
-            },
-            score: Some("good".to_string()), // You could implement actual scoring logic
-            points: Some(analysis_points),
-        });
-    }
-
-    DisplayFormat {
-        format_type: "analysis".to_string(),
-        sections: Some(sections),
-    }
-}
-
-fn extract_key_points(analysis: &str) -> Vec<String> {
-    // Simple extraction logic - look for bullet points or numbered items
-    analysis
-        .lines()
-        .filter(|line| {
-            line.trim().starts_with("•")
-                || line.trim().starts_with("-")
-                || line.trim().starts_with("*")
-                || line
-                    .trim_start()
-                    .chars()
-                    .next()
-                    .map_or(false, |c| c.is_ascii_digit())
-        })
-        .map(|line| {
-            line.trim()
-                .trim_start_matches("•")
-                .trim_start_matches("-")
-                .trim_start_matches("*")
-                .trim_start_matches(|c: char| c.is_ascii_digit())
-                .trim_start_matches(".")
-                .trim()
-                .to_string()
-        })
-        .filter(|point| !point.is_empty())
-        .take(5) // Limit to 5 key points
-        .collect()
-}
-
 fn categorize_error(error_msg: &str, person_name: &str) -> (String, Vec<String>) {
     if error_msg.contains("Person directory not found") {
         (
@@ -198,26 +129,26 @@ fn categorize_error(error_msg: &str, person_name: &str) -> (String, Vec<String>)
         (
             "SCRAPING_ERROR".to_string(),
             vec![
-                "Verify the LinkedIn job URL is accessible".to_string(),
-                "The job post may be behind authentication or no longer available".to_string(),
-                "Try a different job posting URL".to_string(),
+                "Ensure the job URL is accessible and public".to_string(),
+                "Try a different LinkedIn job URL".to_string(),
+                "Check if the job posting is still active".to_string(),
             ],
         )
-    } else if error_msg.contains("job matching API") || error_msg.contains("API error") {
+    } else if error_msg.contains("timeout") || error_msg.contains("network") {
         (
-            "API_ERROR".to_string(),
+            "NETWORK_ERROR".to_string(),
             vec![
-                "The AI analysis service is temporarily unavailable".to_string(),
+                "Check your internet connection".to_string(),
                 "Try again in a few moments".to_string(),
-                "Contact support if the problem persists".to_string(),
+                "Verify the LinkedIn URL is correct".to_string(),
             ],
         )
     } else {
         (
             "ANALYSIS_ERROR".to_string(),
             vec![
-                "Try again in a few moments".to_string(),
-                "Check that the job URL is valid and accessible".to_string(),
+                "Try again with a different job URL".to_string(),
+                "Ensure the person's CV data is complete".to_string(),
                 "Contact support if the problem persists".to_string(),
             ],
         )

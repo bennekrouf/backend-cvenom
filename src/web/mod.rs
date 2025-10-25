@@ -18,9 +18,6 @@ use rocket::serde::json::Json;
 use rocket::{catchers, get, options, post, routes, Request, Response, State};
 use std::path::PathBuf;
 use tracing::{error, info};
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{EnvFilter, Registry};
 
 // CORS Fairing
 pub struct Cors;
@@ -196,14 +193,6 @@ pub async fn start_web_server(
     templates_dir: PathBuf,
     database_path: PathBuf,
 ) -> Result<()> {
-    Registry::default()
-        .with(tracing_subscriber::fmt::layer())
-        .with(
-            EnvFilter::try_from_default_env()
-                .unwrap_or(EnvFilter::new("cv_generator=INFO,rocket::server=OFF")),
-        )
-        .init();
-
     let server_config = ServerConfig {
         data_dir: data_dir.clone(),
         output_dir,
@@ -265,4 +254,3 @@ pub async fn start_web_server(
 
     Ok(())
 }
-

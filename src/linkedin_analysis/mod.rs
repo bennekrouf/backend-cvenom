@@ -30,16 +30,8 @@ pub struct JobAnalysisResponse {
     pub error: Option<String>,
 }
 
-// Internal request format for the job matching API
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct JobMatchApiRequest {
-    pub cv_json: String,
-    pub job_url: String,
-}
-
 // Internal response format from the job matching API
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct JobMatchApiResponse {
     pub analysis: String,
 }
-

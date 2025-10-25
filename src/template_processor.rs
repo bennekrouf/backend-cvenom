@@ -13,6 +13,12 @@ impl TemplateProcessor {
         Self { templates_dir }
     }
 
+    pub fn process_variables(content: &str, vars: &HashMap<String, String>) -> String {
+        vars.iter().fold(content.to_string(), |acc, (key, value)| {
+            acc.replace(&format!("{{{{{}}}}}", key), value)
+        })
+    }
+
     pub fn process_template(
         &self,
         template_content: &str,

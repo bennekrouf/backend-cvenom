@@ -1,14 +1,15 @@
 // src/web/services.rs
+use crate::{environment::ServiceConfig, template_processor::TemplateProcessor, utils};
+use anyhow::{Context, Result};
 use rocket::serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct CvServiceResponse {
     pub typst_content: String,
-    // Make other fields optional since the external service might not return them
     pub success: Option<bool>,
     pub error: Option<String>,
     pub code: Option<String>,
@@ -21,10 +22,10 @@ pub struct CvConversionService {
 
 impl CvConversionService {
     pub fn new() -> Self {
-        // TODO: Make this configurable via environment variables
+        let config = ServiceConfig::load();
         Self {
-            service_url: "http://127.0.0.1:6666/api/v1/upload-cv".to_string(),
-            timeout_seconds: 30,
+            service_url: config.job_matching_url + "/api/v1/upload-cv",
+            timeout_seconds: config.timeout_seconds,
         }
     }
 
@@ -38,31 +39,36 @@ impl CvConversionService {
         self
     }
 
-    pub async fn convert(&self, file_path: &Path, file_name: &str) -> Result<String, String> {
-        let content_type = if file_name.to_lowercase().ends_with(".pdf") {
-            "application/pdf"
-        } else if file_name.to_lowercase().ends_with(".docx") {
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    fn get_content_type(file_name: &str) -> Result<&'static str> {
+        let lower_name = file_name.to_lowercase();
+        if lower_name.ends_with(".pdf") {
+            Ok("application/pdf")
+        } else if lower_name.ends_with(".docx") {
+            Ok("application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         } else {
-            return Err("Unsupported file format".to_string());
-        };
+            anyhow::bail!("Unsupported file format: {}", file_name)
+        }
+    }
+
+    pub async fn convert(&self, file_path: &Path, file_name: &str) -> Result<String> {
+        let content_type = Self::get_content_type(file_name)?;
 
         let file_content = tokio::fs::read(file_path)
             .await
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+            .with_context(|| format!("Failed to read file: {}", file_path.display()))?;
 
         let form = reqwest::multipart::Form::new().part(
             "cv_file",
             reqwest::multipart::Part::bytes(file_content)
                 .file_name(file_name.to_string())
                 .mime_str(content_type)
-                .map_err(|e| format!("Failed to create multipart: {}", e))?,
+                .context("Failed to create multipart")?,
         );
 
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(self.timeout_seconds))
             .build()
-            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+            .context("Failed to create HTTP client")?;
 
         info!("Calling CV conversion service: {}", self.service_url);
 
@@ -71,43 +77,41 @@ impl CvConversionService {
             .multipart(form)
             .send()
             .await
-            .map_err(|e| format!("HTTP request failed: {}", e))?;
+            .context("HTTP request failed")?;
 
         let status = response.status();
         info!("Response status: {}", status);
 
-        // Get the response text first for debugging
         let response_text = response
             .text()
             .await
-            .map_err(|e| format!("Failed to read response text: {}", e))?;
+            .context("Failed to read response text")?;
 
         info!("Response body: {}", response_text);
 
         if status.is_success() {
-            // Try to parse the JSON response
-            let response_body: CvServiceResponse =
-                serde_json::from_str(&response_text).map_err(|e| {
+            let response_body: CvServiceResponse = serde_json::from_str(&response_text)
+                .with_context(|| {
                     format!(
-                        "Failed to parse JSON response: {}. Response was: {}",
-                        e, response_text
+                        "Failed to parse JSON response. Response was: {}",
+                        response_text
                     )
                 })?;
 
-            // Since the external service only returns typst_content, check if it exists
             if !response_body.typst_content.is_empty() {
                 Ok(response_body.typst_content)
             } else {
                 let error_msg = response_body
                     .error
                     .unwrap_or_else(|| "Empty typst_content in response".to_string());
-                Err(error_msg)
+                anyhow::bail!("{}", error_msg)
             }
         } else {
-            Err(format!(
+            anyhow::bail!(
                 "Service returned error status {}: {}",
-                status, response_text
-            ))
+                status,
+                response_text
+            )
         }
     }
 
@@ -117,41 +121,101 @@ impl CvConversionService {
         typst_content: &str,
         tenant_data_dir: &PathBuf,
         templates_dir: &PathBuf,
-    ) -> Result<(), anyhow::Error> {
+    ) -> Result<()> {
         let person_dir = tenant_data_dir.join(person_name);
-        tokio::fs::create_dir_all(&person_dir).await?;
+        utils::ensure_dir_exists(&person_dir).await?;
 
         // Create cv_params.toml using template
-        let person_template_path = templates_dir.join("person_template.toml");
-        if person_template_path.exists() {
-            let template_content = tokio::fs::read_to_string(&person_template_path).await?;
-
-            let mut variables = HashMap::new();
-            variables.insert("name".to_string(), person_name.to_string());
-
-            // Simple template replacement
-            let processed_content = template_content.replace("{{name}}", person_name);
-            tokio::fs::write(person_dir.join("cv_params.toml"), processed_content).await?;
-        }
+        self.create_cv_params(&person_dir, person_name, templates_dir)
+            .await?;
 
         // Create experiences_en.typ with the converted Typst content
-        tokio::fs::write(person_dir.join("experiences_en.typ"), typst_content).await?;
+        utils::write_file_safe(&person_dir.join("experiences_en.typ"), typst_content).await?;
 
         // Create experiences_fr.typ with default template
-        let experience_template_path = templates_dir.join("experiences_template.typ");
-        if experience_template_path.exists() {
-            let template_content = tokio::fs::read_to_string(&experience_template_path).await?;
-            tokio::fs::write(person_dir.join("experiences_fr.typ"), template_content).await?;
-        }
+        self.create_experiences_fr(&person_dir, templates_dir)
+            .await?;
 
         // Create README
-        let readme_content = format!(
-            "# {} CV Data\n\nCV generated from uploaded file.\n\nAdd your profile image as `profile.png` in this directory.\n\nEdit the following files:\n- `cv_params.toml` - Personal information, skills, and key insights\n- `experiences_en.typ` - Work experience (converted from uploaded CV)\n- `experiences_fr.typ` - Work experience in French (template)\n",
-            person_name
-        );
-        tokio::fs::write(person_dir.join("README.md"), readme_content).await?;
+        self.create_readme(&person_dir, person_name).await?;
 
-        info!("Created person directory with CV content: {}", person_name);
+        info!("Successfully created person: {}", person_name);
+        Ok(())
+    }
+
+    async fn create_cv_params(
+        &self,
+        person_dir: &PathBuf,
+        person_name: &str,
+        templates_dir: &PathBuf,
+    ) -> Result<()> {
+        let person_template_path = templates_dir.join("person_template.toml");
+        if person_template_path.exists() {
+            let template_content = utils::read_file_safe(&person_template_path).await?;
+            let mut vars = HashMap::new();
+            vars.insert("name".to_string(), person_name.to_string());
+            let processed_content = TemplateProcessor::process_variables(&template_content, &vars);
+            utils::write_file_safe(&person_dir.join("cv_params.toml"), &processed_content).await?;
+        } else {
+            warn!("Person template not found, creating basic cv_params.toml");
+            let basic_config = format!(
+                r#"[personal]
+name = "{}"
+title = ""
+summary = ""
+email = ""
+phone = ""
+linkedin = ""
+github = ""
+"#,
+                person_name
+            );
+            utils::write_file_safe(&person_dir.join("cv_params.toml"), &basic_config).await?;
+        }
+        Ok(())
+    }
+
+    async fn create_experiences_fr(
+        &self,
+        person_dir: &PathBuf,
+        templates_dir: &PathBuf,
+    ) -> Result<()> {
+        let experiences_template_path = templates_dir.join("experiences_template.typ");
+        if experiences_template_path.exists() {
+            let template_content = utils::read_file_safe(&experiences_template_path).await?;
+            utils::write_file_safe(&person_dir.join("experiences_fr.typ"), &template_content)
+                .await?;
+        } else {
+            warn!("Experiences template not found, creating basic experiences_fr.typ");
+            let basic_experiences = r#"// French experiences
+#import "/template.typ": *
+
+// Add your French experiences here
+"#;
+            utils::write_file_safe(&person_dir.join("experiences_fr.typ"), basic_experiences)
+                .await?;
+        }
+        Ok(())
+    }
+
+    async fn create_readme(&self, person_dir: &PathBuf, person_name: &str) -> Result<()> {
+        let readme_content = format!(
+            r#"# CV for {}
+
+This directory contains the CV configuration and experiences for {}.
+
+## Files:
+- `cv_params.toml`: Personal information and CV configuration
+- `experiences_en.typ`: English version of professional experiences
+- `experiences_fr.typ`: French version of professional experiences
+
+## Usage:
+Use the web interface or CLI to generate PDFs from these files.
+"#,
+            person_name, person_name
+        );
+        utils::write_file_safe(&person_dir.join("README.md"), &readme_content).await?;
         Ok(())
     }
 }
+
