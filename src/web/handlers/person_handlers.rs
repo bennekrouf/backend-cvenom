@@ -1,15 +1,14 @@
-// src/web/handlers/person_handlers.rs - CORRECTED version
+// src/web/handlers/person_handlers.rs - Final corrected version with proper TempFile path handling
 
 use crate::auth::AuthenticatedUser;
+use crate::core::FsOps; // Use core modules
 use crate::database::{DatabaseConfig, TenantService};
-use crate::utils::normalize_person_name;
 use crate::web::types::{
     ActionResponse, CreatePersonRequest, DeletePersonRequest, StandardErrorResponse,
     StandardRequest, UploadForm, WithConversationId,
 };
-use crate::TemplateProcessor;
-
 use rocket::form::Form;
+use rocket::fs::NamedFile;
 use rocket::serde::json::Json;
 use rocket::State;
 use tracing::{error, info};
@@ -22,12 +21,15 @@ pub async fn create_person_handler(
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
-    let normalized_person = normalize_person_name(&request.data.person);
+    let normalized_person = FsOps::normalize_person_name(&request.data.person);
     let conversation_id = request.conversation_id();
 
     info!(
-        "User {} (tenant: {}) creating person: {}",
-        user.email, tenant.tenant_name, request.data.person
+        "Creating person: {} for tenant: {} (user: {}) [{}]",
+        normalized_person,
+        tenant.tenant_name,
+        user.email,
+        conversation_id.clone().unwrap_or_default()
     );
 
     let pool = match db_config.pool() {
@@ -50,71 +52,102 @@ pub async fn create_person_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            error!("Failed to create tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data directory".to_string(),
-                "TENANT_DIR_ERROR".to_string(),
-                vec!["Contact system administrator".to_string()],
+                "Failed to create tenant directory".to_string(),
+                "TENANT_ERROR".to_string(),
+                vec!["Contact support if this persists".to_string()],
                 conversation_id,
             )));
         }
     };
 
-    let template_processor = TemplateProcessor::new(config.templates_dir.clone());
-
-    match template_processor.create_person_from_templates(
-        &normalized_person,
-        &tenant_data_dir,
-        Some(&request.data.person),
-    ) {
-        Ok(_) => {
-            info!(
-                "Person directory created for {} by {} (tenant: {})",
-                request.data.person, user.email, tenant.tenant_name
-            );
-
-            let next_actions = vec![
-                format!("Upload profile picture for {}", request.data.person),
-                format!("Edit CV parameters in {}/cv_params.toml", normalized_person),
-                format!(
-                    "Update work experience in {}/experiences_en.typ",
-                    normalized_person
-                ),
-                format!("Generate CV PDF for {}", request.data.person),
-            ];
-
-            let response = ActionResponse::success(
-                format!(
-                    "Collaborator '{}' created successfully",
-                    request.data.person
-                ),
-                "created".to_string(),
-                conversation_id,
-            )
-            .with_next_actions(next_actions);
-
-            Ok(Json(response))
-        }
+    // Use core TemplateEngine
+    let template_engine = match crate::core::TemplateEngine::new(config.templates_dir.clone()) {
+        Ok(engine) => engine,
         Err(e) => {
-            error!(
-                "Person creation error for {} (tenant: {}): {}",
-                request.data.person, tenant.tenant_name, e
-            );
-
-            let error_msg = if e.to_string().contains("already exists") {
-                format!("Collaborator '{}' already exists", request.data.person)
-            } else {
-                "Failed to create collaborator directory".to_string()
-            };
-
-            Err(Json(StandardErrorResponse::new(
-                error_msg,
-                "PERSON_CREATE_ERROR".to_string(),
-                vec![
-                    "Try a different person name".to_string(),
-                    "Contact support if the problem persists".to_string(),
-                ],
+            error!("Failed to create template engine: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Template engine initialization failed".to_string(),
+                "TEMPLATE_ERROR".to_string(),
+                vec!["Contact support".to_string()],
                 conversation_id,
+            )));
+        }
+    };
+
+    if let Err(e) = template_engine
+        .create_person_from_templates(
+            &normalized_person,
+            &tenant_data_dir,
+            Some(&request.data.person),
+        )
+        .await
+    {
+        error!("Failed to create person: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to create person".to_string(),
+            "CREATION_ERROR".to_string(),
+            vec!["Try again or contact support".to_string()],
+            conversation_id,
+        )));
+    }
+
+    info!("Successfully created person: {}", normalized_person);
+
+    Ok(Json(ActionResponse::success(
+        format!("Person '{}' created successfully", request.data.person),
+        "created".to_string(),
+        conversation_id,
+    )))
+}
+
+pub async fn list_persons_handler(
+    auth: AuthenticatedUser,
+    config: &State<crate::web::types::ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<Vec<String>>, Json<StandardErrorResponse>> {
+    let tenant = auth.tenant();
+
+    let pool = match db_config.pool() {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Database connection failed: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Database connection failed".to_string(),
+                "DATABASE_ERROR".to_string(),
+                vec!["Try again in a few moments".to_string()],
+                None,
+            )));
+        }
+    };
+
+    let tenant_service = TenantService::new(pool);
+    let tenant_data_dir = match tenant_service
+        .ensure_tenant_data_dir(&config.data_dir, tenant)
+        .await
+    {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to access tenant directory: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Failed to access tenant directory".to_string(),
+                "TENANT_ERROR".to_string(),
+                vec!["Contact support".to_string()],
+                None,
+            )));
+        }
+    };
+
+    match FsOps::list_persons(&tenant_data_dir).await {
+        Ok(persons) => Ok(Json(persons)),
+        Err(e) => {
+            error!("Failed to list persons: {}", e);
+            Err(Json(StandardErrorResponse::new(
+                "Failed to list persons".to_string(),
+                "LIST_ERROR".to_string(),
+                vec!["Try again or contact support".to_string()],
+                None,
             )))
         }
     }
@@ -126,15 +159,9 @@ pub async fn delete_person_handler(
     config: &State<crate::web::types::ServerConfig>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    let user = auth.user();
     let tenant = auth.tenant();
-    let normalized_person = normalize_person_name(&request.data.person);
+    let normalized_person = FsOps::normalize_person_name(&request.data.person);
     let conversation_id = request.conversation_id();
-
-    info!(
-        "User {} (tenant: {}) deleting person: {}",
-        user.email, tenant.tenant_name, normalized_person
-    );
 
     let pool = match db_config.pool() {
         Ok(pool) => pool,
@@ -156,11 +183,11 @@ pub async fn delete_person_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            error!("Failed to access tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data directory".to_string(),
-                "TENANT_DIR_ERROR".to_string(),
-                vec!["Contact system administrator".to_string()],
+                "Failed to access tenant directory".to_string(),
+                "TENANT_ERROR".to_string(),
+                vec!["Contact support".to_string()],
                 conversation_id,
             )));
         }
@@ -170,63 +197,41 @@ pub async fn delete_person_handler(
 
     if !person_dir.exists() {
         return Err(Json(StandardErrorResponse::new(
-            format!("Collaborator '{}' not found", request.data.person),
-            "PERSON_NOT_FOUND".to_string(),
-            vec![
-                "Check the person name spelling".to_string(),
-                "Use 'Show collaborators' to see available persons".to_string(),
-            ],
+            format!("Person '{}' not found", request.data.person),
+            "NOT_FOUND".to_string(),
+            vec!["Check the person name and try again".to_string()],
             conversation_id,
         )));
     }
 
-    match tokio::fs::remove_dir_all(&person_dir).await {
-        Ok(_) => {
-            info!(
-                "Person directory deleted: {} by {} (tenant: {})",
-                normalized_person, user.email, tenant.tenant_name
-            );
-
-            let response = ActionResponse::success(
-                format!(
-                    "Collaborator '{}' deleted successfully",
-                    request.data.person
-                ),
-                "deleted".to_string(),
-                conversation_id,
-            );
-
-            Ok(Json(response))
-        }
-        Err(e) => {
-            error!(
-                "Failed to delete person directory {}: {}",
-                person_dir.display(),
-                e
-            );
-
-            Err(Json(StandardErrorResponse::new(
-                "Failed to delete collaborator".to_string(),
-                "DELETE_ERROR".to_string(),
-                vec![
-                    "Try again in a few moments".to_string(),
-                    "Contact support if the problem persists".to_string(),
-                ],
-                conversation_id,
-            )))
-        }
+    if let Err(e) = FsOps::remove_dir_all(&person_dir).await {
+        error!("Failed to delete person directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to delete person".to_string(),
+            "DELETE_ERROR".to_string(),
+            vec!["Try again or contact support".to_string()],
+            conversation_id,
+        )));
     }
+
+    info!("Successfully deleted person: {}", normalized_person);
+
+    Ok(Json(ActionResponse::success(
+        format!("Person '{}' deleted successfully", request.data.person),
+        "deleted".to_string(),
+        conversation_id,
+    )))
 }
 
 pub async fn upload_picture_handler(
-    mut upload: Form<UploadForm<'_>>,
+    upload: Form<UploadForm<'_>>,
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
-    let normalized_person = normalize_person_name(&upload.person);
+    let normalized_person = FsOps::normalize_person_name(&upload.person);
 
     info!(
         "User {} (tenant: {}) uploading picture for {}",
@@ -253,88 +258,158 @@ pub async fn upload_picture_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            error!("Failed to create tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data directory".to_string(),
-                "TENANT_DIR_ERROR".to_string(),
-                vec!["Contact system administrator".to_string()],
+                "Failed to access tenant data".to_string(),
+                "TENANT_ERROR".to_string(),
+                vec!["Please contact support".to_string()],
                 None,
             )));
         }
     };
 
     let person_dir = tenant_data_dir.join(&normalized_person);
+
     if !person_dir.exists() {
         return Err(Json(StandardErrorResponse::new(
-            format!("Collaborator '{}' not found", upload.person),
-            "PERSON_NOT_FOUND".to_string(),
-            vec![
-                format!("Create collaborator '{}' first", upload.person),
-                "Check the person name spelling".to_string(),
-            ],
+            format!("Person '{}' not found", upload.person),
+            "NOT_FOUND".to_string(),
+            vec!["Create the person first".to_string()],
             None,
         )));
     }
 
-    let content_type = upload.file.content_type();
-    let is_image = content_type.map_or(false, |ct| {
-        ct.is_png() || ct.is_jpeg() || ct.top() == "image"
-    });
+    // FIXED: Handle Option<&Path> from TempFile::path()
+    let file_path = match upload.file.path() {
+        Some(path) => path,
+        None => {
+            error!("Uploaded file has no path");
+            return Err(Json(StandardErrorResponse::new(
+                "Invalid uploaded file".to_string(),
+                "UPLOAD_ERROR".to_string(),
+                vec!["Please try uploading again".to_string()],
+                None,
+            )));
+        }
+    };
 
-    if !is_image {
-        return Err(Json(StandardErrorResponse::new(
-            "Invalid file type".to_string(),
-            "INVALID_FILE_TYPE".to_string(),
-            vec![
-                "Please upload an image file (PNG, JPG, etc.)".to_string(),
-                "Supported formats: PNG, JPEG, JPG".to_string(),
-            ],
-            None,
-        )));
-    }
+    let file_bytes = match tokio::fs::read(file_path).await {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            error!("Failed to read uploaded file: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Failed to process uploaded file".to_string(),
+                "UPLOAD_ERROR".to_string(),
+                vec!["Please try uploading again".to_string()],
+                None,
+            )));
+        }
+    };
 
-    let target_path = person_dir.join("profile.png");
+    let profile_path = person_dir.join("profile.png");
 
-    match upload.file.persist_to(&target_path).await {
+    // Write file using tokio fs
+    match tokio::fs::write(&profile_path, &file_bytes).await {
         Ok(_) => {
+            // Validate the uploaded image
+            if let Err(e) = FsOps::validate_image(&profile_path).await {
+                error!("Invalid image file: {}", e);
+                // Remove invalid file
+                let _ = tokio::fs::remove_file(&profile_path).await;
+                return Err(Json(StandardErrorResponse::new(
+                    format!("Invalid image file: {}", e),
+                    "INVALID_IMAGE".to_string(),
+                    vec!["Please upload a valid PNG or JPEG image".to_string()],
+                    None,
+                )));
+            }
+
             info!(
-                "Profile picture uploaded for {} by {} (tenant: {})",
-                upload.person, user.email, tenant.tenant_name
+                "Successfully uploaded profile picture for person: {}",
+                normalized_person
             );
 
-            let next_actions = vec![
-                format!("Generate CV PDF for {}", upload.person),
-                format!("Update CV parameters for {}", upload.person),
-            ];
-
-            let response = ActionResponse::success(
+            Ok(Json(ActionResponse::success(
                 format!(
                     "Profile picture uploaded successfully for {}",
                     upload.person
                 ),
                 "uploaded".to_string(),
                 None,
-            )
-            .with_next_actions(next_actions);
-
-            Ok(Json(response))
+            )))
         }
         Err(e) => {
-            error!(
-                "File upload error for {} (tenant: {}): {}",
-                upload.person, tenant.tenant_name, e
-            );
-
+            error!("Failed to save uploaded file: {}", e);
             Err(Json(StandardErrorResponse::new(
-                "Failed to upload profile picture".to_string(),
-                "UPLOAD_ERROR".to_string(),
-                vec![
-                    "Try again with a different image".to_string(),
-                    "Ensure the image file is not corrupted".to_string(),
-                ],
+                "Failed to save uploaded file".to_string(),
+                "SAVE_ERROR".to_string(),
+                vec!["Please try again".to_string()],
                 None,
             )))
         }
     }
 }
 
+pub async fn get_picture_handler(
+    person: String,
+    auth: AuthenticatedUser,
+    config: &State<crate::web::types::ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+) -> Result<NamedFile, Json<StandardErrorResponse>> {
+    let tenant = auth.tenant();
+    let normalized_person = FsOps::normalize_person_name(&person);
+
+    let pool = match db_config.pool() {
+        Ok(pool) => pool,
+        Err(e) => {
+            error!("Database connection failed: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Database connection failed".to_string(),
+                "DATABASE_ERROR".to_string(),
+                vec!["Try again in a few moments".to_string()],
+                None,
+            )));
+        }
+    };
+
+    let tenant_service = TenantService::new(pool);
+    let tenant_data_dir = match tenant_service
+        .ensure_tenant_data_dir(&config.data_dir, tenant)
+        .await
+    {
+        Ok(dir) => dir,
+        Err(e) => {
+            error!("Failed to access tenant directory: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Failed to access tenant directory".to_string(),
+                "TENANT_ERROR".to_string(),
+                vec!["Contact support".to_string()],
+                None,
+            )));
+        }
+    };
+
+    let profile_path = tenant_data_dir.join(&normalized_person).join("profile.png");
+
+    if !profile_path.exists() {
+        return Err(Json(StandardErrorResponse::new(
+            "Profile picture not found".to_string(),
+            "NOT_FOUND".to_string(),
+            vec!["Upload a profile picture first".to_string()],
+            None,
+        )));
+    }
+
+    match NamedFile::open(&profile_path).await {
+        Ok(file) => Ok(file),
+        Err(e) => {
+            error!("Failed to serve profile picture: {}", e);
+            Err(Json(StandardErrorResponse::new(
+                "Failed to serve profile picture".to_string(),
+                "FILE_ERROR".to_string(),
+                vec!["Try again or contact support".to_string()],
+                None,
+            )))
+        }
+    }
+}

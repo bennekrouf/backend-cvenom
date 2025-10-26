@@ -1,8 +1,8 @@
 // src/core/fs_ops.rs
-//! Unified file system operations - eliminates duplicate file handling
+//! Enhanced unified file system operations
 
 use anyhow::{Context, Result};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs;
 use tracing::info;
 
@@ -97,6 +97,53 @@ impl FsOps {
         Ok(persons)
     }
 
+    /// Normalize path - replaces scattered path normalization patterns
+    pub fn normalize_path(base: &Path, relative: &Path) -> PathBuf {
+        if relative.is_absolute() {
+            relative.to_path_buf()
+        } else {
+            base.join(relative)
+        }
+    }
+
+    /// Normalize person name - replaces utils::normalize_person_name
+    pub fn normalize_person_name(name: &str) -> String {
+        name.trim()
+            .to_lowercase()
+            .chars()
+            .map(|c| match c {
+                ' ' | '_' | '.' => '-',
+                c if c.is_alphanumeric() => c,
+                _ => '-',
+            })
+            .collect::<String>()
+            .split('-')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("-")
+    }
+
+    /// Get file extension safely
+    pub fn get_extension(path: &Path) -> Option<String> {
+        path.extension()
+            .and_then(|ext| ext.to_str())
+            .map(|ext| ext.to_lowercase())
+    }
+
+    /// Check if file exists with any of the given extensions
+    pub async fn find_file_with_extensions(
+        base_path: &Path,
+        extensions: &[&str],
+    ) -> Option<PathBuf> {
+        for ext in extensions {
+            let path_with_ext = base_path.with_extension(ext);
+            if path_with_ext.exists() {
+                return Some(path_with_ext);
+            }
+        }
+        None
+    }
+
     /// Validate image file format and integrity
     pub async fn validate_image(path: &Path) -> Result<()> {
         let metadata = fs::metadata(path)
@@ -139,4 +186,45 @@ impl FsOps {
 
         Ok(())
     }
+
+    /// Create backup of file with timestamp
+    pub async fn backup_file(path: &Path) -> Result<PathBuf> {
+        if !path.exists() {
+            anyhow::bail!("File to backup does not exist: {}", path.display());
+        }
+
+        let backup_name = format!(
+            "{}.backup.{}",
+            path.file_stem().and_then(|s| s.to_str()).unwrap_or("file"),
+            chrono::Utc::now().format("%Y%m%d_%H%M%S")
+        );
+
+        let backup_path = path.with_file_name(backup_name);
+        Self::copy_file(path, &backup_path).await?;
+        Ok(backup_path)
+    }
+
+    /// Clean up temporary files matching pattern
+    pub async fn cleanup_temp_files(dir: &Path, pattern: &str) -> Result<usize> {
+        let mut count = 0;
+        if !dir.exists() {
+            return Ok(count);
+        }
+
+        let mut entries = fs::read_dir(dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if let Some(file_name) = path.file_name().and_then(|n| n.to_str()) {
+                if file_name.contains(pattern) {
+                    if path.is_file() {
+                        fs::remove_file(&path).await?;
+                        count += 1;
+                        info!("Cleaned up temp file: {}", path.display());
+                    }
+                }
+            }
+        }
+        Ok(count)
+    }
 }
+

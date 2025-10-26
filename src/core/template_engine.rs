@@ -1,5 +1,5 @@
 // src/core/template_engine.rs
-//! Unified template processing engine - eliminates duplicate template logic
+//! Unified template processing engine - consolidates template_system and template_processor
 
 use anyhow::{Context, Result};
 use std::collections::HashMap;
@@ -7,32 +7,113 @@ use std::path::{Path, PathBuf};
 use tracing::{info, warn};
 
 use crate::core::FsOps;
-use crate::template_system::TemplateManager;
+
+#[derive(Debug, Clone)]
+pub struct TemplateInfo {
+    pub id: String,
+    pub path: PathBuf,
+    pub manifest: TemplateManifest,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct TemplateManifest {
+    pub name: String,
+    pub description: Option<String>,
+    pub author: Option<String>,
+    pub version: Option<String>,
+}
 
 pub struct TemplateEngine {
-    manager: TemplateManager,
     templates_dir: PathBuf,
+    templates: Vec<TemplateInfo>,
 }
 
 impl TemplateEngine {
-    /// Create new template engine
+    /// Create new template engine with automatic discovery
     pub fn new(templates_dir: PathBuf) -> Result<Self> {
-        let manager = TemplateManager::new(templates_dir.clone())
-            .context("Failed to create template manager")?;
-
-        Ok(Self {
-            manager,
+        let mut engine = Self {
             templates_dir,
+            templates: Vec::new(),
+        };
+        engine.discover_templates()?;
+        Ok(engine)
+    }
+
+    /// Discover and load all available templates
+    fn discover_templates(&mut self) -> Result<()> {
+        self.templates.clear();
+
+        if !self.templates_dir.exists() {
+            warn!(
+                "Templates directory does not exist: {}",
+                self.templates_dir.display()
+            );
+            return Ok(());
+        }
+
+        let entries = std::fs::read_dir(&self.templates_dir).with_context(|| {
+            format!(
+                "Failed to read templates directory: {}",
+                self.templates_dir.display()
+            )
+        })?;
+
+        for entry in entries {
+            let entry = entry?;
+            let path = entry.path();
+
+            if path.is_dir() {
+                if let Some(template_name) = path.file_name().and_then(|n| n.to_str()) {
+                    match self.load_template_info(template_name, &path) {
+                        Ok(template) => self.templates.push(template),
+                        Err(e) => warn!("Failed to load template {}: {}", template_name, e),
+                    }
+                }
+            }
+        }
+
+        info!("Discovered {} templates", self.templates.len());
+        Ok(())
+    }
+
+    /// Load template information from directory
+    fn load_template_info(&self, template_id: &str, template_path: &Path) -> Result<TemplateInfo> {
+        let manifest_path = template_path.join("manifest.toml");
+
+        let manifest = if manifest_path.exists() {
+            let content = std::fs::read_to_string(&manifest_path)
+                .with_context(|| format!("Failed to read manifest: {}", manifest_path.display()))?;
+            toml::from_str(&content)
+                .with_context(|| format!("Failed to parse manifest: {}", manifest_path.display()))?
+        } else {
+            TemplateManifest {
+                name: template_id.to_string(),
+                description: None,
+                author: None,
+                version: None,
+            }
+        };
+
+        Ok(TemplateInfo {
+            id: template_id.to_string(),
+            path: template_path.to_path_buf(),
+            manifest,
         })
     }
 
     /// List available templates
     pub fn list_templates(&self) -> Vec<String> {
-        self.manager
-            .list_templates()
-            .iter()
-            .map(|t| t.id.clone())
-            .collect()
+        self.templates.iter().map(|t| t.id.clone()).collect()
+    }
+
+    /// Get template info by ID
+    pub fn get_template(&self, template_id: &str) -> Option<&TemplateInfo> {
+        self.templates.iter().find(|t| t.id == template_id)
+    }
+
+    /// Check if template exists
+    pub fn template_exists(&self, template_id: &str) -> bool {
+        self.get_template(template_id).is_some()
     }
 
     /// Process template variables in content
@@ -43,6 +124,46 @@ impl TemplateEngine {
             result = result.replace(&placeholder, value);
         }
         result
+    }
+
+    /// Prepare template workspace by copying template files
+    pub async fn prepare_template_workspace(
+        &self,
+        template_id: &str,
+        workspace_dir: &Path,
+    ) -> Result<()> {
+        let template = self
+            .get_template(template_id)
+            .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", template_id))?;
+
+        FsOps::ensure_dir_exists(workspace_dir).await?;
+
+        // Copy all template files to workspace
+        let mut entries = tokio::fs::read_dir(&template.path).await.with_context(|| {
+            format!(
+                "Failed to read template directory: {}",
+                template.path.display()
+            )
+        })?;
+
+        while let Some(entry) = entries.next_entry().await? {
+            let src_path = entry.path();
+            let file_name = src_path
+                .file_name()
+                .ok_or_else(|| anyhow::anyhow!("Invalid file name in template"))?;
+            let dest_path = workspace_dir.join(file_name);
+
+            if src_path.is_file() {
+                FsOps::copy_file(&src_path, &dest_path).await?;
+            }
+        }
+
+        info!(
+            "Prepared template workspace: {} -> {}",
+            template_id,
+            workspace_dir.display()
+        );
+        Ok(())
     }
 
     /// Create person from templates
@@ -102,19 +223,6 @@ impl TemplateEngine {
         Ok(())
     }
 
-    /// Prepare template workspace
-    pub async fn prepare_template_workspace(
-        &self,
-        template_name: &str,
-        workspace_dir: &Path,
-    ) -> Result<()> {
-        let workspace_pathbuf = workspace_dir.to_path_buf();
-        self.manager
-            .prepare_template_workspace(template_name, &workspace_pathbuf)
-            .context("Failed to prepare template workspace")?;
-        Ok(())
-    }
-
     /// Create cv_params.toml
     async fn create_cv_params(
         &self,
@@ -169,7 +277,115 @@ show_contact = true\n",
             FsOps::write_file_safe(&person_dir.join("experiences_en.typ"), &template_content)
                 .await?;
         } else {
-            let default_experiences = r#"#import "../templates/default/template.typ": *
+            let default_experiences = self.get_default_experiences_content();
+            FsOps::write_file_safe(&person_dir.join("experiences_en.typ"), &default_experiences)
+                .await?;
+        }
+
+        // Create experiences_fr.typ
+        self.create_experiences_fr(person_dir).await?;
+        Ok(())
+    }
+
+    /// Create French experiences file
+    async fn create_experiences_fr(&self, person_dir: &Path) -> Result<()> {
+        let default_experiences_fr = r#"#import "../templates/default/template.typ": *
+
+// Expériences en français
+#let get_work_experience() = {
+  // Ajoutez vos expériences professionnelles ici
+  [
+    #experience(
+      title: "Votre poste",
+      date: "2023 - Présent",
+      description: "Nom de l'entreprise",
+      details: [
+        - Vos responsabilités et réalisations
+        - Ajoutez plus de points selon vos besoins
+      ]
+    )
+  ]
+}
+
+#let get_key_insights() = {
+  [
+    - Point clé ou réalisation #1
+    - Point clé ou réalisation #2
+    - Point clé ou réalisation #3
+  ]
+}
+
+#let get_skills() = {
+  (
+    "Langages": ("Rust", "Python", "JavaScript"),
+    "Frameworks": ("React", "Vue.js", "FastAPI"),
+    "Outils": ("Git", "Docker", "CI/CD"),
+  )
+}
+
+#let get_education() = {
+  [
+    #experience(
+      title: "Votre diplôme",
+      date: "2019 - 2023",
+      description: "Université/École",
+      details: [
+        - Spécialisation ou mention
+        - Projets remarquables
+      ]
+    )
+  ]
+}
+
+#let get_languages() = {
+  (
+    "Français": "Langue maternelle",
+    "Anglais": "Courant",
+    "Allemand": "Notions",
+  )
+}
+"#;
+        FsOps::write_file_safe(
+            &person_dir.join("experiences_fr.typ"),
+            default_experiences_fr,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Create README file
+    async fn create_readme(&self, person_dir: &Path, person_name: &str) -> Result<()> {
+        let readme_content = format!(
+            "# CV Data for {}\n\n\
+This directory contains CV data for {}.\n\n\
+## Files\n\n\
+- `cv_params.toml` - Personal information and configuration\n\
+- `experiences_en.typ` - Work experience and content in English\n\
+- `experiences_fr.typ` - Work experience and content in French\n\
+- `profile.png` - Profile image (add your own)\n\n\
+## Usage\n\n\
+Generate CV in English:\n\
+```bash\n\
+cargo run -- generate {} en\n\
+```\n\n\
+Generate CV in French:\n\
+```bash\n\
+cargo run -- generate {} fr\n\
+```\n\n\
+## Customization\n\n\
+1. Edit `cv_params.toml` to update personal information\n\
+2. Modify `experiences_*.typ` files to add your experience\n\
+3. Replace `profile.png` with your profile image\n",
+            person_name, person_name, person_name, person_name
+        );
+
+        FsOps::write_file_safe(&person_dir.join("README.md"), &readme_content).await?;
+        Ok(())
+    }
+
+    /// Get default experiences content
+    fn get_default_experiences_content(&self) -> String {
+        r#"#import "../templates/default/template.typ": *
 
 // English experiences
 #let get_work_experience() = {
@@ -194,73 +410,43 @@ show_contact = true\n",
     - Key insight or achievement #3
   ]
 }
-"#;
-            FsOps::write_file_safe(&person_dir.join("experiences_en.typ"), default_experiences)
-                .await?;
-        }
 
-        // Create experiences_fr.typ
-        self.create_experiences_fr(person_dir).await?;
-        Ok(())
-    }
+#let get_skills() = {
+  (
+    "Languages": ("Rust", "Python", "JavaScript"),
+    "Frameworks": ("React", "Vue.js", "FastAPI"),
+    "Tools": ("Git", "Docker", "CI/CD"),
+  )
+}
 
-    /// Create French experiences file
-    async fn create_experiences_fr(&self, person_dir: &Path) -> Result<()> {
-        let default_experiences_fr = r#"#import "../templates/default/template.typ": *
-
-// French experiences
-#let get_work_experience() = {
-  // Ajoutez vos expériences professionnelles ici
+#let get_education() = {
   [
     #experience(
-      title: "Votre Titre de Poste",
-      date: "2023 - Présent",
-      description: "Nom de l'Entreprise",
+      title: "Your Degree",
+      date: "2019 - 2023",
+      description: "University/School",
       details: [
-        - Vos responsabilités et réalisations
-        - Ajoutez plus de points selon vos besoins
+        - Specialization or honors
+        - Notable projects
       ]
     )
   ]
 }
 
-#let get_key_insights() = {
-  [
-    - Point clé ou réalisation #1
-    - Point clé ou réalisation #2
-    - Point clé ou réalisation #3
-  ]
+#let get_languages() = {
+  (
+    "English": "Native",
+    "French": "Fluent",
+    "German": "Basic",
+  )
 }
-"#;
-        FsOps::write_file_safe(
-            &person_dir.join("experiences_fr.typ"),
-            default_experiences_fr,
-        )
-        .await?;
-        Ok(())
+"#
+        .to_string()
     }
 
-    /// Create README file
-    async fn create_readme(&self, person_dir: &Path, person_name: &str) -> Result<()> {
-        let readme_content = format!(
-            r#"# CV for {}
-
-This directory contains the CV configuration and experiences for {}.
-
-## Files
-
-- `cv_params.toml` - Personal information and CV configuration
-- `experiences_en.typ` - Work experiences in English
-- `experiences_fr.typ` - Work experiences in French
-- `profile.png` - Profile picture (optional)
-
-## Usage
-
-Generate CV using the web interface or CLI tools.
-"#,
-            person_name, person_name
-        );
-        FsOps::write_file_safe(&person_dir.join("README.md"), &readme_content).await?;
-        Ok(())
+    /// Reload templates (useful for development)
+    pub fn reload(&mut self) -> Result<()> {
+        self.discover_templates()
     }
 }
+
