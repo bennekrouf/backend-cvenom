@@ -1,5 +1,4 @@
-// src/web/mod.rs - REPLACE with this clean version (no v1 compatibility needed)
-
+// src/web/mod.rs
 pub mod file_handlers;
 pub mod handlers;
 pub mod services;
@@ -32,12 +31,34 @@ impl Fairing for Cors {
     }
 
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
-        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        let origin = _request
+            .headers()
+            .get_one("Origin")
+            .unwrap_or("https://studio.cvenom.com");
+
+        let allowed_origins = [
+            "https://studio.cvenom.com",
+            "http://localhost:4001",
+            "http://127.0.0.1:4001",
+        ];
+
+        if allowed_origins.contains(&origin) {
+            response.set_header(Header::new("Access-Control-Allow-Origin", origin));
+        } else {
+            response.set_header(Header::new(
+                "Access-Control-Allow-Origin",
+                "https://studio.cvenom.com",
+            ));
+        }
+
+        response.set_header(Header::new(
+            "Access-Control-Allow-Headers", 
+            "authorization, content-type, referer, sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform, user-agent"
+        ));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",
             "POST, GET, PATCH, OPTIONS",
         ));
-        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
     }
 }
@@ -259,4 +280,3 @@ pub async fn start_web_server(
     info!("Server successfully started and bound to port: {}", port);
     Ok(())
 }
-
