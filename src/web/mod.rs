@@ -26,15 +26,25 @@ impl Fairing for Cors {
     fn info(&self) -> Info {
         Info {
             name: "Add CORS headers to responses",
-            kind: Kind::Response,
+            kind: Kind::Request | Kind::Response,
         }
     }
 
-    async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
-        let origin = _request
+    async fn on_request(&self, request: &mut Request<'_>, _: &mut rocket::Data<'_>) {
+        println!(
+            "CORS: Request method: {:?}, Origin: {:?}",
+            request.method(),
+            request.headers().get_one("Origin")
+        );
+    }
+
+    async fn on_response<'r>(&self, request: &'r Request<'_>, response: &mut Response<'r>) {
+        let origin = request
             .headers()
             .get_one("Origin")
             .unwrap_or("https://studio.cvenom.com");
+
+        println!("CORS: Processing response for origin: {}", origin);
 
         let allowed_origins = [
             "https://studio.cvenom.com",
@@ -57,9 +67,10 @@ impl Fairing for Cors {
         ));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",
-            "POST, GET, PATCH, OPTIONS",
+            "POST, GET, PATCH, OPTIONS, DELETE, PUT",
         ));
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+        response.set_header(Header::new("Access-Control-Max-Age", "86400"));
     }
 }
 
@@ -280,3 +291,4 @@ pub async fn start_web_server(
     info!("Server successfully started and bound to port: {}", port);
     Ok(())
 }
+
