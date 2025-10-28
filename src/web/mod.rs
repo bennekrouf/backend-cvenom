@@ -186,12 +186,13 @@ pub fn internal_error() -> Json<StandardErrorResponse> {
     ))
 }
 
-// Main server start function
 pub async fn start_web_server(
     data_dir: PathBuf,
     output_dir: PathBuf,
     templates_dir: PathBuf,
     database_path: PathBuf,
+    port: u16,
+    cv_service_url: String,
 ) -> Result<()> {
     let server_config = ServerConfig {
         data_dir: data_dir.clone(),
@@ -223,12 +224,15 @@ pub async fn start_web_server(
     info!("Starting CVenom Multi-tenant API server");
     info!("Database: {}", db_config.database_path.display());
     info!("All endpoints use standard response format with conversation_id support");
+    info!("Attempting to bind to port: {}", port);
 
     let _rocket = rocket::build()
+        .configure(rocket::Config::figment().merge(("port", port)))
         .attach(Cors)
         .manage(server_config)
         .manage(auth_config)
         .manage(db_config)
+        .manage(cv_service_url)
         .register("/api", catchers![bad_request, internal_error])
         .mount(
             "/api",
@@ -252,5 +256,7 @@ pub async fn start_web_server(
         .launch()
         .await;
 
+    info!("Server successfully started and bound to port: {}", port);
     Ok(())
 }
+

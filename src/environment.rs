@@ -21,7 +21,7 @@ impl ServiceConfig {
     pub fn load() -> Self {
         Self {
             job_matching_url: std::env::var("JOB_MATCHING_API_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:6666".to_string()),
+                .unwrap_or_else(|_| "http://127.0.0.1:5555".to_string()),
             timeout_seconds: std::env::var("SERVICE_TIMEOUT")
                 .ok()
                 .and_then(|s| s.parse().ok())

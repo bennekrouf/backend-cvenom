@@ -72,7 +72,7 @@ impl ConfigManager {
     /// Load service configuration
     fn load_service() -> Result<ServiceConfig> {
         let job_matching_url = std::env::var("JOB_MATCHING_API_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:6666".to_string());
+            .unwrap_or_else(|_| "http://127.0.0.1:5555".to_string());
 
         Ok(ServiceConfig {
             job_matching_url,
