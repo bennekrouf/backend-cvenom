@@ -187,7 +187,7 @@ pub async fn get_tenant_files(
 }
 
 #[options("/<_..>")]
-pub async fn options() -> Status {
+pub async fn options_handler() -> Status {
     Status::Ok
 }
 
@@ -282,7 +282,7 @@ pub async fn start_web_server(
                 get_tenant_files,
                 get_tenant_file_content,
                 save_tenant_file_content,
-                options,
+                options_handler,
             ],
         )
         .launch()
