@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::fs;
-use tracing::info;
+use crate::app_log;
 
 pub struct FsOps;
 
@@ -15,7 +15,7 @@ impl FsOps {
             fs::create_dir_all(path)
                 .await
                 .with_context(|| format!("Failed to create directory: {}", path.display()))?;
-            info!("Created directory: {}", path.display());
+            app_log!(info, "Created directory: {}", path.display());
         }
         Ok(())
     }
@@ -38,7 +38,7 @@ impl FsOps {
             .await
             .with_context(|| format!("Failed to write file: {}", path.display()))?;
 
-        info!("Written file: {}", path.display());
+        app_log!(info, "Written file: {}", path.display());
         Ok(())
     }
 
@@ -52,7 +52,7 @@ impl FsOps {
             .await
             .with_context(|| format!("Failed to copy {} to {}", src.display(), dest.display()))?;
 
-        info!("Copied {} to {}", src.display(), dest.display());
+        app_log!(info, "Copied {} to {}", src.display(), dest.display());
         Ok(())
     }
 
@@ -62,7 +62,7 @@ impl FsOps {
             fs::remove_dir_all(path)
                 .await
                 .with_context(|| format!("Failed to remove directory: {}", path.display()))?;
-            info!("Removed directory: {}", path.display());
+            app_log!(info, "Removed directory: {}", path.display());
         }
         Ok(())
     }
@@ -219,7 +219,7 @@ impl FsOps {
                     if path.is_file() {
                         fs::remove_file(&path).await?;
                         count += 1;
-                        info!("Cleaned up temp file: {}", path.display());
+                        app_log!(info, "Cleaned up temp file: {}", path.display());
                     }
                 }
             }

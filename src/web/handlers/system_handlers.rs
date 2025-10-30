@@ -6,7 +6,7 @@ use crate::web::types::{
 };
 use rocket::serde::json::Json;
 use rocket::State;
-use tracing::error;
+use crate::app_log;
 
 pub async fn get_templates_handler(
     config: &State<crate::web::types::ServerConfig>,
@@ -29,7 +29,7 @@ pub async fn get_templates_handler(
             ))
         }
         Err(e) => {
-            error!("Failed to initialize template manager: {}", e);
+            app_log!(error, "Failed to initialize template manager: {}", e);
             let default_templates = vec![TemplateInfo {
                 name: "default".to_string(),
                 description: "Standard CV layout".to_string(),

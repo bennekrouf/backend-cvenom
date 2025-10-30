@@ -4,7 +4,7 @@
 use anyhow::{Context, Result};
 use sqlx::SqlitePool;
 use std::path::Path;
-use tracing::info;
+use crate::app_log;
 
 use crate::core::FsOps;
 
@@ -25,7 +25,7 @@ impl Database {
             format!("Failed to connect to database: {}", database_path.display())
         })?;
 
-        info!(
+        app_log!(info, 
             "Database connection established: {}",
             database_path.display()
         );
@@ -75,7 +75,7 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
-        info!("Database migrations completed");
+        app_log!(info, "Database migrations completed");
         Ok(())
     }
 

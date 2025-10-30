@@ -12,7 +12,7 @@ use crate::{CvConfig, CvGenerator};
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::State;
-use tracing::{error, info};
+use crate::app_log;
 
 pub async fn generate_cv_handler(
     request: Json<StandardRequest<GenerateRequest>>,
@@ -27,7 +27,7 @@ pub async fn generate_cv_handler(
     let template_manager = match TemplateManager::new(config.templates_dir.clone()) {
         Ok(manager) => manager,
         Err(e) => {
-            error!("Failed to initialize template manager: {}", e);
+            app_log!(error, "Failed to initialize template manager: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Template system initialization failed".to_string(),
                 "TEMPLATE_INIT_ERROR".to_string(),
@@ -46,7 +46,7 @@ pub async fn generate_cv_handler(
     // ADD THIS LINE: Normalize the person name
     let normalized_person = normalize_person_name(&request.data.person);
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) generating CV for {} (normalized: {})",
         user.email, tenant.tenant_name, request.data.person, normalized_person
     );
@@ -54,7 +54,7 @@ pub async fn generate_cv_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -71,7 +71,7 @@ pub async fn generate_cv_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            app_log!(error, "Failed to ensure tenant data directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant data directory".to_string(),
                 "TENANT_DIR_ERROR".to_string(),
@@ -87,7 +87,7 @@ pub async fn generate_cv_handler(
     let profile_image_path = person_dir.join("profile.png");
     if let Err(validation_error) = ImageValidator::validate_profile_image(&profile_image_path).await
     {
-        error!(
+        app_log!(error, 
             "Image validation failed for {} (tenant: {}): {}",
             request.data.person, tenant.tenant_name, validation_error.message
         );
@@ -114,14 +114,14 @@ pub async fn generate_cv_handler(
     match CvGenerator::new(cv_config) {
         Ok(generator) => match generator.generate_pdf_data() {
             Ok(pdf_data) => {
-                info!(
+                app_log!(info, 
                     "Successfully generated CV for {} by {} (tenant: {})",
                     request.data.person, user.email, tenant.tenant_name
                 );
                 Ok(PdfResponse(pdf_data))
             }
             Err(e) => {
-                error!(
+                app_log!(error, 
                     "Generation error for {} (tenant: {}): {}",
                     request.data.person, tenant.tenant_name, e
                 );
@@ -154,7 +154,7 @@ pub async fn generate_cv_handler(
             }
         },
         Err(e) => {
-            error!(
+            app_log!(error, 
                 "Config error for {} (tenant: {}): {}",
                 request.data.person, tenant.tenant_name, e
             );
@@ -180,7 +180,7 @@ pub async fn upload_and_convert_cv_handler(
     let user = auth.user();
     let tenant = auth.tenant();
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) uploading CV for conversion",
         user.email, tenant.tenant_name
     );
@@ -259,7 +259,7 @@ pub async fn upload_and_convert_cv_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -276,7 +276,7 @@ pub async fn upload_and_convert_cv_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            app_log!(error, "Failed to ensure tenant data directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant data directory".to_string(),
                 "TENANT_DIR_ERROR".to_string(),
@@ -290,7 +290,7 @@ pub async fn upload_and_convert_cv_handler(
 
     // NOW call persist_to() after extracting all needed info
     if let Err(e) = upload.cv_file.persist_to(&temp_path).await {
-        error!("Failed to save uploaded file: {}", e);
+        app_log!(error, "Failed to save uploaded file: {}", e);
         return Err(Json(StandardErrorResponse::new(
             "Failed to process uploaded file".to_string(),
             "FILE_SAVE_ERROR".to_string(),
@@ -308,7 +308,7 @@ pub async fn upload_and_convert_cv_handler(
         Err(error_msg) => {
             let _ = tokio::fs::remove_file(&temp_path).await;
 
-            error!("CV conversion failed: {}", error_msg);
+            app_log!(error, "CV conversion failed: {}", error_msg);
             return Err(Json(StandardErrorResponse::new(
                 format!("CV conversion failed: {}", error_msg),
                 "PARSE_ERROR".to_string(),
@@ -341,7 +341,7 @@ pub async fn upload_and_convert_cv_handler(
         .await
     {
         Ok(_) => {
-            info!(
+            app_log!(info, 
                 "CV converted and person created: {} by {} (tenant: {})",
                 normalized_person, user.email, tenant.tenant_name
             );
@@ -365,7 +365,7 @@ pub async fn upload_and_convert_cv_handler(
             Ok(Json(response))
         }
         Err(e) => {
-            error!("Failed to create person from converted CV: {}", e);
+            app_log!(error, "Failed to create person from converted CV: {}", e);
             Err(Json(StandardErrorResponse::new(
                 "Failed to create collaborator directory".to_string(),
                 "PERSON_CREATE_ERROR".to_string(),

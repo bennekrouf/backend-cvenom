@@ -7,7 +7,7 @@ use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use crate::app_log;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FirebaseUser {
@@ -64,7 +64,7 @@ impl AuthConfig {
         let keys: HashMap<String, String> = response.json().await?;
 
         self.firebase_keys = keys;
-        tracing::info!("Updated Firebase public keys");
+        app_log!(info, "Updated Firebase public keys");
 
         Ok(())
     }
@@ -119,11 +119,11 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         let token = match req.headers().get_one("Authorization") {
             Some(header) if header.starts_with("Bearer ") => &header[7..],
             Some(_) => {
-                warn!("Invalid Authorization header format");
+                app_log!(warn, "Invalid Authorization header format");
                 return Outcome::Error((Status::Unauthorized, AuthError::InvalidToken));
             }
             None => {
-                warn!("Missing Authorization header");
+                app_log!(warn, "Missing Authorization header");
                 return Outcome::Error((Status::Unauthorized, AuthError::MissingToken));
             }
         };
@@ -132,7 +132,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         let firebase_user = match verify_firebase_token(token, auth_config).await {
             Ok(user) => user,
             Err(e) => {
-                error!("Token verification failed: {}", e);
+                app_log!(error, "Token verification failed: {}", e);
                 return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
             }
         };
@@ -141,7 +141,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         let pool = match db_config.pool() {
             Ok(pool) => pool,
             Err(e) => {
-                error!("Database connection failed: {}", e);
+                app_log!(error, "Database connection failed: {}", e);
                 return Outcome::Error((Status::InternalServerError, AuthError::DatabaseError));
             }
         };
@@ -155,7 +155,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         {
             Ok(tenant) => tenant,
             Err(e) => {
-                error!(
+                app_log!(error, 
                     "Failed to get or create tenant for {}: {}",
                     firebase_user.email, e
                 );
@@ -163,7 +163,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             }
         };
 
-        info!(
+        app_log!(info, 
             "User {} authenticated for tenant: {}",
             firebase_user.email, tenant.tenant_name
         );

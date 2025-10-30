@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
-use tracing::info;
+use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Tenant {
@@ -52,28 +52,28 @@ impl DatabaseConfig {
 
     /// Initialize the database connection pool
     pub async fn init_pool(&mut self) -> Result<()> {
-        println!(
+        app_log!(info, 
             "Attempting to create database at: {}",
             self.database_path.display()
         );
 
         // Ensure parent directory exists
         if let Some(parent) = self.database_path.parent() {
-            println!("Creating parent directory: {}", parent.display());
+            app_log!(info, "Creating parent directory: {}", parent.display());
             tokio::fs::create_dir_all(parent)
                 .await
                 .context("Failed to create database directory")?;
         }
 
         let database_url = format!("sqlite:{}?mode=rwc", self.database_path.display());
-        println!("Database URL: {}", database_url);
+        app_log!(info, "Database URL: {}", database_url);
 
         let pool = SqlitePool::connect(&database_url)
             .await
             .context("Failed to connect to SQLite database")?;
         self.pool = Some(pool);
 
-        info!("Database connection pool initialized: {}", database_url);
+        app_log!(info, "Database connection pool initialized: {}", database_url);
         Ok(())
     }
 
@@ -122,7 +122,7 @@ impl DatabaseConfig {
             .execute(pool)
             .await?;
 
-        info!("Database migrations completed successfully");
+        app_log!(info, "Database migrations completed successfully");
         Ok(())
     }
 }
@@ -189,7 +189,7 @@ impl<'a> TenantRepository<'a> {
             is_active: true,
         };
 
-        info!("Created email tenant: {} for email: {}", tenant_name, email);
+        app_log!(info, "Created email tenant: {} for email: {}", tenant_name, email);
         Ok(tenant)
     }
 
@@ -222,7 +222,7 @@ impl<'a> TenantRepository<'a> {
             is_active: true,
         };
 
-        info!(
+        app_log!(info, 
             "Created domain tenant: {} for domain: {}",
             tenant_name, domain
         );
@@ -261,7 +261,7 @@ impl<'a> TenantRepository<'a> {
 
         let updated = result.rows_affected() > 0;
         if updated {
-            info!("Deactivated tenant for email: {}", email);
+            app_log!(info, "Deactivated tenant for email: {}", email);
         }
 
         Ok(updated)
@@ -282,7 +282,7 @@ impl<'a> TenantRepository<'a> {
 
         let updated = result.rows_affected() > 0;
         if updated {
-            info!("Deactivated tenant for domain: {}", domain);
+            app_log!(info, "Deactivated tenant for domain: {}", domain);
         }
 
         Ok(updated)
@@ -309,7 +309,7 @@ impl<'a> TenantService<'a> {
             Some(tenant) => {
                 // Double-check authorization using the tenant's logic
                 if tenant.authorizes_email(email) {
-                    info!(
+                    app_log!(info, 
                         "User {} validated for tenant: {} ({})",
                         email,
                         tenant.tenant_name,
@@ -321,7 +321,7 @@ impl<'a> TenantService<'a> {
                     );
                     Ok(Some(tenant))
                 } else {
-                    info!(
+                    app_log!(info, 
                         "User {} failed authorization check for tenant: {}",
                         email, tenant.tenant_name
                     );
@@ -329,7 +329,7 @@ impl<'a> TenantService<'a> {
                 }
             }
             None => {
-                info!(
+                app_log!(info, 
                     "Access denied for email: {} - no matching tenant or domain",
                     email
                 );
@@ -353,7 +353,7 @@ impl<'a> TenantService<'a> {
 
         if !tenant_dir.exists() {
             tokio::fs::create_dir_all(&tenant_dir).await?;
-            info!("Created tenant data directory: {}", tenant_dir.display());
+            app_log!(info, "Created tenant data directory: {}", tenant_dir.display());
         }
 
         Ok(tenant_dir)
@@ -395,7 +395,7 @@ impl<'a> TenantService<'a> {
             tokio::fs::write(person_dir.join("experiences_fr.typ"), &exp_content).await?;
         }
 
-        info!(
+        app_log!(info, 
             "Created default person structure for {} (display: {}) in tenant {}",
             person_name,
             display_name.unwrap_or(person_name),
@@ -410,7 +410,7 @@ impl<'a> TenantService<'a> {
         let username = email.split('@').next().unwrap_or("user");
         let tenant_name = username.to_string();
 
-        info!(
+        app_log!(info, 
             "Auto-creating tenant '{}' for new user: {}",
             tenant_name, email
         );

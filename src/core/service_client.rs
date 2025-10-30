@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use reqwest::multipart::{Form, Part};
 use std::path::Path;
 use std::time::Duration;
-use tracing::info;
+use crate::app_log;
 
 pub struct ServiceClient {
     client: reqwest::Client,
@@ -45,7 +45,7 @@ impl ServiceClient {
                 .context("Failed to create multipart")?,
         );
 
-        info!("Calling CV conversion service: {}", url);
+        app_log!(info, "Calling CV conversion service: {}", url);
 
         let response = self
             .client
@@ -56,14 +56,14 @@ impl ServiceClient {
             .context("HTTP request failed")?;
 
         let status = response.status();
-        info!("Response status: {}", status);
+        app_log!(info, "Response status: {}", status);
 
         let response_text = response
             .text()
             .await
             .context("Failed to read response text")?;
 
-        info!("Response body: {}", response_text);
+        app_log!(info, "Response body: {}", response_text);
 
         if status.is_success() {
             self.parse_cv_response(&response_text)

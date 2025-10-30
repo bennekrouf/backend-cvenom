@@ -11,7 +11,7 @@ use rocket::form::Form;
 use rocket::fs::NamedFile;
 use rocket::serde::json::Json;
 use rocket::State;
-use tracing::{error, info};
+use crate::app_log;
 
 pub async fn create_person_handler(
     request: Json<StandardRequest<CreatePersonRequest>>,
@@ -24,7 +24,7 @@ pub async fn create_person_handler(
     let normalized_person = FsOps::normalize_person_name(&request.data.person);
     let conversation_id = request.conversation_id();
 
-    info!(
+    app_log!(info, 
         "Creating person: {} for tenant: {} (user: {}) [{}]",
         normalized_person,
         tenant.tenant_name,
@@ -35,7 +35,7 @@ pub async fn create_person_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -52,7 +52,7 @@ pub async fn create_person_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to create tenant directory: {}", e);
+            app_log!(error, "Failed to create tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to create tenant directory".to_string(),
                 "TENANT_ERROR".to_string(),
@@ -66,7 +66,7 @@ pub async fn create_person_handler(
     let template_engine = match crate::core::TemplateEngine::new(config.templates_dir.clone()) {
         Ok(engine) => engine,
         Err(e) => {
-            error!("Failed to create template engine: {}", e);
+            app_log!(error, "Failed to create template engine: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Template engine initialization failed".to_string(),
                 "TEMPLATE_ERROR".to_string(),
@@ -84,7 +84,7 @@ pub async fn create_person_handler(
         )
         .await
     {
-        error!("Failed to create person: {}", e);
+        app_log!(error, "Failed to create person: {}", e);
         return Err(Json(StandardErrorResponse::new(
             "Failed to create person".to_string(),
             "CREATION_ERROR".to_string(),
@@ -93,7 +93,7 @@ pub async fn create_person_handler(
         )));
     }
 
-    info!("Successfully created person: {}", normalized_person);
+    app_log!(info, "Successfully created person: {}", normalized_person);
 
     Ok(Json(ActionResponse::success(
         format!("Person '{}' created successfully", request.data.person),
@@ -112,7 +112,7 @@ pub async fn list_persons_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -129,7 +129,7 @@ pub async fn list_persons_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to access tenant directory: {}", e);
+            app_log!(error, "Failed to access tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant directory".to_string(),
                 "TENANT_ERROR".to_string(),
@@ -142,7 +142,7 @@ pub async fn list_persons_handler(
     match FsOps::list_persons(&tenant_data_dir).await {
         Ok(persons) => Ok(Json(persons)),
         Err(e) => {
-            error!("Failed to list persons: {}", e);
+            app_log!(error, "Failed to list persons: {}", e);
             Err(Json(StandardErrorResponse::new(
                 "Failed to list persons".to_string(),
                 "LIST_ERROR".to_string(),
@@ -166,7 +166,7 @@ pub async fn delete_person_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -183,7 +183,7 @@ pub async fn delete_person_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to access tenant directory: {}", e);
+            app_log!(error, "Failed to access tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant directory".to_string(),
                 "TENANT_ERROR".to_string(),
@@ -205,7 +205,7 @@ pub async fn delete_person_handler(
     }
 
     if let Err(e) = FsOps::remove_dir_all(&person_dir).await {
-        error!("Failed to delete person directory: {}", e);
+        app_log!(error, "Failed to delete person directory: {}", e);
         return Err(Json(StandardErrorResponse::new(
             "Failed to delete person".to_string(),
             "DELETE_ERROR".to_string(),
@@ -214,7 +214,7 @@ pub async fn delete_person_handler(
         )));
     }
 
-    info!("Successfully deleted person: {}", normalized_person);
+    app_log!(info, "Successfully deleted person: {}", normalized_person);
 
     Ok(Json(ActionResponse::success(
         format!("Person '{}' deleted successfully", request.data.person),
@@ -233,7 +233,7 @@ pub async fn upload_picture_handler(
     let tenant = auth.tenant();
     let normalized_person = FsOps::normalize_person_name(&upload.person);
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) uploading picture for {}",
         user.email, tenant.tenant_name, upload.person
     );
@@ -241,7 +241,7 @@ pub async fn upload_picture_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -258,7 +258,7 @@ pub async fn upload_picture_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to create tenant directory: {}", e);
+            app_log!(error, "Failed to create tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant data".to_string(),
                 "TENANT_ERROR".to_string(),
@@ -283,7 +283,7 @@ pub async fn upload_picture_handler(
     let file_path = match upload.file.path() {
         Some(path) => path,
         None => {
-            error!("Uploaded file has no path");
+            app_log!(error, "Uploaded file has no path");
             return Err(Json(StandardErrorResponse::new(
                 "Invalid uploaded file".to_string(),
                 "UPLOAD_ERROR".to_string(),
@@ -296,7 +296,7 @@ pub async fn upload_picture_handler(
     let file_bytes = match tokio::fs::read(file_path).await {
         Ok(bytes) => bytes,
         Err(e) => {
-            error!("Failed to read uploaded file: {}", e);
+            app_log!(error, "Failed to read uploaded file: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to process uploaded file".to_string(),
                 "UPLOAD_ERROR".to_string(),
@@ -313,7 +313,7 @@ pub async fn upload_picture_handler(
         Ok(_) => {
             // Validate the uploaded image
             if let Err(e) = FsOps::validate_image(&profile_path).await {
-                error!("Invalid image file: {}", e);
+                app_log!(error, "Invalid image file: {}", e);
                 // Remove invalid file
                 let _ = tokio::fs::remove_file(&profile_path).await;
                 return Err(Json(StandardErrorResponse::new(
@@ -324,7 +324,7 @@ pub async fn upload_picture_handler(
                 )));
             }
 
-            info!(
+            app_log!(info, 
                 "Successfully uploaded profile picture for person: {}",
                 normalized_person
             );
@@ -339,7 +339,7 @@ pub async fn upload_picture_handler(
             )))
         }
         Err(e) => {
-            error!("Failed to save uploaded file: {}", e);
+            app_log!(error, "Failed to save uploaded file: {}", e);
             Err(Json(StandardErrorResponse::new(
                 "Failed to save uploaded file".to_string(),
                 "SAVE_ERROR".to_string(),
@@ -362,7 +362,7 @@ pub async fn get_picture_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -379,7 +379,7 @@ pub async fn get_picture_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to access tenant directory: {}", e);
+            app_log!(error, "Failed to access tenant directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant directory".to_string(),
                 "TENANT_ERROR".to_string(),
@@ -403,7 +403,7 @@ pub async fn get_picture_handler(
     match NamedFile::open(&profile_path).await {
         Ok(file) => Ok(file),
         Err(e) => {
-            error!("Failed to serve profile picture: {}", e);
+            app_log!(error, "Failed to serve profile picture: {}", e);
             Err(Json(StandardErrorResponse::new(
                 "Failed to serve profile picture".to_string(),
                 "FILE_ERROR".to_string(),

@@ -16,7 +16,7 @@ use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
 use rocket::{catchers, get, options, post, routes, Request, Response, State};
 use std::path::PathBuf;
-use tracing::{error, info};
+use crate::app_log;
 
 // CORS Fairing
 pub struct Cors;
@@ -31,7 +31,7 @@ impl Fairing for Cors {
     }
 
     async fn on_request(&self, request: &mut Request<'_>, _: &mut rocket::Data<'_>) {
-        println!(
+        app_log!(info, 
             "CORS: Request method: {:?}, Origin: {:?}",
             request.method(),
             request.headers().get_one("Origin")
@@ -44,7 +44,7 @@ impl Fairing for Cors {
             .get_one("Origin")
             .unwrap_or("https://studio.cvenom.com");
 
-        println!("CORS: Processing response for origin: {}", origin);
+        app_log!(info, "CORS: Processing response for origin: {}", origin);
 
         let allowed_origins = [
             "https://studio.cvenom.com",
@@ -237,26 +237,26 @@ pub async fn start_web_server(
     let mut db_config = DatabaseConfig::new(database_path);
 
     if let Err(e) = db_config.init_pool().await {
-        error!("Failed to initialize database: {}", e);
+        app_log!(error, "Failed to initialize database: {}", e);
         return Err(e);
     }
 
     if let Err(e) = db_config.migrate().await {
-        error!("Failed to run database migrations: {}", e);
+        app_log!(error, "Failed to run database migrations: {}", e);
         return Err(e);
     }
 
     let mut auth_config = AuthConfig::new("semantic-27923".to_string());
 
     if let Err(e) = auth_config.update_firebase_keys().await {
-        error!("Failed to fetch Firebase keys: {}", e);
+        app_log!(error, "Failed to fetch Firebase keys: {}", e);
         return Err(e);
     }
 
-    info!("Starting CVenom Multi-tenant API server");
-    info!("Database: {}", db_config.database_path.display());
-    info!("All endpoints use standard response format with conversation_id support");
-    info!("Attempting to bind to port: {}", port);
+    app_log!(info, "Starting CVenom Multi-tenant API server");
+    app_log!(info, "Database: {}", db_config.database_path.display());
+    app_log!(info, "All endpoints use standard response format with conversation_id support");
+    app_log!(info, "Attempting to bind to port: {}", port);
 
     let _rocket = rocket::build()
         .configure(rocket::Config::figment().merge(("port", port)))
@@ -288,7 +288,7 @@ pub async fn start_web_server(
         .launch()
         .await;
 
-    info!("Server successfully started and bound to port: {}", port);
+    app_log!(info, "Server successfully started and bound to port: {}", port);
     Ok(())
 }
 

@@ -1,4 +1,5 @@
 // src/generator.rs
+use crate::app_log;
 use crate::config::CvConfig;
 use crate::template_processor::TemplateProcessor;
 use crate::template_system::TemplateManager;
@@ -50,7 +51,8 @@ impl CvGenerator {
         let output_path = workspace.compile_cv()?;
         workspace.cleanup_workspace()?;
 
-        println!(
+        app_log!(
+            info,
             "✅ Successfully compiled CV for {} ({} template, {} lang) to {}",
             self.config.person_name,
             self.config.template,
@@ -108,7 +110,8 @@ impl CvGenerator {
             Some(&self.config.person_name),
         )?;
 
-        println!(
+        app_log!(
+            info,
             "Created person directory structure for: {}",
             self.config.person_name
         );

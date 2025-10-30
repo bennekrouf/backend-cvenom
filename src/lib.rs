@@ -26,6 +26,13 @@ pub use environment::EnvironmentConfig;
 pub use generator::CvGenerator;
 pub use template_processor::TemplateProcessor;
 
+#[macro_export]
+macro_rules! app_log {
+    ($level:ident, $($arg:tt)*) => {
+        tracing::$level!(service = "cvenom", component = "backend", $($arg)*)
+    };
+}
+
 /// List all available persons - now uses core FsOps
 pub fn list_persons(data_dir: &PathBuf) -> Result<Vec<String>> {
     // Use async runtime for the async core function
@@ -60,4 +67,3 @@ pub fn generate_cv(
     let generator = CvGenerator::new(config).context("Failed to create CV generator")?;
     generator.generate()
 }
-

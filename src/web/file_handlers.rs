@@ -10,7 +10,7 @@ use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::State;
 use std::collections::HashMap;
-use tracing::{error, info, warn};
+use crate::app_log;
 
 impl AuthenticatedUser {
     /// Ensure person directory exists for this user
@@ -50,11 +50,11 @@ pub async fn get_tenant_file_content_handler(
 
     // Security: Only allow .typ and .toml files
     if !path.ends_with(".typ") && !path.ends_with(".toml") {
-        warn!("Unauthorized file access attempt: {}", path);
+        app_log!(warn, "Unauthorized file access attempt: {}", path);
         return Err(Status::Forbidden);
     }
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) requesting file: {}",
         auth.user().email,
         tenant.tenant_name,
@@ -65,7 +65,7 @@ pub async fn get_tenant_file_content_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Status::InternalServerError);
         }
     };
@@ -77,7 +77,7 @@ pub async fn get_tenant_file_content_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            app_log!(error, "Failed to ensure tenant data directory: {}", e);
             return Err(Status::InternalServerError);
         }
     };
@@ -86,20 +86,20 @@ pub async fn get_tenant_file_content_handler(
 
     // Security: Ensure the file is within tenant directory
     if !file_path.starts_with(&tenant_data_dir) {
-        warn!("Path traversal attempt: {}", path);
+        app_log!(warn, "Path traversal attempt: {}", path);
         return Err(Status::Forbidden);
     }
 
     match tokio::fs::read_to_string(&file_path).await {
         Ok(content) => {
-            info!(
+            app_log!(info, 
                 "File content served: {} for tenant: {}",
                 path, tenant.tenant_name
             );
             Ok(content)
         }
         Err(e) => {
-            error!("Failed to read file {}: {}", file_path.display(), e);
+            app_log!(error, "Failed to read file {}: {}", file_path.display(), e);
             Err(Status::NotFound)
         }
     }
@@ -116,7 +116,7 @@ pub async fn save_tenant_file_content_handler(
 
     // Security: Only allow .typ and .toml files
     if !request.data.path.ends_with(".typ") && !request.data.path.ends_with(".toml") {
-        warn!("Unauthorized file save attempt: {}", request.data.path);
+        app_log!(warn, "Unauthorized file save attempt: {}", request.data.path);
         return Err(Json(StandardErrorResponse::new(
             "File type not allowed".to_string(),
             "FORBIDDEN_FILE_TYPE".to_string(),
@@ -128,7 +128,7 @@ pub async fn save_tenant_file_content_handler(
         )));
     }
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) saving file: {}",
         auth.user().email,
         tenant.tenant_name,
@@ -139,7 +139,7 @@ pub async fn save_tenant_file_content_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -156,7 +156,7 @@ pub async fn save_tenant_file_content_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            app_log!(error, "Failed to ensure tenant data directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant data directory".to_string(),
                 "TENANT_DIR_ERROR".to_string(),
@@ -170,7 +170,7 @@ pub async fn save_tenant_file_content_handler(
 
     // Security: Ensure the file is within tenant directory
     if !file_path.starts_with(&tenant_data_dir) {
-        warn!("Path traversal attempt: {}", request.data.path);
+        app_log!(warn, "Path traversal attempt: {}", request.data.path);
         return Err(Json(StandardErrorResponse::new(
             "Invalid file path".to_string(),
             "INVALID_PATH".to_string(),
@@ -185,7 +185,7 @@ pub async fn save_tenant_file_content_handler(
     // Ensure parent directory exists
     if let Some(parent) = file_path.parent() {
         if let Err(e) = tokio::fs::create_dir_all(parent).await {
-            error!("Failed to create directory {}: {}", parent.display(), e);
+            app_log!(error, "Failed to create directory {}: {}", parent.display(), e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to create directory structure".to_string(),
                 "DIRECTORY_CREATE_ERROR".to_string(),
@@ -200,7 +200,7 @@ pub async fn save_tenant_file_content_handler(
 
     match tokio::fs::write(&file_path, &request.data.content).await {
         Ok(_) => {
-            info!(
+            app_log!(info, 
                 "File saved: {} for tenant: {}",
                 request.data.path, tenant.tenant_name
             );
@@ -221,7 +221,7 @@ pub async fn save_tenant_file_content_handler(
             Ok(Json(response))
         }
         Err(e) => {
-            error!("Failed to save file {}: {}", file_path.display(), e);
+            app_log!(error, "Failed to save file {}: {}", file_path.display(), e);
             Err(Json(StandardErrorResponse::new(
                 "Failed to save file".to_string(),
                 "FILE_SAVE_ERROR".to_string(),
@@ -243,11 +243,11 @@ pub async fn get_tenant_files_handler(
 ) -> Result<Json<serde_json::Value>, Status> {
     // Auto-create person if doesn't exist
     if let Err(e) = auth.ensure_person_exists(config, db_config).await {
-        error!("Failed to ensure person exists: {}", e);
+        app_log!(error, "Failed to ensure person exists: {}", e);
     }
     let tenant = auth.tenant();
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) requesting file tree",
         auth.user().email,
         tenant.tenant_name
@@ -257,7 +257,7 @@ pub async fn get_tenant_files_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
 
             return Err(Status::InternalServerError);
         }
@@ -274,7 +274,7 @@ pub async fn get_tenant_files_handler(
             Ok(Json(tree_value))
         }
         Err(e) => {
-            error!(
+            app_log!(error, 
                 "Failed to build file tree for tenant {}: {}",
                 tenant.tenant_name, e
             );

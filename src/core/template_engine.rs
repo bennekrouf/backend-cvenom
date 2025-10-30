@@ -1,11 +1,10 @@
 // src/core/template_engine.rs
 //! Unified template processing engine - consolidates template_system and template_processor
-
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
 
+use crate::app_log;
 use crate::core::FsOps;
 
 #[derive(Debug, Clone)]
@@ -44,7 +43,8 @@ impl TemplateEngine {
         self.templates.clear();
 
         if !self.templates_dir.exists() {
-            warn!(
+            app_log!(
+                warn,
                 "Templates directory does not exist: {}",
                 self.templates_dir.display()
             );
@@ -66,13 +66,15 @@ impl TemplateEngine {
                 if let Some(template_name) = path.file_name().and_then(|n| n.to_str()) {
                     match self.load_template_info(template_name, &path) {
                         Ok(template) => self.templates.push(template),
-                        Err(e) => warn!("Failed to load template {}: {}", template_name, e),
+                        Err(e) => {
+                            app_log!(warn, "Failed to load template {}: {}", template_name, e)
+                        }
                     }
                 }
             }
         }
 
-        info!("Discovered {} templates", self.templates.len());
+        app_log!(info, "Discovered {} templates", self.templates.len());
         Ok(())
     }
 
@@ -158,7 +160,8 @@ impl TemplateEngine {
             }
         }
 
-        info!(
+        app_log!(
+            info,
             "Prepared template workspace: {} -> {}",
             template_id,
             workspace_dir.display()
@@ -186,7 +189,8 @@ impl TemplateEngine {
         // Create README
         self.create_readme(&person_dir, person_name).await?;
 
-        info!(
+        app_log!(
+            info,
             "Successfully created person from templates: {}",
             person_name
         );
@@ -216,7 +220,8 @@ impl TemplateEngine {
         // Create README
         self.create_readme(&person_dir, person_name).await?;
 
-        info!(
+        app_log!(
+            info,
             "Successfully created person with typst content: {}",
             person_name
         );
@@ -243,7 +248,10 @@ impl TemplateEngine {
             let processed_content = Self::process_variables(&template_content, &vars);
             FsOps::write_file_safe(&person_dir.join("cv_params.toml"), &processed_content).await?;
         } else {
-            warn!("Person template not found, creating basic cv_params.toml");
+            app_log!(
+                warn,
+                "Person template not found, creating basic cv_params.toml"
+            );
             let basic_config = format!(
                 "[personal]\n\
 name = \"{}\"\n\
@@ -449,4 +457,3 @@ cargo run -- generate {} fr\n\
         self.discover_templates()
     }
 }
-

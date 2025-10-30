@@ -2,7 +2,7 @@
 use anyhow::Result;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::error;
+use crate::app_log;
 
 #[derive(Debug, Clone)]
 pub struct ImageValidationError {
@@ -174,15 +174,15 @@ impl ImageValidator {
         match Self::validate_profile_image(source_path).await {
             Ok(_) => {
                 if source_path.exists() {
-                    tracing::info!("Profile image validation passed: {}", source_path.display());
+                    app_log!(info, "Profile image validation passed: {}", source_path.display());
                     Ok(true)
                 } else {
-                    tracing::info!("No profile image found - will generate CV without photo");
+                    app_log!(info, "No profile image found - will generate CV without photo");
                     Ok(false)
                 }
             }
             Err(validation_error) => {
-                error!("Image validation failed: {}", validation_error.message);
+                app_log!(error, "Image validation failed: {}", validation_error.message);
                 Err(validation_error)
             }
         }

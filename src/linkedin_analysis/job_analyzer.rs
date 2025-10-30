@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use std::path::PathBuf;
 use tokio::fs;
-use tracing::{error, info, warn};
+use crate::app_log;
 
 pub struct JobAnalyzer {
     client: Client,
@@ -47,7 +47,7 @@ impl JobAnalyzer {
                 error: None,
             },
             Err(e) => {
-                error!("Job analysis failed: {}", e);
+                app_log!(error, "Job analysis failed: {}", e);
                 JobAnalysisResponse {
                     success: false,
                     job_content: None,
@@ -65,7 +65,7 @@ impl JobAnalyzer {
         request: &JobAnalysisRequest,
         tenant_data_dir: &PathBuf,
     ) -> Result<(String, String, JobContent)> {
-        info!("Starting job analysis for person: {}", request.person_name);
+        app_log!(info, "Starting job analysis for person: {}", request.person_name);
 
         // Load person's experiences text (for the response)
         let person_experiences = self
@@ -93,7 +93,7 @@ impl JobAnalyzer {
             description: format!("Job posting from: {}", request.job_url),
         };
 
-        info!(
+        app_log!(info, 
             "Job analysis completed successfully for {}",
             request.person_name
         );
@@ -125,12 +125,12 @@ impl JobAnalyzer {
                 match fs::read_to_string(&exp_path).await {
                     Ok(content) => {
                         if !content.trim().is_empty() {
-                            info!("Loaded experiences from: {}", file_name);
+                            app_log!(info, "Loaded experiences from: {}", file_name);
                             return Ok(content);
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to read {}: {}", file_name, e);
+                        app_log!(warn, "Failed to read {}: {}", file_name, e);
                     }
                 }
             }
@@ -158,12 +158,12 @@ impl JobAnalyzer {
                 Ok(content) => match toml::from_str::<toml::Value>(&content) {
                     Ok(value) => Some(value),
                     Err(e) => {
-                        warn!("Failed to parse cv_params.toml: {}", e);
+                        app_log!(warn, "Failed to parse cv_params.toml: {}", e);
                         None
                     }
                 },
                 Err(e) => {
-                    warn!("Failed to read cv_params.toml: {}", e);
+                    app_log!(warn, "Failed to read cv_params.toml: {}", e);
                     None
                 }
             }
@@ -186,7 +186,7 @@ impl JobAnalyzer {
                         }
                     }
                     Err(e) => {
-                        warn!("Failed to read {}: {}", file_name, e);
+                        app_log!(warn, "Failed to read {}: {}", file_name, e);
                     }
                 }
             }
@@ -284,7 +284,7 @@ impl JobAnalyzer {
             job_url: job_url.to_string(),
         };
 
-        info!("Calling job matching API: {}", api_url);
+        app_log!(info, "Calling job matching API: {}", api_url);
 
         let response = self
             .client
@@ -305,12 +305,12 @@ impl JobAnalyzer {
             // Try to parse as success response
             match serde_json::from_str::<JobMatchApiResponse>(&response_text) {
                 Ok(api_response) => {
-                    info!("Successfully received analysis from job matching API");
+                    app_log!(info, "Successfully received analysis from job matching API");
                     Ok(api_response.analysis)
                 }
                 Err(_) => {
                     // If JSON parsing fails, try to extract analysis from raw response
-                    warn!("Failed to parse API response as JSON, using raw response");
+                    app_log!(warn, "Failed to parse API response as JSON, using raw response");
                     Ok(response_text)
                 }
             }
@@ -321,7 +321,7 @@ impl JobAnalyzer {
                 Err(_) => format!("API returned error {}: {}", status, response_text),
             };
 
-            error!("Job matching API error: {}", error_message);
+            app_log!(error, "Job matching API error: {}", error_message);
             anyhow::bail!("Job matching API error: {}", error_message);
         }
     }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use tracing::{info, warn};
+use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateManifest {
@@ -102,10 +102,10 @@ impl TemplateManager {
     }
 
     fn discover_templates(&mut self) -> Result<()> {
-        info!("Discovering templates in: {}", self.templates_dir.display());
+        app_log!(info, "Discovering templates in: {}", self.templates_dir.display());
 
         if !self.templates_dir.exists() {
-            warn!(
+            app_log!(warn, 
                 "Templates directory does not exist: {}",
                 self.templates_dir.display()
             );
@@ -123,11 +123,11 @@ impl TemplateManager {
             if path.is_dir() {
                 match Template::load_from_dir(&path) {
                     Ok(template) => {
-                        info!("Discovered template: {} at {}", template.id, path.display());
+                        app_log!(info, "Discovered template: {} at {}", template.id, path.display());
                         self.templates.insert(template.id.clone(), template);
                     }
                     Err(e) => {
-                        warn!("Failed to load template from {}: {}", path.display(), e);
+                        app_log!(warn, "Failed to load template from {}: {}", path.display(), e);
                     }
                 }
             }
@@ -138,7 +138,7 @@ impl TemplateManager {
             self.create_default_template()?;
         }
 
-        info!("Loaded {} templates", self.templates.len());
+        app_log!(info, "Loaded {} templates", self.templates.len());
         Ok(())
     }
 
@@ -153,7 +153,7 @@ impl TemplateManager {
                 path: self.templates_dir.clone(),
             };
             self.templates.insert("default".to_string(), template);
-            info!("Created virtual default template from legacy cv.typ");
+            app_log!(info, "Created virtual default template from legacy cv.typ");
         } else {
             // Create minimal default template in memory
             let template = Template {
@@ -162,7 +162,7 @@ impl TemplateManager {
                 path: self.templates_dir.clone(),
             };
             self.templates.insert("default".to_string(), template);
-            info!("Created fallback default template");
+            app_log!(info, "Created fallback default template");
         }
 
         Ok(())
@@ -189,27 +189,27 @@ impl TemplateManager {
             .get_template(template_id)
             .ok_or_else(|| anyhow::anyhow!("Template not found: {}", template_id))?;
 
-        info!("Preparing template workspace for: {}", template_id);
-        info!("Template path: {}", template.path.display());
-        info!("Workspace dir: {}", workspace_dir.display());
+        app_log!(info, "Preparing template workspace for: {}", template_id);
+        app_log!(info, "Template path: {}", template.path.display());
+        app_log!(info, "Workspace dir: {}", workspace_dir.display());
 
         // Adjust paths to account for being in tmp_workspace directory
         let main_template = PathBuf::from("..").join(&template.main_template_file());
         let main_dest = workspace_dir.join("main.typ");
 
-        info!("Looking for main template at: {}", main_template.display());
+        app_log!(info, "Looking for main template at: {}", main_template.display());
 
         let font_config_source = self.templates_dir.join("font_config.typ");
         if font_config_source.exists() {
             let font_config_dest = workspace_dir.join("font_config.typ");
             fs::copy(&font_config_source, &font_config_dest)
                 .context("Failed to copy font_config.typ")?;
-            info!("Copied font configuration file");
+            app_log!(info, "Copied font configuration file");
         }
 
         if main_template.exists() {
             fs::copy(&main_template, &main_dest).context("Failed to copy main template file")?;
-            info!(
+            app_log!(info, 
                 "Copied main template: {} -> {}",
                 main_template.display(),
                 main_dest.display()
@@ -225,19 +225,19 @@ impl TemplateManager {
                 .join(dep_relative_path);
             let dep_dest = workspace_dir.join(dep_relative_path);
 
-            info!("Looking for dependency: {}", dep_source.display());
+            app_log!(info, "Looking for dependency: {}", dep_source.display());
 
             if dep_source.exists() {
                 fs::copy(&dep_source, &dep_dest).with_context(|| {
                     format!("Failed to copy dependency: {}", dep_source.display())
                 })?;
-                info!(
+                app_log!(info, 
                     "Copied dependency: {} -> {}",
                     dep_source.display(),
                     dep_dest.display()
                 );
             } else {
-                warn!("Dependency not found: {}", dep_source.display());
+                app_log!(warn, "Dependency not found: {}", dep_source.display());
             }
         }
 

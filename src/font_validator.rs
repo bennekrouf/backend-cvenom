@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
-use tracing::{error, info, warn};
+use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FontRequirement {
@@ -88,7 +88,7 @@ impl FontValidator {
 
     async fn load_config(path: &PathBuf) -> Result<FontValidationConfig> {
         if !path.exists() {
-            info!(
+            app_log!(info, 
                 "Font validation config not found at {}, using defaults",
                 path.display()
             );
@@ -102,12 +102,12 @@ impl FontValidator {
         let config: FontValidationConfig =
             serde_yaml::from_str(&content).context("Failed to parse font validation config")?;
 
-        info!("Loaded font validation config from {}", path.display());
+        app_log!(info, "Loaded font validation config from {}", path.display());
         Ok(config)
     }
 
     async fn get_system_fonts() -> Result<Vec<String>> {
-        info!("Detecting system fonts...");
+        app_log!(info, "Detecting system fonts...");
 
         // Try different methods based on OS
         if cfg!(target_os = "macos") {
@@ -117,7 +117,7 @@ impl FontValidator {
         } else if cfg!(target_os = "windows") {
             Self::get_windows_fonts().await
         } else {
-            warn!("Unsupported OS for font detection");
+            app_log!(warn, "Unsupported OS for font detection");
             Ok(vec![])
         }
     }
@@ -141,10 +141,10 @@ impl FontValidator {
                 .filter(|line| !line.is_empty())
                 .collect();
 
-            info!("Detected {} system fonts", fonts.len());
+            app_log!(info, "Detected {} system fonts", fonts.len());
             Ok(fonts)
         } else {
-            warn!("Failed to detect fonts via command line tools");
+            app_log!(warn, "Failed to detect fonts via command line tools");
             Ok(vec![])
         }
     }
@@ -162,10 +162,10 @@ impl FontValidator {
                 .filter(|line| !line.is_empty())
                 .collect();
 
-            info!("Detected {} system fonts", fonts.len());
+            app_log!(info, "Detected {} system fonts", fonts.len());
             Ok(fonts)
         } else {
-            warn!("Failed to run fc-list for font detection");
+            app_log!(warn, "Failed to run fc-list for font detection");
             Ok(vec![])
         }
     }
@@ -187,17 +187,17 @@ impl FontValidator {
                 .filter(|line| !line.is_empty())
                 .collect();
 
-            info!("Detected {} system fonts", fonts.len());
+            app_log!(info, "Detected {} system fonts", fonts.len());
             Ok(fonts)
         } else {
-            warn!("Failed to detect Windows fonts");
+            app_log!(warn, "Failed to detect Windows fonts");
             Ok(vec![])
         }
     }
 
     pub async fn validate(&self) -> Result<FontValidationResult> {
         if !self.config.validation_enabled {
-            info!("Font validation disabled");
+            app_log!(info, "Font validation disabled");
             return Ok(FontValidationResult {
                 valid: true,
                 missing_fonts: vec![],
@@ -207,7 +207,7 @@ impl FontValidator {
             });
         }
 
-        info!("Validating font requirements...");
+        app_log!(info, "Validating font requirements...");
 
         let mut result = FontValidationResult {
             valid: true,
@@ -265,7 +265,7 @@ impl FontValidator {
                     }
                 }
             } else {
-                info!("✓ Font available: {}", font_req.display_name);
+                app_log!(info, "✓ Font available: {}", font_req.display_name);
             }
         }
 
@@ -280,40 +280,40 @@ impl FontValidator {
     }
 
     pub fn print_validation_report(&self, result: &FontValidationResult) {
-        println!("=== Font Validation Report ===");
+        app_log!(info, "=== Font Validation Report ===");
 
         if result.valid {
-            println!("✅ Font validation passed");
+            app_log!(info, "✅ Font validation passed");
         } else {
-            println!("❌ Font validation failed");
+            app_log!(info, "❌ Font validation failed");
         }
 
         if !result.warnings.is_empty() {
-            println!("\n⚠️  Warnings:");
+            app_log!(info, "\n⚠️  Warnings:");
             for warning in &result.warnings {
-                println!("  • {}", warning);
+                app_log!(info, "  • {}", warning);
             }
         }
 
         if !result.errors.is_empty() {
-            println!("\n❌ Errors:");
+            app_log!(info, "\n❌ Errors:");
             for error in &result.errors {
-                println!("  • {}", error);
+                app_log!(info, "  • {}", error);
             }
         }
 
         if !result.available_alternatives.is_empty() {
-            println!("\n💡 Available alternatives:");
+            app_log!(info, "\n💡 Available alternatives:");
             for (missing, alternatives) in &result.available_alternatives {
-                println!("  • {} → {}", missing, alternatives.join(", "));
+                app_log!(info, "  • {} → {}", missing, alternatives.join(", "));
             }
         }
 
-        println!("\n📝 Font installation help:");
-        println!("  macOS: ./install_font_mac.sh");
-        println!("  Ubuntu: ./install_font_ubuntu.sh");
-        println!("  Or disable font validation in config.yaml");
-        println!();
+        app_log!(info, "\n📝 Font installation help:");
+        app_log!(info, "  macOS: ./install_font_mac.sh");
+        app_log!(info, "  Ubuntu: ./install_font_ubuntu.sh");
+        app_log!(info, "  Or disable font validation in config.yaml");
+        app_log!(info, );
     }
 }
 
@@ -329,14 +329,14 @@ pub async fn validate_fonts_or_exit(config_path: Option<PathBuf>) -> Result<()> 
     validator.print_validation_report(&result);
 
     if !result.valid {
-        error!("Font validation failed - server cannot start");
+        app_log!(error, "Font validation failed - server cannot start");
         std::process::exit(1);
     }
 
     if !result.warnings.is_empty() {
-        warn!("Font validation completed with warnings - server will continue");
+        app_log!(warn, "Font validation completed with warnings - server will continue");
     } else {
-        info!("All font requirements satisfied");
+        app_log!(info, "All font requirements satisfied");
     }
 
     Ok(())

@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use rocket::serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use tracing::{info, warn};
+use crate::app_log;
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
@@ -70,7 +70,7 @@ impl CvConversionService {
             .build()
             .context("Failed to create HTTP client")?;
 
-        info!("Calling CV conversion service: {}", self.service_url);
+        app_log!(info, "Calling CV conversion service: {}", self.service_url);
 
         let response = client
             .post(&self.service_url)
@@ -80,14 +80,14 @@ impl CvConversionService {
             .context("HTTP request failed")?;
 
         let status = response.status();
-        info!("Response status: {}", status);
+        app_log!(info, "Response status: {}", status);
 
         let response_text = response
             .text()
             .await
             .context("Failed to read response text")?;
 
-        info!("Response body: {}", response_text);
+        app_log!(info, "Response body: {}", response_text);
 
         if status.is_success() {
             let response_body: CvServiceResponse = serde_json::from_str(&response_text)
@@ -139,7 +139,7 @@ impl CvConversionService {
         // Create README
         self.create_readme(&person_dir, person_name).await?;
 
-        info!("Successfully created person: {}", person_name);
+        app_log!(info, "Successfully created person: {}", person_name);
         Ok(())
     }
 
@@ -157,7 +157,7 @@ impl CvConversionService {
             let processed_content = TemplateProcessor::process_variables(&template_content, &vars);
             utils::write_file_safe(&person_dir.join("cv_params.toml"), &processed_content).await?;
         } else {
-            warn!("Person template not found, creating basic cv_params.toml");
+            app_log!(warn, "Person template not found, creating basic cv_params.toml");
             let basic_config = format!(
                 r#"[personal]
 name = "{}"
@@ -186,7 +186,7 @@ github = ""
             utils::write_file_safe(&person_dir.join("experiences_fr.typ"), &template_content)
                 .await?;
         } else {
-            warn!("Experiences template not found, creating basic experiences_fr.typ");
+            app_log!(warn, "Experiences template not found, creating basic experiences_fr.typ");
             let basic_experiences = r#"// French experiences
 #import "/template.typ": *
 

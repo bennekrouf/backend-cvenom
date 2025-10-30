@@ -3,7 +3,7 @@ use crate::database::{DatabaseConfig, TenantRepository, TenantService};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use tracing::error;
+use crate::app_log;
 
 #[derive(Parser)]
 #[command(name = "tenant-manager")]
@@ -50,17 +50,17 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
         TenantCommand::Add { email, tenant_name } => {
             match tenant_repo.create_email_tenant(&email, &tenant_name).await {
                 Ok(tenant) => {
-                    println!("✅ Email tenant created successfully:");
-                    println!("   Email: {}", email);
-                    println!("   Tenant: {}", tenant.tenant_name);
-                    println!("   ID: {}", tenant.id);
+                    app_log!(info, "✅ Email tenant created successfully:");
+                    app_log!(info, "   Email: {}", email);
+                    app_log!(info, "   Tenant: {}", tenant.tenant_name);
+                    app_log!(info, "   ID: {}", tenant.id);
                 }
                 Err(e) => {
-                    error!("Failed to create tenant: {}", e);
+                    app_log!(error, "Failed to create tenant: {}", e);
                     if e.to_string().contains("UNIQUE constraint failed") {
-                        println!("❌ Error: Email '{}' already exists", email);
+                        app_log!(info, "❌ Error: Email '{}' already exists", email);
                     } else {
-                        println!("❌ Error: {}", e);
+                        app_log!(info, "❌ Error: {}", e);
                     }
                 }
             }
@@ -75,46 +75,46 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
                 .await
             {
                 Ok(tenant) => {
-                    println!("✅ Domain tenant created successfully:");
-                    println!("   Domain: @{}", domain);
-                    println!("   Tenant: {}", tenant.tenant_name);
-                    println!("   ID: {}", tenant.id);
-                    println!(
+                    app_log!(info, "✅ Domain tenant created successfully:");
+                    app_log!(info, "   Domain: @{}", domain);
+                    app_log!(info, "   Tenant: {}", tenant.tenant_name);
+                    app_log!(info, "   ID: {}", tenant.id);
+                    app_log!(info, 
                         "   All emails with @{} can now access tenant '{}'",
                         domain, tenant_name
                     );
                 }
                 Err(e) => {
-                    error!("Failed to create domain tenant: {}", e);
-                    println!("❌ Error: {}", e);
+                    app_log!(error, "Failed to create domain tenant: {}", e);
+                    app_log!(info, "❌ Error: {}", e);
                 }
             }
         }
 
         TenantCommand::Remove { email } => match tenant_repo.deactivate_by_email(&email).await {
             Ok(true) => {
-                println!("✅ Tenant deactivated for email: {}", email);
+                app_log!(info, "✅ Tenant deactivated for email: {}", email);
             }
             Ok(false) => {
-                println!("❌ No active tenant found for email: {}", email);
+                app_log!(info, "❌ No active tenant found for email: {}", email);
             }
             Err(e) => {
-                error!("Failed to deactivate tenant: {}", e);
-                println!("❌ Error: {}", e);
+                app_log!(error, "Failed to deactivate tenant: {}", e);
+                app_log!(info, "❌ Error: {}", e);
             }
         },
 
         TenantCommand::RemoveDomain { domain } => {
             match tenant_repo.deactivate_by_domain(&domain).await {
                 Ok(true) => {
-                    println!("✅ Tenant deactivated for domain: @{}", domain);
+                    app_log!(info, "✅ Tenant deactivated for domain: @{}", domain);
                 }
                 Ok(false) => {
-                    println!("❌ No active tenant found for domain: @{}", domain);
+                    app_log!(info, "❌ No active tenant found for domain: @{}", domain);
                 }
                 Err(e) => {
-                    error!("Failed to deactivate domain tenant: {}", e);
-                    println!("❌ Error: {}", e);
+                    app_log!(error, "Failed to deactivate domain tenant: {}", e);
+                    app_log!(info, "❌ Error: {}", e);
                 }
             }
         }
@@ -122,14 +122,14 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
         TenantCommand::List => match tenant_repo.list_active().await {
             Ok(tenants) => {
                 if tenants.is_empty() {
-                    println!("No active tenants found.");
+                    app_log!(info, "No active tenants found.");
                 } else {
-                    println!("Active tenants:");
-                    println!(
+                    app_log!(info, "Active tenants:");
+                    app_log!(info, 
                         "{:<5} {:<25} {:<15} {:<20} {:<20}",
                         "ID", "Email/Domain", "Type", "Tenant", "Created"
                     );
-                    println!("{}", "-".repeat(85));
+                    app_log!(info, "{}", "-".repeat(85));
 
                     for tenant in tenants {
                         let auth_info = if let Some(email) = &tenant.email {
@@ -140,7 +140,7 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
                             ("Invalid".to_string(), "Error".to_string())
                         };
 
-                        println!(
+                        app_log!(info, 
                             "{:<5} {:<25} {:<15} {:<20} {:<20}",
                             tenant.id,
                             auth_info.0,
@@ -152,8 +152,8 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
                 }
             }
             Err(e) => {
-                error!("Failed to list tenants: {}", e);
-                println!("❌ Error: {}", e);
+                app_log!(error, "Failed to list tenants: {}", e);
+                app_log!(info, "❌ Error: {}", e);
             }
         },
 
@@ -164,31 +164,31 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
                 } else {
                     "domain"
                 };
-                println!(
+                app_log!(info, 
                     "✅ Email '{}' is authorized for tenant: {} (via {})",
                     email, tenant.tenant_name, auth_type
                 );
-                println!("   Tenant ID: {}", tenant.id);
-                println!(
+                app_log!(info, "   Tenant ID: {}", tenant.id);
+                app_log!(info, 
                     "   Created: {}",
                     tenant.created_at.format("%Y-%m-%d %H:%M:%S UTC")
                 );
             }
             Ok(None) => {
-                println!(
+                app_log!(info, 
                     "❌ Email '{}' is not authorized (no matching email or domain)",
                     email
                 );
             }
             Err(e) => {
-                error!("Failed to check email: {}", e);
-                println!("❌ Error: {}", e);
+                app_log!(error, "Failed to check email: {}", e);
+                app_log!(info, "❌ Error: {}", e);
             }
         },
 
         TenantCommand::Import { csv_file } => {
             if !csv_file.exists() {
-                println!("❌ CSV file not found: {}", csv_file.display());
+                app_log!(info, "❌ CSV file not found: {}", csv_file.display());
                 return Ok(());
             }
 
@@ -207,53 +207,53 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
 
                             if email.is_empty() || tenant_name.is_empty() {
                                 error_count += 1;
-                                println!("⚠️  Skipping empty email or tenant name");
+                                app_log!(info, "⚠️  Skipping empty email or tenant name");
                                 continue;
                             }
 
                             match tenant_repo.create_email_tenant(email, tenant_name).await {
                                 Ok(_) => {
                                     success_count += 1;
-                                    println!("✅ Added: {} -> {}", email, tenant_name);
+                                    app_log!(info, "✅ Added: {} -> {}", email, tenant_name);
                                 }
                                 Err(e) => {
                                     error_count += 1;
                                     if e.to_string().contains("UNIQUE constraint failed") {
-                                        println!("⚠️  Skipped (already exists): {}", email);
+                                        app_log!(info, "⚠️  Skipped (already exists): {}", email);
                                     } else {
-                                        println!("❌ Failed to add {}: {}", email, e);
+                                        app_log!(info, "❌ Failed to add {}: {}", email, e);
                                     }
                                 }
                             }
                         } else {
                             error_count += 1;
-                            println!("⚠️  Skipping invalid record (need email,tenant_name)");
+                            app_log!(info, "⚠️  Skipping invalid record (need email,tenant_name)");
                         }
                     }
                     Err(e) => {
                         error_count += 1;
-                        println!("❌ CSV parsing error: {}", e);
+                        app_log!(info, "❌ CSV parsing error: {}", e);
                     }
                 }
             }
 
-            println!("\nImport completed:");
-            println!("  ✅ Success: {}", success_count);
-            println!("  ❌ Errors:  {}", error_count);
+            app_log!(info, "\nImport completed:");
+            app_log!(info, "  ✅ Success: {}", success_count);
+            app_log!(info, "  ❌ Errors:  {}", error_count);
         }
 
         TenantCommand::Init => {
-            println!(
+            app_log!(info, 
                 "✅ Database initialized at: {}",
                 cli.database_path.display()
             );
-            println!("   Tables created: tenants (with email and domain support)");
-            println!("   Ready to accept tenant registrations");
-            println!("");
-            println!("Usage:");
-            println!("  cargo run -- tenant add <email> <tenant-name>           # Add email-specific tenant");
-            println!("  cargo run -- tenant add-domain <domain> <tenant-name>   # Add domain tenant (e.g., keyteo.ch)");
-            println!(
+            app_log!(info, "   Tables created: tenants (with email and domain support)");
+            app_log!(info, "   Ready to accept tenant registrations");
+            app_log!(info, "");
+            app_log!(info, "Usage:");
+            app_log!(info, "  cargo run -- tenant add <email> <tenant-name>           # Add email-specific tenant");
+            app_log!(info, "  cargo run -- tenant add-domain <domain> <tenant-name>   # Add domain tenant (e.g., keyteo.ch)");
+            app_log!(info, 
                 "  cargo run -- tenant check <email>                       # Check authorization"
             );
         }

@@ -1,4 +1,5 @@
 // src/workspace.rs
+use crate::app_log;
 use crate::config::CvConfig;
 use crate::template_system::TemplateManager;
 
@@ -20,7 +21,7 @@ impl<'a> WorkspaceManager<'a> {
     }
 
     pub fn prepare_workspace(&self) -> Result<()> {
-        println!("Preparing workspace in tmp_workspace/...");
+        app_log!(info, "Preparing workspace in tmp_workspace/...");
 
         let original_dir = std::env::current_dir().context("Failed to get current directory")?;
 
@@ -45,11 +46,11 @@ impl<'a> WorkspaceManager<'a> {
 
         match workspace_result() {
             Ok(_) => {
-                println!("Workspace preparation completed successfully");
+                app_log!(info, "Workspace preparation completed successfully");
                 Ok(())
             }
             Err(e) => {
-                eprintln!("Workspace preparation failed: {}", e);
+                app_log!(warn, "Workspace preparation failed: {}", e);
                 self.restore_directory_and_cleanup(&original_dir)?;
                 Err(e)
             }
@@ -101,8 +102,12 @@ impl<'a> WorkspaceManager<'a> {
         let config_source = self.config.person_config_path();
         let config_dest = PathBuf::from("cv_params.toml");
 
-        println!("DEBUG: config_source = {}", config_source.display());
-        println!("DEBUG: config_source exists = {}", config_source.exists());
+        app_log!(info, "DEBUG: config_source = {}", config_source.display());
+        app_log!(
+            info,
+            "DEBUG: config_source exists = {}",
+            config_source.exists()
+        );
 
         fs::copy(&config_source, &config_dest).context("Failed to copy person config")?;
 
@@ -114,11 +119,12 @@ impl<'a> WorkspaceManager<'a> {
         // Copy profile image with validation
         let person_image_png = self.config.person_image_path();
 
-        println!(
+        app_log!(
+            info,
             "DEBUG: Looking for image at: {}",
             person_image_png.display()
         );
-        println!("DEBUG: Image exists: {}", person_image_png.exists());
+        app_log!(info, "DEBUG: Image exists: {}", person_image_png.exists());
 
         if person_image_png.exists() {
             // Validate the image before copying
@@ -126,15 +132,18 @@ impl<'a> WorkspaceManager<'a> {
                 Ok(_) => {
                     let profile_dest = PathBuf::from("profile.png");
                     fs::copy(&person_image_png, &profile_dest)?;
-                    println!("✅ Copied valid profile image");
+                    app_log!(info, "✅ Copied valid profile image");
                 }
                 Err(error_msg) => {
-                    println!("❌ Skipping corrupted image: {}", error_msg);
+                    app_log!(info, "❌ Skipping corrupted image: {}", error_msg);
                     // Don't copy the corrupted file - let CV generate without photo
                 }
             }
         } else {
-            println!("No profile image found - CV will generate without photo");
+            app_log!(
+                info,
+                "No profile image found - CV will generate without photo"
+            );
         }
 
         Ok(())
@@ -147,10 +156,10 @@ impl<'a> WorkspaceManager<'a> {
 
         if person_logo_source.exists() {
             fs::copy(&person_logo_source, &logo_dest)?;
-            println!("Person logo copied successfully");
+            app_log!(info, "Person logo copied successfully");
         } else if tenant_logo_source.exists() {
             fs::copy(&tenant_logo_source, &logo_dest)?;
-            println!("Tenant logo copied successfully");
+            app_log!(info, "Tenant logo copied successfully");
         }
 
         Ok(())
@@ -161,13 +170,18 @@ impl<'a> WorkspaceManager<'a> {
             .prepare_template_workspace(&self.config.template, &PathBuf::from("."))
             .context("Failed to prepare template workspace")?;
 
-        println!("Workspace prepared with template: {}", self.config.template);
+        app_log!(
+            info,
+            "Workspace prepared with template: {}",
+            self.config.template
+        );
         Ok(())
     }
 
     fn restore_directory_and_cleanup(&self, original_dir: &PathBuf) -> Result<()> {
         if let Err(restore_err) = std::env::set_current_dir(original_dir) {
-            eprintln!(
+            app_log!(
+                warn,
                 "Critical: Failed to restore directory after error: {}",
                 restore_err
             );
@@ -175,7 +189,11 @@ impl<'a> WorkspaceManager<'a> {
 
         if PathBuf::from("tmp_workspace").exists() {
             if let Err(cleanup_err) = fs::remove_dir_all("tmp_workspace") {
-                eprintln!("Warning: Failed to clean up workspace: {}", cleanup_err);
+                app_log!(
+                    warn,
+                    "Warning: Failed to clean up workspace: {}",
+                    cleanup_err
+                );
             }
         }
 
@@ -184,12 +202,16 @@ impl<'a> WorkspaceManager<'a> {
 
     pub fn cleanup_workspace(&self) -> Result<()> {
         if let Err(e) = std::env::set_current_dir("..") {
-            eprintln!("Warning: Failed to change back to root directory: {}", e);
+            app_log!(
+                warn,
+                "Warning: Failed to change back to root directory: {}",
+                e
+            );
         }
 
         if PathBuf::from("tmp_workspace").exists() {
             if let Err(e) = fs::remove_dir_all("tmp_workspace") {
-                eprintln!("Warning: Failed to remove workspace: {}", e);
+                app_log!(warn, "Warning: Failed to remove workspace: {}", e);
             }
         }
 
@@ -216,7 +238,10 @@ impl<'a> WorkspaceManager<'a> {
 
         // ONLY add picture input if file exists AND is valid
         if PathBuf::from("profile.png").exists() {
-            println!("DEBUG: profile.png exists in workspace, checking validity...");
+            app_log!(
+                info,
+                "DEBUG: profile.png exists in workspace, checking validity..."
+            );
             if let Ok(header) = fs::read("profile.png") {
                 let is_valid = if header.len() >= 8 {
                     header.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) || // PNG
@@ -227,13 +252,16 @@ impl<'a> WorkspaceManager<'a> {
 
                 if is_valid {
                     cmd.arg("--input").arg("picture=profile.png");
-                    println!("✅ Added valid picture input to Typst command");
+                    app_log!(info, "✅ Added valid picture input to Typst command");
                 } else {
-                    println!("❌ Skipping invalid picture file");
+                    app_log!(info, "❌ Skipping invalid picture file");
                 }
             }
         } else {
-            println!("ℹ️  No profile.png in workspace - generating without photo");
+            app_log!(
+                info,
+                "ℹ️  No profile.png in workspace - generating without photo"
+            );
         }
 
         let output = cmd.output().context("Failed to execute typst command")?;

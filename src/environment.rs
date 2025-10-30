@@ -1,7 +1,7 @@
 // src/environment.rs
 use anyhow::{Context, Result};
 use std::path::PathBuf;
-use tracing::info;
+use crate::app_log;
 
 #[derive(Clone)]
 pub struct EnvironmentConfig {
@@ -41,14 +41,14 @@ impl EnvironmentConfig {
     pub fn load() -> Result<Self> {
         let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string());
 
-        info!("Loading environment configuration for: {}", environment);
+        app_log!(info, "Loading environment configuration for: {}", environment);
 
         let config = match environment.as_str() {
             "production" => Self::production_config()?,
             _ => Self::local_config()?,
         };
 
-        info!("Configuration loaded successfully");
+        app_log!(info, "Configuration loaded successfully");
         Ok(config)
     }
 
@@ -103,7 +103,7 @@ impl EnvironmentConfig {
             tokio::fs::create_dir_all(path)
                 .await
                 .with_context(|| format!("Failed to create directory: {}", path.display()))?;
-            info!("Created directory: {}", path.display());
+            app_log!(info, "Created directory: {}", path.display());
         }
         Ok(())
     }

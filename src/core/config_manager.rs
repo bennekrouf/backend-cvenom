@@ -1,10 +1,10 @@
 // src/core/config_manager.rs
 //! Unified configuration management - eliminates duplicate config loading
 
+use crate::app_log;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;
-use tracing::info;
 
 #[derive(Debug, Clone)]
 pub struct ConfigManager {
@@ -53,7 +53,7 @@ impl ConfigManager {
     /// Load environment configuration
     fn load_environment() -> Result<EnvironmentConfig> {
         let env = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string());
-        info!("Loading environment configuration for: {}", env);
+        app_log!(info, "Loading environment configuration for: {}", env);
 
         let base_dir = if env == "production" {
             PathBuf::from("/app")

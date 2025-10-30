@@ -8,7 +8,7 @@ use crate::web::{DatabaseConfig, ServerConfig};
 use anyhow::Result;
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use tracing::{error, info};
+use crate::app_log;
 
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit_handler(
@@ -21,7 +21,7 @@ pub async fn analyze_job_fit_handler(
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
-    info!(
+    app_log!(info, 
         "User {} (tenant: {}) requesting job fit analysis for {}",
         user.email, tenant.tenant_name, request.data.person_name
     );
@@ -30,7 +30,7 @@ pub async fn analyze_job_fit_handler(
     let pool = match db_config.pool() {
         Ok(pool) => pool,
         Err(e) => {
-            error!("Database connection failed: {}", e);
+            app_log!(error, "Database connection failed: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Database connection failed".to_string(),
                 "DATABASE_ERROR".to_string(),
@@ -47,7 +47,7 @@ pub async fn analyze_job_fit_handler(
     {
         Ok(dir) => dir,
         Err(e) => {
-            error!("Failed to ensure tenant data directory: {}", e);
+            app_log!(error, "Failed to ensure tenant data directory: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Failed to access tenant data directory".to_string(),
                 "TENANT_DIR_ERROR".to_string(),
@@ -61,7 +61,7 @@ pub async fn analyze_job_fit_handler(
     let analyzer = match JobAnalyzer::new() {
         Ok(analyzer) => analyzer,
         Err(e) => {
-            error!("Failed to initialize job analyzer: {}", e);
+            app_log!(error, "Failed to initialize job analyzer: {}", e);
             return Err(Json(StandardErrorResponse::new(
                 "Service configuration error".to_string(),
                 "SERVICE_CONFIG_ERROR".to_string(),
@@ -80,7 +80,7 @@ pub async fn analyze_job_fit_handler(
         .await;
 
     if analysis_response.success {
-        info!(
+        app_log!(info, 
             "Successfully analyzed job fit for {} by {} (tenant: {})",
             request.data.person_name, user.email, tenant.tenant_name
         );
@@ -96,7 +96,7 @@ pub async fn analyze_job_fit_handler(
             .error
             .unwrap_or_else(|| "Unknown analysis error".to_string());
 
-        error!(
+        app_log!(error, 
             "Job analysis failed for {} by {} (tenant: {}): {}",
             request.data.person_name, user.email, tenant.tenant_name, error_msg
         );
