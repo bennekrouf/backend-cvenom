@@ -1,10 +1,10 @@
 // src/template_system.rs
+use crate::app_log;
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
-use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateManifest {
@@ -102,10 +102,15 @@ impl TemplateManager {
     }
 
     fn discover_templates(&mut self) -> Result<()> {
-        app_log!(info, "Discovering templates in: {}", self.templates_dir.display());
+        app_log!(
+            info,
+            "Discovering templates in: {}",
+            self.templates_dir.display()
+        );
 
         if !self.templates_dir.exists() {
-            app_log!(warn, 
+            app_log!(
+                warn,
                 "Templates directory does not exist: {}",
                 self.templates_dir.display()
             );
@@ -123,11 +128,21 @@ impl TemplateManager {
             if path.is_dir() {
                 match Template::load_from_dir(&path) {
                     Ok(template) => {
-                        app_log!(info, "Discovered template: {} at {}", template.id, path.display());
+                        app_log!(
+                            info,
+                            "Discovered template: {} at {}",
+                            template.id,
+                            path.display()
+                        );
                         self.templates.insert(template.id.clone(), template);
                     }
                     Err(e) => {
-                        app_log!(warn, "Failed to load template from {}: {}", path.display(), e);
+                        app_log!(
+                            warn,
+                            "Failed to load template from {}: {}",
+                            path.display(),
+                            e
+                        );
                     }
                 }
             }
@@ -193,11 +208,15 @@ impl TemplateManager {
         app_log!(info, "Template path: {}", template.path.display());
         app_log!(info, "Workspace dir: {}", workspace_dir.display());
 
-        // Adjust paths to account for being in tmp_workspace directory
-        let main_template = PathBuf::from("..").join(&template.main_template_file());
+        // Use absolute template path instead of relative
+        let main_template = template.main_template_file();
         let main_dest = workspace_dir.join("main.typ");
 
-        app_log!(info, "Looking for main template at: {}", main_template.display());
+        app_log!(
+            info,
+            "Looking for main template at: {}",
+            main_template.display()
+        );
 
         let font_config_source = self.templates_dir.join("font_config.typ");
         if font_config_source.exists() {
@@ -209,7 +228,8 @@ impl TemplateManager {
 
         if main_template.exists() {
             fs::copy(&main_template, &main_dest).context("Failed to copy main template file")?;
-            app_log!(info, 
+            app_log!(
+                info,
                 "Copied main template: {} -> {}",
                 main_template.display(),
                 main_dest.display()
@@ -218,11 +238,9 @@ impl TemplateManager {
             anyhow::bail!("Template main file not found: {}", main_template.display());
         }
 
-        // Copy dependencies with correct path resolution
+        // Copy dependencies with absolute paths
         for dep_relative_path in &template.manifest.dependencies {
-            let dep_source = PathBuf::from("..")
-                .join(&template.path)
-                .join(dep_relative_path);
+            let dep_source = template.path.join(dep_relative_path);
             let dep_dest = workspace_dir.join(dep_relative_path);
 
             app_log!(info, "Looking for dependency: {}", dep_source.display());
@@ -231,7 +249,8 @@ impl TemplateManager {
                 fs::copy(&dep_source, &dep_dest).with_context(|| {
                     format!("Failed to copy dependency: {}", dep_source.display())
                 })?;
-                app_log!(info, 
+                app_log!(
+                    info,
                     "Copied dependency: {} -> {}",
                     dep_source.display(),
                     dep_dest.display()
