@@ -7,6 +7,7 @@ pub mod types;
 pub use handlers::*;
 pub use types::*;
 
+use crate::app_log;
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::DatabaseConfig;
 use anyhow::Result;
@@ -16,7 +17,6 @@ use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
 use rocket::{catchers, get, options, post, routes, Request, Response, State};
 use std::path::PathBuf;
-use crate::app_log;
 
 // CORS Fairing
 pub struct Cors;
@@ -31,7 +31,8 @@ impl Fairing for Cors {
     }
 
     async fn on_request(&self, request: &mut Request<'_>, _: &mut rocket::Data<'_>) {
-        app_log!(info, 
+        app_log!(
+            info,
             "CORS: Request method: {:?}, Origin: {:?}",
             request.method(),
             request.headers().get_one("Origin")
@@ -101,9 +102,8 @@ pub async fn create_person(
     request: Json<StandardRequest<CreatePersonRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::create_person_handler(request, auth, config, db_config).await
+    handlers::create_person_handler(request, auth, config).await
 }
 
 #[post("/delete-person", data = "<request>")]
@@ -255,7 +255,10 @@ pub async fn start_web_server(
 
     app_log!(info, "Starting CVenom Multi-tenant API server");
     app_log!(info, "Database: {}", db_config.database_path.display());
-    app_log!(info, "All endpoints use standard response format with conversation_id support");
+    app_log!(
+        info,
+        "All endpoints use standard response format with conversation_id support"
+    );
     app_log!(info, "Attempting to bind to port: {}", port);
 
     let _rocket = rocket::build()
@@ -288,7 +291,10 @@ pub async fn start_web_server(
         .launch()
         .await;
 
-    app_log!(info, "Server successfully started and bound to port: {}", port);
+    app_log!(
+        info,
+        "Server successfully started and bound to port: {}",
+        port
+    );
     Ok(())
 }
-

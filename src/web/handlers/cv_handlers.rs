@@ -1,7 +1,8 @@
-// src/web/handlers/cv_handlers.rs - REPLACE with this corrected version
+// src/web/handlers/cv_handlers.rs
 
 use crate::auth::AuthenticatedUser;
-use crate::database::{DatabaseConfig, TenantService};
+use crate::core::FsOps;
+use crate::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::image_validator::ImageValidator;
 use crate::template_system::TemplateManager;
 use crate::utils::{normalize_language, normalize_person_name};
@@ -9,16 +10,16 @@ use crate::web::services::CvConversionService;
 use crate::web::types::*;
 use crate::{CvConfig, CvGenerator};
 
+use crate::app_log;
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::State;
-use crate::app_log;
 
 pub async fn generate_cv_handler(
     request: Json<StandardRequest<GenerateRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<PdfResponse, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
@@ -42,54 +43,42 @@ pub async fn generate_cv_handler(
 
     let lang = normalize_language(request.data.lang.as_deref());
     let template_id = normalize_template(request.data.template.as_deref(), &template_manager);
-
-    // ADD THIS LINE: Normalize the person name
     let normalized_person = normalize_person_name(&request.data.person);
 
-    app_log!(info, 
+    app_log!(
+        info,
         "User {} (tenant: {}) generating CV for {} (normalized: {})",
-        user.email, tenant.tenant_name, request.data.person, normalized_person
+        user.email,
+        tenant.tenant_name,
+        request.data.person,
+        normalized_person
     );
 
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                conversation_id,
-            )));
-        }
-    };
+    // Use new tenant folder path
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to ensure tenant data directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data directory".to_string(),
-                "TENANT_DIR_ERROR".to_string(),
-                vec!["Contact system administrator".to_string()],
-                conversation_id,
-            )));
-        }
-    };
+    // Ensure directory exists
+    if let Err(e) = FsOps::ensure_dir_exists(&tenant_data_dir).await {
+        app_log!(error, "Failed to create tenant directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to access tenant data directory".to_string(),
+            "TENANT_DIR_ERROR".to_string(),
+            vec!["Contact system administrator".to_string()],
+            conversation_id,
+        )));
+    }
 
-    // CHANGE THIS LINE: Use normalized_person instead of request.data.person
     let person_dir = tenant_data_dir.join(&normalized_person);
 
     let profile_image_path = person_dir.join("profile.png");
     if let Err(validation_error) = ImageValidator::validate_profile_image(&profile_image_path).await
     {
-        app_log!(error, 
+        app_log!(
+            error,
             "Image validation failed for {} (tenant: {}): {}",
-            request.data.person, tenant.tenant_name, validation_error.message
+            request.data.person,
+            tenant.tenant_name,
+            validation_error.message
         );
 
         return Err(Json(StandardErrorResponse::new(
@@ -104,7 +93,6 @@ pub async fn generate_cv_handler(
         )));
     }
 
-    // CHANGE THIS LINE: Use normalized_person instead of request.data.person
     let cv_config = CvConfig::new(&normalized_person, &lang)
         .with_template(template_id.to_string())
         .with_data_dir(tenant_data_dir)
@@ -114,16 +102,22 @@ pub async fn generate_cv_handler(
     match CvGenerator::new(cv_config) {
         Ok(generator) => match generator.generate_pdf_data() {
             Ok(pdf_data) => {
-                app_log!(info, 
+                app_log!(
+                    info,
                     "Successfully generated CV for {} by {} (tenant: {})",
-                    request.data.person, user.email, tenant.tenant_name
+                    request.data.person,
+                    user.email,
+                    tenant.tenant_name
                 );
                 Ok(PdfResponse(pdf_data))
             }
             Err(e) => {
-                app_log!(error, 
+                app_log!(
+                    error,
                     "Generation error for {} (tenant: {}): {}",
-                    request.data.person, tenant.tenant_name, e
+                    request.data.person,
+                    tenant.tenant_name,
+                    e
                 );
 
                 let error_msg = e.to_string();
@@ -154,9 +148,12 @@ pub async fn generate_cv_handler(
             }
         },
         Err(e) => {
-            app_log!(error, 
+            app_log!(
+                error,
                 "Config error for {} (tenant: {}): {}",
-                request.data.person, tenant.tenant_name, e
+                request.data.person,
+                tenant.tenant_name,
+                e
             );
             Err(Json(StandardErrorResponse::new(
                 "Invalid CV configuration".to_string(),
@@ -175,14 +172,16 @@ pub async fn upload_and_convert_cv_handler(
     mut upload: Form<CvUploadForm<'_>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
 
-    app_log!(info, 
+    app_log!(
+        info,
         "User {} (tenant: {}) uploading CV for conversion",
-        user.email, tenant.tenant_name
+        user.email,
+        tenant.tenant_name
     );
 
     // Extract all file information BEFORE calling persist_to()
@@ -255,36 +254,19 @@ pub async fn upload_and_convert_cv_handler(
         )));
     }
 
-    // Database setup...
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                None,
-            )));
-        }
-    };
+    // Use new tenant folder path
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to ensure tenant data directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data directory".to_string(),
-                "TENANT_DIR_ERROR".to_string(),
-                vec!["Contact system administrator".to_string()],
-                None,
-            )));
-        }
-    };
+    // Ensure directory exists
+    if let Err(e) = FsOps::ensure_dir_exists(&tenant_data_dir).await {
+        app_log!(error, "Failed to create tenant directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to access tenant data directory".to_string(),
+            "TENANT_DIR_ERROR".to_string(),
+            vec!["Contact system administrator".to_string()],
+            None,
+        )));
+    }
 
     let temp_path = std::env::temp_dir().join(format!("cv_upload_{}", uuid::Uuid::new_v4()));
 
@@ -341,9 +323,12 @@ pub async fn upload_and_convert_cv_handler(
         .await
     {
         Ok(_) => {
-            app_log!(info, 
+            app_log!(
+                info,
                 "CV converted and person created: {} by {} (tenant: {})",
-                normalized_person, user.email, tenant.tenant_name
+                normalized_person,
+                user.email,
+                tenant.tenant_name
             );
 
             let next_actions = vec![
@@ -390,3 +375,4 @@ fn normalize_template(template: Option<&str>, template_manager: &TemplateManager
 
     "default".to_string()
 }
+

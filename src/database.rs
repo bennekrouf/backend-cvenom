@@ -1,10 +1,10 @@
 // src/database.rs
+use crate::app_log;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
-use crate::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Tenant {
@@ -52,7 +52,8 @@ impl DatabaseConfig {
 
     /// Initialize the database connection pool
     pub async fn init_pool(&mut self) -> Result<()> {
-        app_log!(info, 
+        app_log!(
+            info,
             "Attempting to create database at: {}",
             self.database_path.display()
         );
@@ -73,7 +74,11 @@ impl DatabaseConfig {
             .context("Failed to connect to SQLite database")?;
         self.pool = Some(pool);
 
-        app_log!(info, "Database connection pool initialized: {}", database_url);
+        app_log!(
+            info,
+            "Database connection pool initialized: {}",
+            database_url
+        );
         Ok(())
     }
 
@@ -189,7 +194,12 @@ impl<'a> TenantRepository<'a> {
             is_active: true,
         };
 
-        app_log!(info, "Created email tenant: {} for email: {}", tenant_name, email);
+        app_log!(
+            info,
+            "Created email tenant: {} for email: {}",
+            tenant_name,
+            email
+        );
         Ok(tenant)
     }
 
@@ -222,9 +232,11 @@ impl<'a> TenantRepository<'a> {
             is_active: true,
         };
 
-        app_log!(info, 
+        app_log!(
+            info,
             "Created domain tenant: {} for domain: {}",
-            tenant_name, domain
+            tenant_name,
+            domain
         );
         Ok(tenant)
     }
@@ -309,7 +321,8 @@ impl<'a> TenantService<'a> {
             Some(tenant) => {
                 // Double-check authorization using the tenant's logic
                 if tenant.authorizes_email(email) {
-                    app_log!(info, 
+                    app_log!(
+                        info,
                         "User {} validated for tenant: {} ({})",
                         email,
                         tenant.tenant_name,
@@ -321,15 +334,18 @@ impl<'a> TenantService<'a> {
                     );
                     Ok(Some(tenant))
                 } else {
-                    app_log!(info, 
+                    app_log!(
+                        info,
                         "User {} failed authorization check for tenant: {}",
-                        email, tenant.tenant_name
+                        email,
+                        tenant.tenant_name
                     );
                     Ok(None)
                 }
             }
             None => {
-                app_log!(info, 
+                app_log!(
+                    info,
                     "Access denied for email: {} - no matching tenant or domain",
                     email
                 );
@@ -353,7 +369,11 @@ impl<'a> TenantService<'a> {
 
         if !tenant_dir.exists() {
             tokio::fs::create_dir_all(&tenant_dir).await?;
-            app_log!(info, "Created tenant data directory: {}", tenant_dir.display());
+            app_log!(
+                info,
+                "Created tenant data directory: {}",
+                tenant_dir.display()
+            );
         }
 
         Ok(tenant_dir)
@@ -395,7 +415,8 @@ impl<'a> TenantService<'a> {
             tokio::fs::write(person_dir.join("experiences_fr.typ"), &exp_content).await?;
         }
 
-        app_log!(info, 
+        app_log!(
+            info,
             "Created default person structure for {} (display: {}) in tenant {}",
             person_name,
             display_name.unwrap_or(person_name),
@@ -410,9 +431,11 @@ impl<'a> TenantService<'a> {
         let username = email.split('@').next().unwrap_or("user");
         let tenant_name = username.to_string();
 
-        app_log!(info, 
+        app_log!(
+            info,
             "Auto-creating tenant '{}' for new user: {}",
-            tenant_name, email
+            tenant_name,
+            email
         );
 
         let tenant_repo = TenantRepository::new(self.repo.pool);
@@ -429,4 +452,31 @@ impl<'a> TenantService<'a> {
         // If none found, auto-create
         self.auto_create_tenant(email).await
     }
+}
+
+pub fn email_to_folder_name(email: &str) -> String {
+    email.replace('@', "-").replace('.', "-")
+}
+
+pub fn get_tenant_for_email(email: &str) -> String {
+    if let Some(domain) = email.split('@').nth(1) {
+        // For known company domains, return the company tenant
+        match domain {
+            "keyteo.ch" => "keyteo".to_string(),
+            // Add other company domains here
+            _ => std::env::var("DEFAULT_TENANT").unwrap_or_else(|_| "independent".to_string()),
+        }
+    } else {
+        "independent".to_string()
+    }
+}
+
+pub fn get_tenant_folder_path(
+    email: &str,
+    tenant_data_path: &std::path::PathBuf,
+) -> std::path::PathBuf {
+    let tenant = get_tenant_for_email(email);
+    let user_folder = email_to_folder_name(email);
+
+    tenant_data_path.join(tenant).join(user_folder)
 }

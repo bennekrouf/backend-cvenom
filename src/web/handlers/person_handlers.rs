@@ -1,8 +1,9 @@
-// src/web/handlers/person_handlers.rs - Final corrected version with proper TempFile path handling
+// src/web/handlers/person_handlers.rs - Updated with new tenant structure
 
+use crate::app_log;
 use crate::auth::AuthenticatedUser;
-use crate::core::FsOps; // Use core modules
-use crate::database::{DatabaseConfig, TenantService};
+use crate::core::FsOps;
+use crate::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::web::types::{
     ActionResponse, CreatePersonRequest, DeletePersonRequest, StandardErrorResponse,
     StandardRequest, UploadForm, WithConversationId,
@@ -11,20 +12,19 @@ use rocket::form::Form;
 use rocket::fs::NamedFile;
 use rocket::serde::json::Json;
 use rocket::State;
-use crate::app_log;
 
 pub async fn create_person_handler(
     request: Json<StandardRequest<CreatePersonRequest>>,
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
-    db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
     let normalized_person = FsOps::normalize_person_name(&request.data.person);
     let conversation_id = request.conversation_id();
 
-    app_log!(info, 
+    app_log!(
+        info,
         "Creating person: {} for tenant: {} (user: {}) [{}]",
         normalized_person,
         tenant.tenant_name,
@@ -32,35 +32,18 @@ pub async fn create_person_handler(
         conversation_id.clone().unwrap_or_default()
     );
 
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                conversation_id,
-            )));
-        }
-    };
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to create tenant directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to create tenant directory".to_string(),
-                "TENANT_ERROR".to_string(),
-                vec!["Contact support if this persists".to_string()],
-                conversation_id,
-            )));
-        }
-    };
+    // Ensure the directory exists
+    if let Err(e) = FsOps::ensure_dir_exists(&tenant_data_dir).await {
+        app_log!(error, "Failed to create tenant directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to create tenant directory".to_string(),
+            "TENANT_ERROR".to_string(),
+            vec!["Contact support if this persists".to_string()],
+            conversation_id,
+        )));
+    }
 
     // Use core TemplateEngine
     let template_engine = match crate::core::TemplateEngine::new(config.templates_dir.clone()) {
@@ -105,39 +88,9 @@ pub async fn create_person_handler(
 pub async fn list_persons_handler(
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<Json<Vec<String>>, Json<StandardErrorResponse>> {
-    let tenant = auth.tenant();
-
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                None,
-            )));
-        }
-    };
-
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to access tenant directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant directory".to_string(),
-                "TENANT_ERROR".to_string(),
-                vec!["Contact support".to_string()],
-                None,
-            )));
-        }
-    };
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
     match FsOps::list_persons(&tenant_data_dir).await {
         Ok(persons) => Ok(Json(persons)),
@@ -157,42 +110,12 @@ pub async fn delete_person_handler(
     request: Json<StandardRequest<DeletePersonRequest>>,
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    let tenant = auth.tenant();
     let normalized_person = FsOps::normalize_person_name(&request.data.person);
     let conversation_id = request.conversation_id();
 
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                conversation_id,
-            )));
-        }
-    };
-
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to access tenant directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant directory".to_string(),
-                "TENANT_ERROR".to_string(),
-                vec!["Contact support".to_string()],
-                conversation_id,
-            )));
-        }
-    };
-
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
     let person_dir = tenant_data_dir.join(&normalized_person);
 
     if !person_dir.exists() {
@@ -227,47 +150,21 @@ pub async fn upload_picture_handler(
     upload: Form<UploadForm<'_>>,
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
     let normalized_person = FsOps::normalize_person_name(&upload.person);
 
-    app_log!(info, 
+    app_log!(
+        info,
         "User {} (tenant: {}) uploading picture for {}",
-        user.email, tenant.tenant_name, upload.person
+        user.email,
+        tenant.tenant_name,
+        upload.person
     );
 
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                None,
-            )));
-        }
-    };
-
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to create tenant directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data".to_string(),
-                "TENANT_ERROR".to_string(),
-                vec!["Please contact support".to_string()],
-                None,
-            )));
-        }
-    };
-
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
     let person_dir = tenant_data_dir.join(&normalized_person);
 
     if !person_dir.exists() {
@@ -279,7 +176,7 @@ pub async fn upload_picture_handler(
         )));
     }
 
-    // FIXED: Handle Option<&Path> from TempFile::path()
+    // Handle Option<&Path> from TempFile::path()
     let file_path = match upload.file.path() {
         Some(path) => path,
         None => {
@@ -324,7 +221,8 @@ pub async fn upload_picture_handler(
                 )));
             }
 
-            app_log!(info, 
+            app_log!(
+                info,
                 "Successfully uploaded profile picture for person: {}",
                 normalized_person
             );
@@ -354,41 +252,11 @@ pub async fn get_picture_handler(
     person: String,
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<NamedFile, Json<StandardErrorResponse>> {
-    let tenant = auth.tenant();
     let normalized_person = FsOps::normalize_person_name(&person);
 
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                None,
-            )));
-        }
-    };
-
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to access tenant directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant directory".to_string(),
-                "TENANT_ERROR".to_string(),
-                vec!["Contact support".to_string()],
-                None,
-            )));
-        }
-    };
-
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
     let profile_path = tenant_data_dir.join(&normalized_person).join("profile.png");
 
     if !profile_path.exists() {

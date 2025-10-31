@@ -1,61 +1,48 @@
 // src/web/handlers/linkedin_handlers.rs
+use crate::app_log;
 use crate::auth::AuthenticatedUser;
-use crate::database::TenantService;
+use crate::core::FsOps;
+use crate::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::linkedin_analysis::job_analyzer::JobAnalyzer;
 use crate::linkedin_analysis::JobAnalysisRequest;
 use crate::web::types::{StandardErrorResponse, StandardRequest, TextResponse, WithConversationId};
-use crate::web::{DatabaseConfig, ServerConfig};
+use crate::web::ServerConfig;
 use anyhow::Result;
 use rocket::serde::json::Json;
 use rocket::{post, State};
-use crate::app_log;
 
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit_handler(
     request: Json<StandardRequest<JobAnalysisRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    _db_config: &State<DatabaseConfig>,
 ) -> Result<Json<TextResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
-    app_log!(info, 
+    app_log!(
+        info,
         "User {} (tenant: {}) requesting job fit analysis for {}",
-        user.email, tenant.tenant_name, request.data.person_name
+        user.email,
+        tenant.tenant_name,
+        request.data.person_name
     );
 
-    // Database setup
-    let pool = match db_config.pool() {
-        Ok(pool) => pool,
-        Err(e) => {
-            app_log!(error, "Database connection failed: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Database connection failed".to_string(),
-                "DATABASE_ERROR".to_string(),
-                vec!["Try again in a few moments".to_string()],
-                conversation_id,
-            )));
-        }
-    };
+    // Use new tenant folder path
+    let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
-    let tenant_service = TenantService::new(pool);
-    let tenant_data_dir = match tenant_service
-        .ensure_tenant_data_dir(&config.data_dir, tenant)
-        .await
-    {
-        Ok(dir) => dir,
-        Err(e) => {
-            app_log!(error, "Failed to ensure tenant data directory: {}", e);
-            return Err(Json(StandardErrorResponse::new(
-                "Failed to access tenant data directory".to_string(),
-                "TENANT_DIR_ERROR".to_string(),
-                vec!["Contact system administrator".to_string()],
-                conversation_id,
-            )));
-        }
-    };
+    // Ensure directory exists
+    if let Err(e) = FsOps::ensure_dir_exists(&tenant_data_dir).await {
+        app_log!(error, "Failed to create tenant directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to access tenant data directory".to_string(),
+            "TENANT_DIR_ERROR".to_string(),
+            vec!["Contact system administrator".to_string()],
+            conversation_id,
+        )));
+    }
 
     // Initialize job analyzer
     let analyzer = match JobAnalyzer::new() {
@@ -80,9 +67,12 @@ pub async fn analyze_job_fit_handler(
         .await;
 
     if analysis_response.success {
-        app_log!(info, 
+        app_log!(
+            info,
             "Successfully analyzed job fit for {} by {} (tenant: {})",
-            request.data.person_name, user.email, tenant.tenant_name
+            request.data.person_name,
+            user.email,
+            tenant.tenant_name
         );
 
         // Return simple text response for chat frontend
@@ -96,9 +86,13 @@ pub async fn analyze_job_fit_handler(
             .error
             .unwrap_or_else(|| "Unknown analysis error".to_string());
 
-        app_log!(error, 
+        app_log!(
+            error,
             "Job analysis failed for {} by {} (tenant: {}): {}",
-            request.data.person_name, user.email, tenant.tenant_name, error_msg
+            request.data.person_name,
+            user.email,
+            tenant.tenant_name,
+            error_msg
         );
 
         let (error_code, suggestions) = categorize_error(&error_msg, &request.data.person_name);
@@ -154,3 +148,4 @@ fn categorize_error(error_msg: &str, person_name: &str) -> (String, Vec<String>)
         )
     }
 }
+
