@@ -14,7 +14,7 @@ async fn main() -> Result<()> {
         .create(true)
         .write(true)
         .truncate(true) // Clear file on startup
-        .open("/tmp/api0.log")
+        .open("/tmp/cvenom.log")
         .expect("Failed to open log file");
 
     tracing_subscriber::registry()
