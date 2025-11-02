@@ -1,35 +1,11 @@
 use anyhow::Result;
 use cv_generator::app_log;
 use cv_generator::{core::ConfigManager, start_web_server};
-use std::fs::OpenOptions;
-
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::{fmt, EnvFilter};
+use graflog::init_logging;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize logging first
-    let file = OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true) // Clear file on startup
-        .open("/tmp/cvenom.log")
-        .expect("Failed to open log file");
-
-    tracing_subscriber::registry()
-        .with(
-            fmt::layer()
-                .json()
-                .with_writer(file)
-                .with_current_span(false)
-                .with_span_list(false),
-        )
-        .with(
-            EnvFilter::from_default_env()
-                .add_directive("trace".parse().expect("Invalid log directive")),
-        )
-        .init();
+    init_logging!("/var/log/cvenom.log", "cvenom", "backend");
 
     let port = std::env::var("ROCKET_PORT")
         .map_err(|_| anyhow::anyhow!("ROCKET_PORT environment variable not set"))?
