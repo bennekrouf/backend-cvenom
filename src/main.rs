@@ -13,7 +13,7 @@ async fn main() -> Result<()> {
     }
 
     let log_path =
-        env::var("LOG_PATH_CVENOM").unwrap_or_else(|_| "/var/logs/cvenom.log".to_string());
+        env::var("LOG_PATH_CVENOM").unwrap_or_else(|_| "/var/log/cvenom.log".to_string());
     init_logging!(&log_path, "cvenom", "backend");
 
     let port = std::env::var("ROCKET_PORT")
