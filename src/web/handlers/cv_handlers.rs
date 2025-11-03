@@ -2,9 +2,9 @@
 
 use crate::auth::AuthenticatedUser;
 use crate::core::FsOps;
+use crate::core::TemplateEngine;
 use crate::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::image_validator::ImageValidator;
-use crate::template_system::TemplateManager;
 use crate::utils::{normalize_language, normalize_person_name};
 use crate::web::services::CvConversionService;
 use crate::web::types::*;
@@ -25,7 +25,7 @@ pub async fn generate_cv_handler(
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
-    let template_manager = match TemplateManager::new(config.templates_dir.clone()) {
+    let template_manager = match TemplateEngine::new(config.templates_dir.clone()) {
         Ok(manager) => manager,
         Err(e) => {
             app_log!(error, "Failed to initialize template manager: {}", e);
@@ -100,7 +100,7 @@ pub async fn generate_cv_handler(
         .with_templates_dir(config.templates_dir.clone());
 
     match CvGenerator::new(cv_config) {
-        Ok(generator) => match generator.generate_pdf_data() {
+        Ok(generator) => match generator.generate_pdf_data().await {
             Ok(pdf_data) => {
                 app_log!(
                     info,
@@ -364,15 +364,14 @@ pub async fn upload_and_convert_cv_handler(
     }
 }
 
-fn normalize_template(template: Option<&str>, template_manager: &TemplateManager) -> String {
+fn normalize_template(template: Option<&str>, template_manager: &TemplateEngine) -> String {
     let requested = template.unwrap_or("default").to_lowercase();
 
     for available_template in template_manager.list_templates() {
-        if available_template.id.to_lowercase() == requested {
-            return available_template.id.to_lowercase();
+        if available_template.to_lowercase() == requested {
+            return available_template.to_lowercase();
         }
     }
 
     "default".to_string()
 }
-

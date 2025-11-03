@@ -14,7 +14,6 @@ pub mod generator;
 pub mod image_validator;
 pub mod linkedin_analysis;
 pub mod template_processor;
-pub mod template_system;
 pub mod utils;
 pub mod web;
 pub mod workspace;
@@ -41,7 +40,7 @@ pub fn list_templates(templates_dir: &PathBuf) -> Result<Vec<String>> {
 }
 
 /// Convenience function for quick CV generation - API unchanged
-pub fn generate_cv(
+pub async fn generate_cv(
     person_name: &str,
     lang: &str,
     template: Option<&str>,
@@ -58,5 +57,5 @@ pub fn generate_cv(
     }
 
     let generator = CvGenerator::new(config).context("Failed to create CV generator")?;
-    generator.generate()
+    generator.generate().await
 }

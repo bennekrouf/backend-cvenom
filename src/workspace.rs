@@ -1,7 +1,7 @@
 // src/workspace.rs
-use graflog::app_log;
 use crate::config::CvConfig;
-use crate::template_system::TemplateManager;
+use crate::core::TemplateEngine;
+use graflog::app_log;
 
 use anyhow::{Context, Result};
 use std::path::PathBuf;
@@ -9,23 +9,23 @@ use std::{fs, process::Command};
 
 pub struct WorkspaceManager<'a> {
     config: &'a CvConfig,
-    template_manager: &'a TemplateManager,
+    template_engine: &'a TemplateEngine,
 }
 
 impl<'a> WorkspaceManager<'a> {
-    pub fn new(config: &'a CvConfig, template_manager: &'a TemplateManager) -> Self {
+    pub fn new(config: &'a CvConfig, template_engine: &'a TemplateEngine) -> Self {
         Self {
             config,
-            template_manager,
+            template_engine,
         }
     }
 
-    pub fn prepare_workspace(&self) -> Result<()> {
+    pub async fn prepare_workspace(&self) -> Result<()> {
         app_log!(info, "Preparing workspace in tmp_workspace/...");
 
         let original_dir = std::env::current_dir().context("Failed to get current directory")?;
 
-        let workspace_result = || -> Result<()> {
+        let workspace_result = async || -> Result<()> {
             std::env::set_current_dir("tmp_workspace")
                 .context("Failed to change to temporary workspace")?;
 
@@ -39,12 +39,12 @@ impl<'a> WorkspaceManager<'a> {
                 fs::copy(&font_config_source, &font_config_dest)?;
             }
 
-            self.prepare_template_files()?;
+            self.prepare_template_files().await?;
 
             Ok(())
         };
 
-        match workspace_result() {
+        match workspace_result().await {
             Ok(_) => {
                 app_log!(info, "Workspace preparation completed successfully");
                 Ok(())
@@ -165,9 +165,10 @@ impl<'a> WorkspaceManager<'a> {
         Ok(())
     }
 
-    fn prepare_template_files(&self) -> Result<()> {
-        self.template_manager
+    async fn prepare_template_files(&self) -> Result<()> {
+        self.template_engine
             .prepare_template_workspace(&self.config.template, &PathBuf::from("."))
+            .await
             .context("Failed to prepare template workspace")?;
 
         app_log!(

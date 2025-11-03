@@ -1,46 +1,53 @@
 // src/web/handlers/system_handlers.rs
 use crate::auth::{AuthenticatedUser, OptionalAuth};
-use crate::template_system::TemplateManager;
+use crate::core::TemplateEngine;
 use crate::web::types::{
     DataResponse, StandardErrorResponse, TemplateInfo, TextResponse, UserInfo,
 };
+use crate::web::ResponseType;
+// use graflog::app_log;
 use rocket::serde::json::Json;
 use rocket::State;
-use graflog::app_log;
 
 pub async fn get_templates_handler(
     config: &State<crate::web::types::ServerConfig>,
 ) -> Json<DataResponse<Vec<TemplateInfo>>> {
-    match TemplateManager::new(config.templates_dir.clone()) {
-        Ok(template_manager) => {
-            let template_infos = template_manager
+    match TemplateEngine::new(config.templates_dir.clone()) {
+        Ok(template_engine) => {
+            let templates: Vec<TemplateInfo> = template_engine
                 .list_templates()
                 .into_iter()
-                .map(|template| TemplateInfo {
-                    name: template.id.clone(),
-                    description: template.manifest.description.clone(),
+                .map(|template_name| {
+                    let template_info = template_engine.get_template(&template_name);
+                    TemplateInfo {
+                        // id: template_name,
+                        name: template_info
+                            .map(|t| t.manifest.name.clone())
+                            .unwrap_or_default(),
+                        description: template_info
+                            .and_then(|t| t.manifest.description.clone())
+                            .unwrap_or_else(|| "No description available".to_string()),
+                    }
                 })
                 .collect();
 
-            Json(DataResponse::success(
-                "Templates retrieved successfully".to_string(),
-                template_infos,
-                None,
-            ))
+            Json(DataResponse {
+                success: true,
+                data: templates,
+                message: "Templates retrieved successfully".to_string(),
+                conversation_id: None,
+                display_format: None,
+                response_type: ResponseType::Data,
+            })
         }
-        Err(e) => {
-            app_log!(error, "Failed to initialize template manager: {}", e);
-            let default_templates = vec![TemplateInfo {
-                name: "default".to_string(),
-                description: "Standard CV layout".to_string(),
-            }];
-
-            Json(DataResponse::success(
-                "Templates retrieved (default only)".to_string(),
-                default_templates,
-                None,
-            ))
-        }
+        Err(e) => Json(DataResponse {
+            success: false,
+            data: Vec::new(),
+            message: format!("Failed to load templates: {}", e),
+            conversation_id: None,
+            display_format: None,
+            response_type: ResponseType::Error,
+        }),
     }
 }
 
@@ -84,4 +91,3 @@ pub async fn health_handler(auth: OptionalAuth) -> Json<TextResponse> {
 
     Json(TextResponse::success(message, None))
 }
-

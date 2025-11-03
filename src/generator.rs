@@ -1,21 +1,21 @@
 // src/generator.rs
-use graflog::app_log;
 use crate::config::CvConfig;
+use crate::core::TemplateEngine;
 use crate::template_processor::TemplateProcessor;
-use crate::template_system::TemplateManager;
 use crate::workspace::WorkspaceManager;
 use anyhow::{Context, Result};
+use graflog::app_log;
 use std::path::PathBuf;
 use std::{fs, process::Command};
 
 pub struct CvGenerator {
     pub config: CvConfig,
-    template_manager: TemplateManager,
+    template_manager: TemplateEngine,
 }
 
 impl CvGenerator {
     pub fn new(mut config: CvConfig) -> Result<Self> {
-        let template_manager = TemplateManager::new(config.templates_dir.clone())
+        let template_manager = TemplateEngine::new(config.templates_dir.clone())
             .context("Failed to initialize template manager")?;
 
         // Validate and normalize template
@@ -42,11 +42,11 @@ impl CvGenerator {
         })
     }
 
-    pub fn generate(&self) -> Result<PathBuf> {
+    pub async fn generate(&self) -> Result<PathBuf> {
         self.setup_output_dir()?;
 
         let workspace = WorkspaceManager::new(&self.config, &self.template_manager);
-        workspace.prepare_workspace()?;
+        workspace.prepare_workspace().await?;
 
         let output_path = workspace.compile_cv()?;
         workspace.cleanup_workspace()?;
@@ -63,11 +63,11 @@ impl CvGenerator {
         Ok(output_path)
     }
 
-    pub fn generate_pdf_data(&self) -> Result<Vec<u8>> {
+    pub async fn generate_pdf_data(&self) -> Result<Vec<u8>> {
         self.setup_output_dir()?;
 
         let workspace = WorkspaceManager::new(&self.config, &self.template_manager);
-        workspace.prepare_workspace()?;
+        workspace.prepare_workspace().await?;
 
         let output_path = workspace.compile_cv()?;
         let pdf_data = fs::read(&output_path).context("Failed to read generated PDF")?;
@@ -77,11 +77,11 @@ impl CvGenerator {
         Ok(pdf_data)
     }
 
-    pub fn watch(&self) -> Result<()> {
+    pub async fn watch(&self) -> Result<()> {
         self.setup_output_dir()?;
 
         let workspace = WorkspaceManager::new(&self.config, &self.template_manager);
-        workspace.prepare_workspace()?;
+        workspace.prepare_workspace().await?;
 
         let output_path = self.config.output_dir.join(format!(
             "{}_{}_{}.pdf",
@@ -125,11 +125,11 @@ impl CvGenerator {
     }
 }
 
-fn normalize_template_for_generator(template: &str, template_manager: &TemplateManager) -> String {
+fn normalize_template_for_generator(template: &str, template_manager: &TemplateEngine) -> String {
     let requested = template.to_lowercase();
     for available_template in template_manager.list_templates() {
-        if available_template.id.to_lowercase() == requested {
-            return available_template.id.to_lowercase(); // Force lowercase return
+        if available_template.to_lowercase() == requested {
+            return available_template.to_lowercase(); // Force lowercase return
         }
     }
     "default".to_string()
