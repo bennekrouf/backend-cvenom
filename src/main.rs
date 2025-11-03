@@ -5,7 +5,7 @@ use graflog::init_logging;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logging!("/var/log/cvenom.log", "cvenom", "backend");
+    init_logging!("/var/logs/cvenom.log", "cvenom", "backend");
 
     let port = std::env::var("ROCKET_PORT")
         .map_err(|_| anyhow::anyhow!("ROCKET_PORT environment variable not set"))?
