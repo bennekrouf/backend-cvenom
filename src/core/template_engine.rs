@@ -4,8 +4,8 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use graflog::app_log;
 use crate::core::FsOps;
+use graflog::app_log;
 
 #[derive(Debug, Clone)]
 pub struct TemplateInfo {
@@ -134,9 +134,22 @@ impl TemplateEngine {
         template_id: &str,
         workspace_dir: &Path,
     ) -> Result<()> {
-        let template = self
-            .get_template(template_id)
-            .ok_or_else(|| anyhow::anyhow!("Template '{}' not found", template_id))?;
+        app_log!(info, "Looking for template: '{}'", template_id);
+        app_log!(
+            info,
+            "Templates directory: {}",
+            self.templates_dir.display()
+        );
+        app_log!(info, "Available templates: {:?}", self.list_templates());
+
+        let template = self.get_template(template_id).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Template '{}' not found. Available templates: {:?}. Templates directory: {}",
+                template_id,
+                self.list_templates(),
+                self.templates_dir.display()
+            )
+        })?;
 
         FsOps::ensure_dir_exists(workspace_dir).await?;
 
