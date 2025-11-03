@@ -1,11 +1,20 @@
+use std::env;
+
 use anyhow::Result;
-use graflog::app_log;
 use cv_generator::{core::ConfigManager, start_web_server};
+use graflog::app_log;
 use graflog::init_logging;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_logging!("/var/logs/cvenom.log", "cvenom", "backend");
+    if env::var("LOG_PATH_CVENOM").is_err() {
+        eprintln!("Error: LOG_PATH_CVENOM environment variable is required");
+        std::process::exit(1);
+    }
+
+    let log_path =
+        env::var("LOG_PATH_CVENOM").unwrap_or_else(|_| "/var/logs/cvenom.log".to_string());
+    init_logging!(&log_path, "cvenom", "backend");
 
     let port = std::env::var("ROCKET_PORT")
         .map_err(|_| anyhow::anyhow!("ROCKET_PORT environment variable not set"))?
