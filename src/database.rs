@@ -1,5 +1,5 @@
 // src/database.rs
-use crate::app_log;
+use graflog::app_log;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

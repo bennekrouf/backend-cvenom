@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use reqwest::multipart::{Form, Part};
 use std::path::Path;
 use std::time::Duration;
-use crate::app_log;
+use graflog::app_log;
 
 pub struct ServiceClient {
     client: reqwest::Client,

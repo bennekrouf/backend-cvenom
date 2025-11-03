@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use crate::app_log;
+use graflog::app_log;
 use crate::core::FsOps;
 
 #[derive(Debug, Clone)]

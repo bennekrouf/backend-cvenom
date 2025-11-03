@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use rocket::serde::Deserialize;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use crate::app_log;
+use graflog::app_log;
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]

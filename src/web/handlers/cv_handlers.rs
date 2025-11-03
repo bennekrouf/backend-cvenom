@@ -10,7 +10,7 @@ use crate::web::services::CvConversionService;
 use crate::web::types::*;
 use crate::{CvConfig, CvGenerator};
 
-use crate::app_log;
+use graflog::app_log;
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::State;

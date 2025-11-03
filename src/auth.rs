@@ -7,7 +7,7 @@ use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::app_log;
+use graflog::app_log;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FirebaseUser {

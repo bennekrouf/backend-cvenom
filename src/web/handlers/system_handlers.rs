@@ -6,7 +6,7 @@ use crate::web::types::{
 };
 use rocket::serde::json::Json;
 use rocket::State;
-use crate::app_log;
+use graflog::app_log;
 
 pub async fn get_templates_handler(
     config: &State<crate::web::types::ServerConfig>,

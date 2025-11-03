@@ -8,7 +8,7 @@ use anyhow::{Context, Result};
 use reqwest::Client;
 use std::path::PathBuf;
 use tokio::fs;
-use crate::app_log;
+use graflog::app_log;
 
 pub struct JobAnalyzer {
     client: Client,

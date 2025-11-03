@@ -1,5 +1,5 @@
 // src/workspace.rs
-use crate::app_log;
+use graflog::app_log;
 use crate::config::CvConfig;
 use crate::template_system::TemplateManager;
 

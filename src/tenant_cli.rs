@@ -3,7 +3,7 @@ use crate::database::{DatabaseConfig, TenantRepository, TenantService};
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
-use crate::app_log;
+use graflog::app_log;
 
 #[derive(Parser)]
 #[command(name = "tenant-manager")]

@@ -1,6 +1,6 @@
 // src/web/handlers/person_handlers.rs - Updated with new tenant structure
 
-use crate::app_log;
+use graflog::app_log;
 use crate::auth::AuthenticatedUser;
 use crate::core::FsOps;
 use crate::database::{get_tenant_folder_path, DatabaseConfig};

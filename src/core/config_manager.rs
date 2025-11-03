@@ -1,7 +1,7 @@
 // src/core/config_manager.rs
 //! Unified configuration management - eliminates duplicate config loading
 
-use crate::app_log;
+use graflog::app_log;
 use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::path::PathBuf;

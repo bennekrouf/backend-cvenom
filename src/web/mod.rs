@@ -7,7 +7,7 @@ pub mod types;
 pub use handlers::*;
 pub use types::*;
 
-use crate::app_log;
+use graflog::app_log;
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::DatabaseConfig;
 use anyhow::Result;

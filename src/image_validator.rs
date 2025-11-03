@@ -2,7 +2,7 @@
 use anyhow::Result;
 use std::path::PathBuf;
 use tokio::fs;
-use crate::app_log;
+use graflog::app_log;
 
 #[derive(Debug, Clone)]
 pub struct ImageValidationError {

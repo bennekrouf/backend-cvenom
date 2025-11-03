@@ -1,7 +1,7 @@
 // src/environment.rs
 use anyhow::{Context, Result};
 use std::path::PathBuf;
-use crate::app_log;
+use graflog::app_log;
 
 #[derive(Clone)]
 pub struct EnvironmentConfig {

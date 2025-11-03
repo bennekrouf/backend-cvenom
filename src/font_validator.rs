@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Command;
-use crate::app_log;
+use graflog::app_log;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FontRequirement {

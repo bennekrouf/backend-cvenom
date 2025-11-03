@@ -1,5 +1,5 @@
 // src/generator.rs
-use crate::app_log;
+use graflog::app_log;
 use crate::config::CvConfig;
 use crate::template_processor::TemplateProcessor;
 use crate::template_system::TemplateManager;

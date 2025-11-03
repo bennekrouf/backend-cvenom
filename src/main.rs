@@ -1,5 +1,5 @@
 use anyhow::Result;
-use cv_generator::app_log;
+use graflog::app_log;
 use cv_generator::{core::ConfigManager, start_web_server};
 use graflog::init_logging;
 
