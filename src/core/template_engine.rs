@@ -154,12 +154,18 @@ impl TemplateEngine {
         FsOps::ensure_dir_exists(workspace_dir).await?;
 
         // Copy all template files to workspace
+        app_log!(
+            info,
+            "Reading template files from: {}",
+            template.path.display()
+        );
+
         let mut entries = tokio::fs::read_dir(&template.path).await.with_context(|| {
-            format!(
-                "Failed to read template directory: {}",
-                template.path.display()
-            )
-        })?;
+    format!(
+        "Failed to read template directory: {}. Check if directory exists and has proper permissions.",
+        template.path.display()
+    )
+})?;
 
         while let Some(entry) = entries.next_entry().await? {
             let src_path = entry.path();
