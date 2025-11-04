@@ -1,328 +1,223 @@
-use super::{
-    types::{JobMatchApiError, JobMatchApiRequest},
-    JobAnalysisRequest, JobAnalysisResponse,
-};
+use super::{types::JobMatchApiRequest, JobAnalysisRequest, JobAnalysisResponse};
 use crate::linkedin_analysis::JobContent;
 use crate::linkedin_analysis::JobMatchApiResponse;
 use anyhow::{Context, Result};
+use graflog::app_log;
 use reqwest::Client;
 use std::path::PathBuf;
 use tokio::fs;
-use graflog::app_log;
 
 pub struct JobAnalyzer {
     client: Client,
-    api_base_url: String,
+    job_matching_url: String,
+    timeout_seconds: u64,
 }
 
 impl JobAnalyzer {
+    /// Create new JobAnalyzer with configuration from environment variables only
     pub fn new() -> Result<Self> {
-        // Get API URL from environment or use default
-        let api_base_url = std::env::var("JOB_MATCHING_API_URL")
-            .unwrap_or_else(|_| "http://localhost:8000".to_string());
+        let job_matching_url = std::env::var("JOB_MATCHING_API_URL")
+            .context("JOB_MATCHING_API_URL environment variable is required")?;
+
+        let timeout_seconds = std::env::var("SERVICE_TIMEOUT")
+            .context("SERVICE_TIMEOUT environment variable is required")?
+            .parse::<u64>()
+            .context("SERVICE_TIMEOUT must be a valid number")?;
 
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(60))
+            .timeout(std::time::Duration::from_secs(timeout_seconds))
             .build()
             .context("Failed to create HTTP client")?;
 
+        app_log!(
+            info,
+            "JobAnalyzer initialized with URL: {}",
+            job_matching_url
+        );
+        app_log!(info, "Timeout: {} seconds", timeout_seconds);
+
         Ok(Self {
             client,
-            api_base_url,
+            job_matching_url,
+            timeout_seconds,
         })
     }
 
+    /// Analyze job fit for a person
     pub async fn analyze_job_fit(
         &self,
         request: JobAnalysisRequest,
         tenant_data_dir: &PathBuf,
     ) -> JobAnalysisResponse {
-        match self.perform_analysis(&request, tenant_data_dir).await {
-            Ok((analysis, person_experiences, job_content)) => JobAnalysisResponse {
-                success: true,
-                job_content: Some(job_content),
-                person_experiences: Some(person_experiences),
-                fit_analysis: Some(analysis),
-                raw_job_content: Some(format!("Job URL: {}", request.job_url)),
-                error: None,
-            },
+        app_log!(
+            info,
+            "Starting job analysis for person: {}",
+            request.person_name
+        );
+
+        // Check if person directory exists
+        let person_dir = tenant_data_dir.join(&request.person_name);
+        if !person_dir.exists() {
+            return JobAnalysisResponse {
+                success: false,
+                error: Some(format!(
+                    "Person directory not found: {}",
+                    request.person_name
+                )),
+                job_content: None,
+                person_experiences: None,
+                fit_analysis: None,
+                raw_job_content: None,
+            };
+        }
+
+        // Extract job content from LinkedIn URL
+        let job_content = match self.extract_job_content(&request.job_url).await {
+            Ok(content) => content,
             Err(e) => {
-                app_log!(error, "Job analysis failed: {}", e);
-                JobAnalysisResponse {
+                app_log!(error, "Failed to extract job content: {}", e);
+                return JobAnalysisResponse {
                     success: false,
+                    error: Some(format!("Failed to extract job content: {}", e)),
                     job_content: None,
                     person_experiences: None,
                     fit_analysis: None,
                     raw_job_content: None,
-                    error: Some(e.to_string()),
+                };
+            }
+        };
+
+        // Read person's experiences
+        let person_experiences = match self.read_person_experiences(&person_dir).await {
+            Ok(exp) => exp,
+            Err(e) => {
+                app_log!(error, "Failed to read person experiences: {}", e);
+                return JobAnalysisResponse {
+                    success: false,
+                    error: Some(format!("Failed to read person experiences: {}", e)),
+                    job_content: Some(job_content),
+                    person_experiences: None,
+                    fit_analysis: None,
+                    raw_job_content: None,
+                };
+            }
+        };
+
+        // Create JSON representation of CV data
+        let cv_json = match self.create_cv_json(&person_dir, &person_experiences).await {
+            Ok(json) => json,
+            Err(e) => {
+                app_log!(error, "Failed to create CV JSON: {}", e);
+                return JobAnalysisResponse {
+                    success: false,
+                    error: Some(format!("Failed to process CV data: {}", e)),
+                    job_content: Some(job_content.clone()),
+                    person_experiences: Some(person_experiences),
+                    fit_analysis: None,
+                    raw_job_content: Some(job_content.description),
+                };
+            }
+        };
+
+        // Call job matching API
+        match self.call_job_matching_api(cv_json, &request.job_url).await {
+            Ok(fit_analysis) => JobAnalysisResponse {
+                success: true,
+                error: None,
+                job_content: Some(job_content.clone()),
+                person_experiences: Some(person_experiences),
+                fit_analysis: Some(fit_analysis),
+                raw_job_content: Some(job_content.description),
+            },
+            Err(e) => {
+                app_log!(error, "Job matching API failed: {}", e);
+                JobAnalysisResponse {
+                    success: false,
+                    error: Some(format!("Job matching analysis failed: {}", e)),
+                    job_content: Some(job_content.clone()),
+                    person_experiences: Some(person_experiences),
+                    fit_analysis: None,
+                    raw_job_content: Some(job_content.description),
                 }
             }
         }
     }
 
-    async fn perform_analysis(
-        &self,
-        request: &JobAnalysisRequest,
-        tenant_data_dir: &PathBuf,
-    ) -> Result<(String, String, JobContent)> {
-        app_log!(info, "Starting job analysis for person: {}", request.person_name);
-
-        // Load person's experiences text (for the response)
-        let person_experiences = self
-            .load_person_experiences(&request.person_name, tenant_data_dir)
-            .await
-            .context("Failed to load person's experiences")?;
-
-        // Load person's CV data as JSON (for the API call)
-        let cv_json = self
-            .load_person_cv_json(&request.person_name, tenant_data_dir)
-            .await
-            .context("Failed to load person's CV data")?;
-
-        // Call the job matching API
-        let analysis = self
-            .call_job_matching_api(&request.job_url, &cv_json)
-            .await
-            .context("Failed to analyze job fit")?;
+    /// Extract job content from LinkedIn URL
+    async fn extract_job_content(&self, job_url: &str) -> Result<JobContent> {
+        app_log!(info, "Extracting job content from URL: {}", job_url);
 
         // Create a placeholder job content since we're not scraping anymore
-        let job_content = JobContent {
+        Ok(JobContent {
             title: "Job Position".to_string(),
-            company: "Company".to_string(),
+            company: "Company Name".to_string(),
+            description: format!("Job description from {}", job_url),
             location: "Location".to_string(),
-            description: format!("Job posting from: {}", request.job_url),
+        })
+    }
+
+    /// Read person's experiences from files
+    async fn read_person_experiences(&self, person_dir: &PathBuf) -> Result<String> {
+        let experiences_en = person_dir.join("experiences_en.typ");
+        let experiences_fr = person_dir.join("experiences_fr.typ");
+
+        let experiences = if experiences_en.exists() {
+            fs::read_to_string(&experiences_en).await?
+        } else if experiences_fr.exists() {
+            fs::read_to_string(&experiences_fr).await?
+        } else {
+            return Err(anyhow::anyhow!("No experience files found"));
         };
 
-        app_log!(info, 
-            "Job analysis completed successfully for {}",
-            request.person_name
-        );
-
-        Ok((analysis, person_experiences, job_content))
+        Ok(experiences)
     }
 
-    async fn load_person_experiences(
-        &self,
-        person_name: &str,
-        tenant_data_dir: &PathBuf,
-    ) -> Result<String> {
-        let normalized_person = crate::utils::normalize_person_name(person_name);
-        let person_dir = tenant_data_dir.join(&normalized_person);
-
-        if !person_dir.exists() {
-            anyhow::bail!(
-                "Person directory not found: {}. Create the person first using the create endpoint.",
-                person_dir.display()
-            );
-        }
-
-        // Try to load English experiences first, then French as fallback
-        let experience_files = ["experiences_en.typ", "experiences_fr.typ"];
-
-        for file_name in &experience_files {
-            let exp_path = person_dir.join(file_name);
-            if exp_path.exists() {
-                match fs::read_to_string(&exp_path).await {
-                    Ok(content) => {
-                        if !content.trim().is_empty() {
-                            app_log!(info, "Loaded experiences from: {}", file_name);
-                            return Ok(content);
-                        }
-                    }
-                    Err(e) => {
-                        app_log!(warn, "Failed to read {}: {}", file_name, e);
-                    }
-                }
-            }
-        }
-
-        anyhow::bail!(
-            "No valid experience files found for person: {}. Expected files: {}",
-            person_name,
-            experience_files.join(", ")
-        );
-    }
-
-    async fn load_person_cv_json(
-        &self,
-        person_name: &str,
-        tenant_data_dir: &PathBuf,
-    ) -> Result<String> {
-        let normalized_person = crate::utils::normalize_person_name(person_name);
-        let person_dir = tenant_data_dir.join(&normalized_person);
-
-        // Load CV parameters
+    /// Create JSON representation of CV data
+    async fn create_cv_json(&self, person_dir: &PathBuf, experiences: &str) -> Result<String> {
         let cv_params_path = person_dir.join("cv_params.toml");
         let cv_params = if cv_params_path.exists() {
-            match fs::read_to_string(&cv_params_path).await {
-                Ok(content) => match toml::from_str::<toml::Value>(&content) {
-                    Ok(value) => Some(value),
-                    Err(e) => {
-                        app_log!(warn, "Failed to parse cv_params.toml: {}", e);
-                        None
-                    }
-                },
-                Err(e) => {
-                    app_log!(warn, "Failed to read cv_params.toml: {}", e);
-                    None
-                }
-            }
+            fs::read_to_string(&cv_params_path).await?
         } else {
-            None
+            "# No CV params found".to_string()
         };
 
-        // Load work experience from experiences file
-        let experience_files = ["experiences_en.typ", "experiences_fr.typ"];
-        let mut work_experience_text = None;
+        let cv_data = serde_json::json!({
+            "cv_params": cv_params,
+            "experiences": experiences,
+            "person_dir": person_dir.display().to_string()
+        });
 
-        for file_name in &experience_files {
-            let exp_path = person_dir.join(file_name);
-            if exp_path.exists() {
-                match fs::read_to_string(&exp_path).await {
-                    Ok(content) => {
-                        if !content.trim().is_empty() {
-                            work_experience_text = Some(content);
-                            break;
-                        }
-                    }
-                    Err(e) => {
-                        app_log!(warn, "Failed to read {}: {}", file_name, e);
-                    }
-                }
-            }
-        }
-
-        // Create a simplified CV JSON structure
-        let mut cv_data = serde_json::Map::new();
-
-        // Extract key insights from CV params
-        if let Some(params) = cv_params {
-            if let Some(name) = params.get("name").and_then(|v| v.as_str()) {
-                cv_data.insert(
-                    "name".to_string(),
-                    serde_json::Value::String(name.to_string()),
-                );
-            }
-
-            if let Some(job_title) = params.get("job_title").and_then(|v| v.as_str()) {
-                cv_data.insert(
-                    "job_title".to_string(),
-                    serde_json::Value::String(job_title.to_string()),
-                );
-            }
-
-            // Extract skills
-            if let Some(skills) = params.get("skills").and_then(|v| v.as_table()) {
-                let skills_summary: Vec<String> = skills
-                    .iter()
-                    .flat_map(|(category, items)| {
-                        if let Some(items_array) = items.as_array() {
-                            items_array
-                                .iter()
-                                .filter_map(|item| {
-                                    item.as_str().map(|s| format!("{}: {}", category, s))
-                                })
-                                .collect::<Vec<_>>()
-                        } else if let Some(item_str) = items.as_str() {
-                            vec![format!("{}: {}", category, item_str)]
-                        } else {
-                            vec![]
-                        }
-                    })
-                    .collect();
-
-                if !skills_summary.is_empty() {
-                    cv_data.insert(
-                        "technical_skills".to_string(),
-                        serde_json::Value::Array(
-                            skills_summary
-                                .into_iter()
-                                .map(serde_json::Value::String)
-                                .collect(),
-                        ),
-                    );
-                }
-            }
-        }
-
-        // Add work experience summary
-        if let Some(exp_text) = work_experience_text {
-            // Extract basic info from the Typst experience text
-            cv_data.insert(
-                "work_experience_summary".to_string(),
-                serde_json::Value::String(exp_text.chars().take(2000).collect()),
-            );
-        }
-
-        // Default key insights
-        let key_insights = vec![
-            "Experienced technical professional with proven track record".to_string(),
-            "Expert in modern development technologies and methodologies".to_string(),
-            "Strong background in project delivery and team collaboration".to_string(),
-        ];
-        cv_data.insert(
-            "key_insights".to_string(),
-            serde_json::Value::Array(
-                key_insights
-                    .into_iter()
-                    .map(serde_json::Value::String)
-                    .collect(),
-            ),
-        );
-
-        let cv_json =
-            serde_json::to_string(&cv_data).context("Failed to serialize CV data to JSON")?;
-
-        Ok(cv_json)
+        Ok(cv_data.to_string())
     }
 
-    async fn call_job_matching_api(&self, job_url: &str, cv_json: &str) -> Result<String> {
-        let api_url = format!("{}/api/v1/analyze-job-match", self.api_base_url);
-
-        let request_body = JobMatchApiRequest {
-            cv_json: cv_json.to_string(),
+    /// Call the job matching API
+    async fn call_job_matching_api(&self, cv_json: String, job_url: &str) -> Result<String> {
+        let api_request = JobMatchApiRequest {
+            cv_json,
             job_url: job_url.to_string(),
         };
 
-        app_log!(info, "Calling job matching API: {}", api_url);
-
         let response = self
             .client
-            .post(&api_url)
-            .header("Content-Type", "application/json")
-            .json(&request_body)
+            .post(&self.job_matching_url)
+            .json(&api_request)
             .send()
             .await
             .context("Failed to send request to job matching API")?;
 
-        let status = response.status();
-        let response_text = response
-            .text()
-            .await
-            .context("Failed to read response body")?;
+        if response.status().is_success() {
+            let api_response: JobMatchApiResponse = response
+                .json()
+                .await
+                .context("Failed to parse job matching API response")?;
 
-        if status.is_success() {
-            // Try to parse as success response
-            match serde_json::from_str::<JobMatchApiResponse>(&response_text) {
-                Ok(api_response) => {
-                    app_log!(info, "Successfully received analysis from job matching API");
-                    Ok(api_response.analysis)
-                }
-                Err(_) => {
-                    // If JSON parsing fails, try to extract analysis from raw response
-                    app_log!(warn, "Failed to parse API response as JSON, using raw response");
-                    Ok(response_text)
-                }
-            }
+            Ok(api_response.analysis)
         } else {
-            // Try to parse as error response
-            let error_message = match serde_json::from_str::<JobMatchApiError>(&response_text) {
-                Ok(error_response) => error_response.error,
-                Err(_) => format!("API returned error {}: {}", status, response_text),
-            };
-
-            app_log!(error, "Job matching API error: {}", error_message);
-            anyhow::bail!("Job matching API error: {}", error_message);
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            Err(anyhow::anyhow!("Job matching API error: {}", error_text))
         }
     }
 }

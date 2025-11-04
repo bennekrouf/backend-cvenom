@@ -1,8 +1,8 @@
 // src/core/config_manager.rs
-//! Unified configuration management - eliminates duplicate config loading
+//! Unified configuration management - pure environment variables, no config.yaml
 
-use graflog::app_log;
 use anyhow::{Context, Result};
+use graflog::app_log;
 use serde::Deserialize;
 use std::path::PathBuf;
 
@@ -38,7 +38,7 @@ pub struct CvConfig {
 }
 
 impl ConfigManager {
-    /// Load all configurations
+    /// Load all configurations from environment variables only
     pub fn load() -> Result<Self> {
         let environment = Self::load_environment()?;
         let service = Self::load_service()?;
@@ -50,33 +50,60 @@ impl ConfigManager {
         })
     }
 
-    /// Load environment configuration
+    /// Load environment configuration from mandatory environment variables
     fn load_environment() -> Result<EnvironmentConfig> {
-        let env = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string());
-        app_log!(info, "Loading environment configuration for: {}", env);
+        app_log!(info, "Loading environment configuration from env vars");
 
-        let base_dir = if env == "production" {
-            PathBuf::from("/app")
-        } else {
-            std::env::current_dir().context("Failed to get current directory")?
-        };
+        // All paths are now mandatory environment variables
+        let tenant_data_path = PathBuf::from(
+            std::env::var("CVENOM_TENANT_DATA_PATH")
+                .context("CVENOM_TENANT_DATA_PATH environment variable is required")?,
+        );
+
+        let output_path = PathBuf::from(
+            std::env::var("CVENOM_OUTPUT_PATH")
+                .context("CVENOM_OUTPUT_PATH environment variable is required")?,
+        );
+
+        let templates_path = PathBuf::from(
+            std::env::var("CVENOM_TEMPLATES_PATH")
+                .context("CVENOM_TEMPLATES_PATH environment variable is required")?,
+        );
+
+        let database_path = PathBuf::from(
+            std::env::var("CVENOM_DATABASE_PATH")
+                .context("CVENOM_DATABASE_PATH environment variable is required")?,
+        );
+
+        app_log!(info, "Tenant data path: {}", tenant_data_path.display());
+        app_log!(info, "Output path: {}", output_path.display());
+        app_log!(info, "Templates path: {}", templates_path.display());
+        app_log!(info, "Database path: {}", database_path.display());
 
         Ok(EnvironmentConfig {
-            tenant_data_path: base_dir.join("data"),
-            output_path: base_dir.join("out"),
-            templates_path: base_dir.join("templates"),
-            database_path: base_dir.join("cv_generator.db"),
+            tenant_data_path,
+            output_path,
+            templates_path,
+            database_path,
         })
     }
 
-    /// Load service configuration
+    /// Load service configuration from mandatory environment variables
     fn load_service() -> Result<ServiceConfig> {
         let job_matching_url = std::env::var("JOB_MATCHING_API_URL")
-            .unwrap_or_else(|_| "http://127.0.0.1:5555".to_string());
+            .context("JOB_MATCHING_API_URL environment variable is required")?;
+
+        let timeout_seconds = std::env::var("SERVICE_TIMEOUT")
+            .context("SERVICE_TIMEOUT environment variable is required")?
+            .parse::<u64>()
+            .context("SERVICE_TIMEOUT must be a valid number")?;
+
+        app_log!(info, "Job matching URL: {}", job_matching_url);
+        app_log!(info, "Service timeout: {} seconds", timeout_seconds);
 
         Ok(ServiceConfig {
             job_matching_url,
-            timeout_seconds: 30,
+            timeout_seconds,
         })
     }
 
@@ -144,3 +171,4 @@ impl CvConfig {
         self.data_dir.clone()
     }
 }
+

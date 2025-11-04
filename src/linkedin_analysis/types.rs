@@ -12,3 +12,4 @@ pub(crate) struct JobMatchApiRequest {
 pub(crate) struct JobMatchApiError {
     pub error: String,
 }
+

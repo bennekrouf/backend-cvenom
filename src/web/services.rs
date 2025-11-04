@@ -1,18 +1,17 @@
 // src/web/services.rs
-use crate::{environment::ServiceConfig, template_processor::TemplateProcessor, utils};
+use crate::template_processor::TemplateProcessor;
+use crate::utils;
 use anyhow::{Context, Result};
-use rocket::serde::Deserialize;
+use graflog::app_log;
+// use reqwest::multipart::Form;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use graflog::app_log;
 
-#[derive(Deserialize)]
-#[serde(crate = "rocket::serde")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CvServiceResponse {
     pub typst_content: String,
-    pub success: Option<bool>,
     pub error: Option<String>,
-    pub code: Option<String>,
 }
 
 pub struct CvConversionService {
@@ -21,12 +20,15 @@ pub struct CvConversionService {
 }
 
 impl CvConversionService {
-    pub fn new() -> Self {
-        let config = ServiceConfig::load();
-        Self {
-            service_url: config.job_matching_url + "/api/v1/upload-cv",
-            timeout_seconds: config.timeout_seconds,
-        }
+    pub fn new() -> Result<Self> {
+        // Load service configuration from environment variables
+        let service_config = crate::environment::ServiceConfig::load()
+            .context("Failed to load service configuration")?;
+
+        Ok(Self {
+            service_url: service_config.job_matching_url + "/api/v1/upload-cv",
+            timeout_seconds: service_config.timeout_seconds,
+        })
     }
 
     pub fn with_url(mut self, url: String) -> Self {
@@ -157,7 +159,10 @@ impl CvConversionService {
             let processed_content = TemplateProcessor::process_variables(&template_content, &vars);
             utils::write_file_safe(&person_dir.join("cv_params.toml"), &processed_content).await?;
         } else {
-            app_log!(warn, "Person template not found, creating basic cv_params.toml");
+            app_log!(
+                warn,
+                "Person template not found, creating basic cv_params.toml"
+            );
             let basic_config = format!(
                 r#"[personal]
 name = "{}"
@@ -186,7 +191,10 @@ github = ""
             utils::write_file_safe(&person_dir.join("experiences_fr.typ"), &template_content)
                 .await?;
         } else {
-            app_log!(warn, "Experiences template not found, creating basic experiences_fr.typ");
+            app_log!(
+                warn,
+                "Experiences template not found, creating basic experiences_fr.typ"
+            );
             let basic_experiences = r#"// French experiences
 #import "/template.typ": *
 
@@ -218,4 +226,3 @@ Use the web interface or CLI to generate PDFs from these files.
         Ok(())
     }
 }
-

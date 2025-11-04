@@ -281,7 +281,22 @@ pub async fn upload_and_convert_cv_handler(
         )));
     }
 
-    let conversion_service = CvConversionService::new();
+    let conversion_service = match CvConversionService::new() {
+        Ok(service) => service,
+        Err(e) => {
+            app_log!(error, "Failed to create conversion service: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "SERVICE_CONFIG_ERROR_MESSAGE".to_string(),
+                "SERVICE_CONFIG_ERROR".to_string(),
+                vec![
+                    "CONTACT_SYSTEM_ADMIN".to_string(),
+                    "SERVICE_TEMPORARILY_UNAVAILABLE".to_string(),
+                ],
+                None,
+            )));
+        }
+    };
+
     let typst_content = match conversion_service
         .convert(&temp_path, &filename_with_extension)
         .await
@@ -292,12 +307,12 @@ pub async fn upload_and_convert_cv_handler(
 
             app_log!(error, "CV conversion failed: {}", error_msg);
             return Err(Json(StandardErrorResponse::new(
-                format!("CV conversion failed: {}", error_msg),
+                "CV_CONVERSION_FAILED_MESSAGE".to_string(),
                 "PARSE_ERROR".to_string(),
                 vec![
-                    "Ensure your CV has clear, readable text".to_string(),
-                    "Try uploading a different file format".to_string(),
-                    "Check if the file is not corrupted".to_string(),
+                    "ENSURE_CV_READABLE_TEXT".to_string(),
+                    "TRY_DIFFERENT_FILE_FORMAT".to_string(),
+                    "CHECK_FILE_NOT_CORRUPTED".to_string(),
                 ],
                 None,
             )));
@@ -352,11 +367,11 @@ pub async fn upload_and_convert_cv_handler(
         Err(e) => {
             app_log!(error, "Failed to create person from converted CV: {}", e);
             Err(Json(StandardErrorResponse::new(
-                "Failed to create collaborator directory".to_string(),
+                "FAILED_CREATE_COLLABORATOR_DIRECTORY".to_string(),
                 "PERSON_CREATE_ERROR".to_string(),
                 vec![
-                    "Try again in a few moments".to_string(),
-                    "Contact support if the problem persists".to_string(),
+                    "TRY_AGAIN_MOMENTS".to_string(),
+                    "CONTACT_SUPPORT_PERSISTS".to_string(),
                 ],
                 None,
             )))
