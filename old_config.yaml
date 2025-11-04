@@ -1,0 +1,9 @@
+# config.yaml - Environment-specific configuration
+
+# Local development
+# Production server
+production:
+  tenant_data_path: "/var/cvenom/tenant-data"  # Absolute server path
+  output_path: "/var/cvenom/output"
+  templates_path: "/opt/cvenom/templates"
+  database_path: "/var/cvenom/tenants.db"
