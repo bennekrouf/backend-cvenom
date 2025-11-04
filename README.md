@@ -1,255 +1,207 @@
-# CV Generator
+# CVenom Multi-tenant CV Generator
 
-A multi-tenant CV generator written in Rust using Typst for PDF compilation with Firebase authentication and SQLite-based tenant management.
+A Rust-based multi-tenant CV generation system with Firebase authentication and tenant isolation.
 
-## Features
+## Breaking Change: Configuration
 
-JOB_MATCHING_API_URL=http://127.0.0.1:5555 cargo run -- server
+**🚨 IMPORTANT: Config.yaml has been removed. All configuration is now via mandatory environment variables.**
 
-- **Multi-tenant**: Complete data isolation between tenants using SQLite
-- **Firebase Authentication**: Google sign-in with JWT token verification
-- **Multi-language**: English and French support
-- **Multi-template**: Choose from different CV layouts
-- **Web API**: RESTful API with full CORS support
-- **Watch mode**: Auto-recompile on file changes
-- **Profile pictures**: Upload and manage profile images
-- **Template system**: Extensible template architecture
+## Required Environment Variables
+
+The application will **crash on startup** if any of these variables are missing:
+
+```bash
+# Logging
+LOG_PATH_CVENOM="/var/log/cvenom.log"
+
+# Server
+ROCKET_PORT="4002"
+CV_SERVICE_URL="http://localhost:8080"
+
+# Storage paths
+CVENOM_TENANT_DATA_PATH="/var/cvenom/tenant-data"
+CVENOM_OUTPUT_PATH="/var/cvenom/output" 
+CVENOM_TEMPLATES_PATH="/opt/cvenom/templates"
+CVENOM_DATABASE_PATH="/var/cvenom/tenants.db"
+
+# Services
+JOB_MATCHING_API_URL="http://127.0.0.1:5555"
+SERVICE_TIMEOUT="60"
+```
 
 ## Quick Start
 
-### 1. Prerequisites
+1. **Set environment variables:**
 ```bash
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Install Typst
-cargo install typst-cli
-
-# Install dependencies
-cargo add anyhow clap --features derive rocket --features json,secrets serde --features derive tokio --features full jsonwebtoken reqwest --features json tracing tracing-subscriber --features env-filter sqlx --features runtime-tokio-rustls,sqlite,chrono,uuid chrono --features serde uuid --features v4 csv
+cp set_env_example.sh set_env.sh
+# Edit set_env.sh with your values
+source set_env.sh
 ```
 
-### 2. Initialize Database and Tenants
+2. **Initialize database:**
 ```bash
-# Create directories
-mkdir -p data output templates
-
-# Initialize the tenant database
 cargo run -- tenant init
-
-# Add tenants manually
-cargo run -- tenant add mohamed.bennekrouf@gmail.com keyteo
-
-# Check it is added
-cargo run -- tenant check mohamed.bennekrouf@gmail.com
-
-# Add a tenant keyteo and authorize all @keyteo.ch address on it 
-cargo run --release -- tenant add-domain keyteo.ch keyteo
-
-
-# OR import from CSV
-echo "email,tenant_name
-user1@company.com,company-a
-user2@startup.io,startup-b" > tenants.csv
-
-cargo run -- tenant import tenants.csv
-
-# Verify tenants
-cargo run -- tenant list
 ```
 
-### 3. Start the Server
+3. **Add tenants:**
 ```bash
-cargo run -- server
-```
-
-The server runs on `http://localhost:4002` with multi-tenant authentication.
-
-## Authentication & Authorization
-
-The system uses Firebase Authentication + SQLite tenant management:
-
-1. **Firebase Auth**: Users sign in with Google
-2. **Tenant Check**: Email must exist in SQLite `tenants` table
-3. **Data Isolation**: Each tenant gets separate data directory
-
-### User Flow
-- User signs in with Google → Gets Firebase ID token
-- Frontend sends token with API requests
-- Backend verifies token + checks tenant authorization
-- Access granted only if both succeed
-
-## CLI Usage
-
-### Tenant Management
-```bash
-# Initialize database
-cargo run -- tenant init
-
-# Add single tenant
-cargo run -- tenant add user@example.com company-name
-
-# Import from CSV file
-cargo run -- tenant import tenants.csv
-
-# List all tenants
-cargo run -- tenant list
-
-# Check if email is authorized
-cargo run -- tenant check user@example.com
-
-# Deactivate tenant
-cargo run -- tenant remove user@example.com
-```
-
-### CV Generation
-```bash
-# Generate with default template
-cargo run -- generate person-name --lang en
-
-# Generate with specific template
-cargo run -- generate person-name --lang en --template keyteo
-
-# Watch mode (auto-recompile on changes)
-cargo run -- generate person-name --lang en --watch
-
-
-# Add domain tenant for keyteo.ch
+# Add domain tenant (all @keyteo.ch emails)
 cargo run -- tenant add-domain keyteo.ch keyteo
 
-# Test it works
-cargo run -- tenant check mohamed.bennekrouf@keyteo.ch
-cargo run -- tenant check alevavasseur@keyteo.ch  
-cargo run -- tenant check anyone@keyteo.ch
-
-# List all tenants
-cargo run -- tenant list
+# Add specific email
+cargo run -- tenant add user@company.com company-name
 ```
 
-### File Management
+4. **Start server:**
 ```bash
-# Create new person directory
-cargo run -- create new-person-name
+cargo run
+```
 
-# List available persons
+## Docker Deployment
+
+1. **Set environment variables:**
+```bash
+cp docker.env .env
+# Edit .env with your values
+```
+
+2. **Build and run:**
+```bash
+docker build -t cvenom .
+docker run --env-file .env -p 4002:4002 cvenom
+```
+
+## Migration from config.yaml
+
+If you previously used config.yaml, convert your settings:
+
+**Old config.yaml:**
+```yaml
+production:
+  tenant_data_path: "/var/cvenom/tenant-data"
+  output_path: "/var/cvenom/output"
+  templates_path: "/opt/cvenom/templates"
+  database_path: "/var/cvenom/tenants.db"
+
+job_matching:
+  api_url: "http://127.0.0.1:5555"
+  timeout_seconds: 60
+```
+
+**New environment variables:**
+```bash
+export CVENOM_TENANT_DATA_PATH="/var/cvenom/tenant-data"
+export CVENOM_OUTPUT_PATH="/var/cvenom/output"
+export CVENOM_TEMPLATES_PATH="/opt/cvenom/templates"
+export CVENOM_DATABASE_PATH="/var/cvenom/tenants.db"
+export JOB_MATCHING_API_URL="http://127.0.0.1:5555"
+export SERVICE_TIMEOUT="60"
+```
+
+## Cargo Dependencies
+
+Add the following dependencies without versions:
+
+```bash
+cargo add anyhow
+cargo add async-recursion
+cargo add chrono --features serde
+cargo add csv
+cargo add graflog
+cargo add jsonwebtoken
+cargo add reqwest --features json,multipart
+cargo add rocket --features json,secrets
+cargo add serde --features derive
+cargo add serde_json
+cargo add sqlx --features runtime-tokio-rustls,sqlite,chrono,uuid
+cargo add tokio --features full
+cargo add toml
+cargo add uuid --features v4
+```
+
+## CLI Commands
+
+```bash
+# Tenant management
+cargo run -- tenant init
+cargo run -- tenant add <email> <tenant-name>
+cargo run -- tenant add-domain <domain> <tenant-name>
+cargo run -- tenant list
+cargo run -- tenant check <email>
+
+# CV generation
+cargo run -- generate <person> --lang <en|fr> --template <template>
+cargo run -- create <person-name>
 cargo run -- list
-
-# List available templates
 cargo run -- list-templates
 ```
 
 ## API Endpoints
 
-### Public Endpoints
-```bash
-GET  /api/health        # Health check
-GET  /api/templates     # List available templates
-```
+### Public
+- `GET /api/health` - Health check
+- `GET /api/templates` - List templates
 
-### Protected Endpoints (require Firebase auth + tenant registration)
-```bash
-POST /api/generate      # Generate CV PDF
-POST /api/create        # Create person directory
-POST /api/upload-picture # Upload profile picture
-GET  /api/me            # Get current user + tenant info
-```
-
-### Example API Usage
-```bash
-# Get templates (public)
-curl http://localhost:4002/api/templates
-
-# Generate CV (requires auth header)
-curl -X POST http://localhost:4002/api/generate \
-  -H "Authorization: Bearer <firebase-id-token>" \
-  -H "Content-Type: application/json" \
-  -d '{"person": "john-doe", "lang": "en", "template": "default"}' \
-  --output cv.pdf
-```
+### Protected (Firebase auth + tenant)
+- `POST /api/generate` - Generate CV PDF
+- `POST /api/create` - Create person
+- `POST /api/upload-picture` - Upload profile picture
+- `POST /api/analyze-job-fit` - LinkedIn job analysis
+- `GET /api/me` - Current user info
 
 ## Directory Structure
 
 ```
 data/
-  tenants.db            # SQLite tenant database
-  tenants/              # Tenant-isolated data
-    company-a/          # Tenant-specific directory
-      john-doe/         # Person directory
-        cv_params.toml  # Personal info
+  tenants.db              # SQLite tenant database
+  tenants/                # Tenant-isolated data
+    keyteo/               # Tenant directory
+      user@domain.com/    # User directory
+        cv_params.toml    # Personal info
         experiences_*.typ # Experience files
-        profile.png     # Profile image
-templates/
-  cv.typ               # Default template
-  cv_keyteo.typ        # Keyteo template
-  template.typ         # Base template functions
-output/                # Generated PDFs
+        profile.png       # Profile image
+templates/                # CV templates
+output/                   # Generated PDFs
 ```
 
-## Configuration
+## Environment Examples
 
-### Firebase Setup
-Update your Firebase project ID in `src/web.rs`:
-```rust
-let mut auth_config = AuthConfig::new("your-project-id".to_string());
-```
-
-### Database Location
-Default: `data/tenants.db`
-Change with: `--data-dir /path/to/data`
-
-## Available Templates
-
-- **default**: Standard CV layout
-- **keyteo**: CV with Keyteo branding and logo
-
-## Troubleshooting
-
-### Database Issues
+### Development
 ```bash
-# Check if database exists
-ls -la data/tenants.db
-
-# Re-initialize database
-rm data/tenants.db
-cargo run -- tenant init
+export LOG_PATH_CVENOM="./logs/cvenom.log"
+export ROCKET_PORT="4002"
+export CV_SERVICE_URL="http://localhost:8080"
+export CVENOM_TENANT_DATA_PATH="./data/tenants"
+export CVENOM_OUTPUT_PATH="./output"
+export CVENOM_TEMPLATES_PATH="./templates"
+export CVENOM_DATABASE_PATH="./data/tenants.db"
+export JOB_MATCHING_API_URL="http://127.0.0.1:5555"
+export SERVICE_TIMEOUT="30"
 ```
 
-### Authentication Issues
-- Verify Firebase project ID matches your setup
-- Check that user email exists in tenant table
-- Ensure Firebase ID token is valid
-
-### Permission Issues
+### Production
 ```bash
-# Fix directory permissions
-chmod 755 data
-chmod 644 data/tenants.db
+export LOG_PATH_CVENOM="/var/log/cvenom.log"
+export ROCKET_PORT="4002"
+export CV_SERVICE_URL="https://cv-service.example.com"
+export CVENOM_TENANT_DATA_PATH="/var/cvenom/tenant-data"
+export CVENOM_OUTPUT_PATH="/var/cvenom/output"
+export CVENOM_TEMPLATES_PATH="/opt/cvenom/templates"
+export CVENOM_DATABASE_PATH="/var/cvenom/tenants.db"
+export JOB_MATCHING_API_URL="https://job-matching.example.com"
+export SERVICE_TIMEOUT="60"
 ```
-
-## Development
-
-### Adding New Tenants
-```bash
-# Via CLI
-cargo run -- tenant add new-user@company.com new-company
-
-# Via CSV
-echo "new-user@company.com,new-company" >> tenants.csv
-cargo run -- tenant import tenants.csv
-```
-
-### Multi-tenant Testing
-1. Add test users to tenant database
-2. Sign in via Firebase in frontend
-3. Verify data isolation between tenants
-4. Check tenant-specific directories are created
 
 ## Security Features
 
 - Firebase JWT token verification
 - Tenant-based authorization
 - Data isolation per tenant
-- Request logging with tenant context
 - No shared data between tenants
+- Mandatory environment variable validation
 
-Built with Rust for performance and type safety, following clear error handling patterns without unwrap calls.
+## Error Handling
+
+The application uses static error handling with `Result<T, E>` types and `trace` logging throughout. No `unwrap()` calls are used for robust error handling.
+
+Built with Rust for performance and type safety.

@@ -1,7 +1,7 @@
 // src/environment.rs
 use anyhow::{Context, Result};
-use std::path::PathBuf;
 use graflog::app_log;
+use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct EnvironmentConfig {
@@ -18,61 +18,68 @@ pub struct ServiceConfig {
 }
 
 impl ServiceConfig {
-    pub fn load() -> Self {
-        Self {
-            job_matching_url: std::env::var("JOB_MATCHING_API_URL")
-                .unwrap_or_else(|_| "http://127.0.0.1:5555".to_string()),
-            timeout_seconds: std::env::var("SERVICE_TIMEOUT")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(30),
-        }
+    pub fn load() -> Result<Self> {
+        let job_matching_url = std::env::var("JOB_MATCHING_API_URL")
+            .context("JOB_MATCHING_API_URL environment variable is required")?;
+
+        let timeout_seconds = std::env::var("SERVICE_TIMEOUT")
+            .context("SERVICE_TIMEOUT environment variable is required")?
+            .parse::<u64>()
+            .context("SERVICE_TIMEOUT must be a valid number")?;
+
+        Ok(Self {
+            job_matching_url,
+            timeout_seconds,
+        })
     }
 }
 
-// Add to EnvironmentConfig
 impl EnvironmentConfig {
-    pub fn service_config(&self) -> ServiceConfig {
+    pub fn service_config(&self) -> Result<ServiceConfig> {
         ServiceConfig::load()
     }
-}
 
-impl EnvironmentConfig {
+    /// Load configuration from mandatory environment variables only
     pub fn load() -> Result<Self> {
-        let environment = std::env::var("ENVIRONMENT").unwrap_or_else(|_| "local".to_string());
+        app_log!(
+            info,
+            "Loading environment configuration from environment variables"
+        );
 
-        app_log!(info, "Loading environment configuration for: {}", environment);
+        let tenant_data_path = PathBuf::from(
+            std::env::var("CVENOM_TENANT_DATA_PATH")
+                .context("CVENOM_TENANT_DATA_PATH environment variable is required")?,
+        );
 
-        let config = match environment.as_str() {
-            "production" => Self::production_config()?,
-            _ => Self::local_config()?,
+        let output_path = PathBuf::from(
+            std::env::var("CVENOM_OUTPUT_PATH")
+                .context("CVENOM_OUTPUT_PATH environment variable is required")?,
+        );
+
+        let templates_path = PathBuf::from(
+            std::env::var("CVENOM_TEMPLATES_PATH")
+                .context("CVENOM_TEMPLATES_PATH environment variable is required")?,
+        );
+
+        let database_path = PathBuf::from(
+            std::env::var("CVENOM_DATABASE_PATH")
+                .context("CVENOM_DATABASE_PATH environment variable is required")?,
+        );
+
+        let config = Self {
+            tenant_data_path,
+            output_path,
+            templates_path,
+            database_path,
         };
 
         app_log!(info, "Configuration loaded successfully");
+        app_log!(info, "Tenant data: {}", config.tenant_data_path.display());
+        app_log!(info, "Output: {}", config.output_path.display());
+        app_log!(info, "Templates: {}", config.templates_path.display());
+        app_log!(info, "Database: {}", config.database_path.display());
+
         Ok(config)
-    }
-
-    fn production_config() -> Result<Self> {
-        Ok(Self {
-            tenant_data_path: Self::get_env_path("CVENOM_TENANT_DATA_PATH", "/app/data/tenants")?,
-            output_path: Self::get_env_path("CVENOM_OUTPUT_PATH", "/app/data/output")?,
-            templates_path: Self::get_env_path("CVENOM_TEMPLATES_PATH", "/app/templates")?,
-            database_path: Self::get_env_path("CVENOM_DATABASE_PATH", "/app/data/database.db")?,
-        })
-    }
-
-    fn local_config() -> Result<Self> {
-        Ok(Self {
-            tenant_data_path: Self::get_env_path("CVENOM_TENANT_DATA_PATH", "./data/tenants")?,
-            output_path: Self::get_env_path("CVENOM_OUTPUT_PATH", "./out")?,
-            templates_path: Self::get_env_path("CVENOM_TEMPLATES_PATH", "./templates")?,
-            database_path: Self::get_env_path("CVENOM_DATABASE_PATH", "./data/database.db")?,
-        })
-    }
-
-    fn get_env_path(env_var: &str, default: &str) -> Result<PathBuf> {
-        let path_str = std::env::var(env_var).unwrap_or_else(|_| default.to_string());
-        Ok(PathBuf::from(path_str))
     }
 
     pub async fn ensure_directories(&self) -> Result<()> {
@@ -108,3 +115,4 @@ impl EnvironmentConfig {
         Ok(())
     }
 }
+
