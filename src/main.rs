@@ -7,14 +7,14 @@ use graflog::init_logging;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    if env::var("LOG_PATH_CVENOM").is_err() {
-        eprintln!("Error: LOG_PATH_CVENOM environment variable is required");
-        std::process::exit(1);
-    }
+    // if env::var("LOG_PATH_CVENOM").is_err() {
+    //     eprintln!("Error: LOG_PATH_CVENOM environment variable is required");
+    //     std::process::exit(1);
+    // }
 
     let log_path =
         env::var("LOG_PATH_CVENOM").unwrap_or_else(|_| "/var/log/cvenom.log".to_string());
-    init_logging!(&log_path, "cvenom", "backend", "trace");
+    init_logging!(&log_path, "cvenom", "backend", "info");
 
     let port = std::env::var("ROCKET_PORT")
         .map_err(|_| anyhow::anyhow!("ROCKET_PORT environment variable not set"))?
