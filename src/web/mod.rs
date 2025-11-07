@@ -7,10 +7,10 @@ pub mod types;
 pub use handlers::*;
 pub use types::*;
 
-use graflog::app_log;
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::database::DatabaseConfig;
 use anyhow::Result;
+use graflog::app_log;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::form::Form;
 use rocket::http::{Header, Status};
@@ -85,6 +85,16 @@ pub async fn analyze_job_fit(
 ) -> Result<Json<TextResponse>, Json<StandardErrorResponse>> {
     // Changed return type
     handlers::analyze_job_fit_handler(request, auth, config, db_config).await
+}
+
+#[rocket::put("/collaborators/<old_name>/rename", data = "<request>")]
+pub async fn rename_collaborator_handler(
+    old_name: String,
+    request: Json<StandardRequest<RenameCollaboratorRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    handlers::rename_collaborator_handler(old_name, request, auth, config).await
 }
 
 #[post("/generate", data = "<request>")]
@@ -286,6 +296,7 @@ pub async fn start_web_server(
                 get_tenant_file_content,
                 save_tenant_file_content,
                 options_handler,
+                rename_collaborator_handler,
             ],
         )
         .launch()

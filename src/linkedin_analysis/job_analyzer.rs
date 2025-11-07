@@ -10,7 +10,7 @@ use tokio::fs;
 pub struct JobAnalyzer {
     client: Client,
     job_matching_url: String,
-    timeout_seconds: u64,
+    // timeout_seconds: u64,
 }
 
 impl JobAnalyzer {
@@ -39,7 +39,7 @@ impl JobAnalyzer {
         Ok(Self {
             client,
             job_matching_url,
-            timeout_seconds,
+            // timeout_seconds,
         })
     }
 

@@ -29,6 +29,12 @@ pub struct ErrorResponse {
     pub suggestions: Vec<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct RenameCollaboratorRequest {
+    pub new_name: String,
+}
+
 // Keep existing response types for v1 compatibility
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
@@ -357,4 +363,3 @@ impl StandardErrorResponse {
         }
     }
 }
-

@@ -8,8 +8,7 @@ pub(crate) struct JobMatchApiRequest {
 }
 
 // Error response format from the job matching API
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub(crate) struct JobMatchApiError {
-    pub error: String,
-}
-
+// #[derive(Debug, Clone, Serialize, Deserialize)]
+// pub(crate) struct JobMatchApiError {
+//     pub error: String,
+// }

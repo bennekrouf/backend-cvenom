@@ -1,6 +1,4 @@
 // src/web/handlers/person_handlers.rs - Updated with new tenant structure
-
-use graflog::app_log;
 use crate::auth::AuthenticatedUser;
 use crate::core::FsOps;
 use crate::database::{get_tenant_folder_path, DatabaseConfig};
@@ -8,6 +6,9 @@ use crate::web::types::{
     ActionResponse, CreatePersonRequest, DeletePersonRequest, StandardErrorResponse,
     StandardRequest, UploadForm, WithConversationId,
 };
+use crate::web::RenameCollaboratorRequest;
+use crate::web::ServerConfig;
+use graflog::app_log;
 use rocket::form::Form;
 use rocket::fs::NamedFile;
 use rocket::serde::json::Json;
@@ -81,6 +82,132 @@ pub async fn create_person_handler(
     Ok(Json(ActionResponse::success(
         format!("Person '{}' created successfully", request.data.person),
         "created".to_string(),
+        conversation_id,
+    )))
+}
+
+pub async fn rename_collaborator_handler(
+    old_name: String,
+    request: Json<StandardRequest<RenameCollaboratorRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let user = auth.user();
+    let tenant = auth.tenant();
+    let conversation_id = request.conversation_id();
+
+    // 1. Validate inputs
+    if old_name.trim().is_empty() {
+        return Err(Json(StandardErrorResponse::new(
+            "Old collaborator name cannot be empty".to_string(),
+            "INVALID_OLD_NAME".to_string(),
+            vec!["Provide a valid collaborator name".to_string()],
+            conversation_id,
+        )));
+    }
+
+    if request.data.new_name.trim().is_empty() {
+        return Err(Json(StandardErrorResponse::new(
+            "New collaborator name cannot be empty".to_string(),
+            "INVALID_NEW_NAME".to_string(),
+            vec!["Provide a valid new collaborator name".to_string()],
+            conversation_id,
+        )));
+    }
+
+    // DON'T normalize the old_name - use it as-is from the URL
+    let normalized_new_name = FsOps::normalize_person_name(&request.data.new_name);
+
+    if old_name == normalized_new_name {
+        return Err(Json(StandardErrorResponse::new(
+            "Old and new names are the same".to_string(),
+            "NAMES_IDENTICAL".to_string(),
+            vec!["Choose a different name".to_string()],
+            conversation_id,
+        )));
+    }
+
+    // 2. Check permissions
+    let tenant_data_dir = get_tenant_folder_path(&user.email, &config.data_dir);
+
+    if let Err(e) = FsOps::ensure_dir_exists(&tenant_data_dir).await {
+        app_log!(error, "Failed to access tenant directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to access tenant data directory".to_string(),
+            "TENANT_DIR_ERROR".to_string(),
+            vec!["Contact system administrator".to_string()],
+            conversation_id,
+        )));
+    }
+
+    let old_person_dir = tenant_data_dir.join(&old_name); // Use original old_name
+    let new_person_dir = tenant_data_dir.join(&normalized_new_name);
+
+    if !old_person_dir.exists() {
+        return Err(Json(StandardErrorResponse::new(
+            format!("Collaborator '{}' not found", old_name),
+            "COLLABORATOR_NOT_FOUND".to_string(),
+            vec![
+                "Check the collaborator name spelling".to_string(),
+                "Use 'Show collaborators' to see available persons".to_string(),
+            ],
+            conversation_id,
+        )));
+    }
+
+    // 3. Check if new name exists
+    if new_person_dir.exists() {
+        return Err(Json(StandardErrorResponse::new(
+            format!("Collaborator '{}' already exists", request.data.new_name),
+            "COLLABORATOR_ALREADY_EXISTS".to_string(),
+            vec![
+                "Choose a different name".to_string(),
+                "Delete the existing collaborator first if needed".to_string(),
+            ],
+            conversation_id,
+        )));
+    }
+
+    app_log!(
+        info,
+        "User {} (tenant: {}) renaming collaborator {} to {}",
+        user.email,
+        tenant.tenant_name,
+        old_name,
+        normalized_new_name
+    );
+
+    // Perform the rename operation
+    if let Err(e) = tokio::fs::rename(&old_person_dir, &new_person_dir).await {
+        app_log!(
+            error,
+            "Failed to rename directory from {} to {}: {}",
+            old_person_dir.display(),
+            new_person_dir.display(),
+            e
+        );
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to rename collaborator directory".to_string(),
+            "RENAME_ERROR".to_string(),
+            vec!["Try again or contact support".to_string()],
+            conversation_id,
+        )));
+    }
+
+    app_log!(
+        info,
+        "Successfully renamed collaborator {} to {} for tenant: {}",
+        old_name,
+        request.data.new_name,
+        tenant.tenant_name
+    );
+
+    Ok(Json(ActionResponse::success(
+        format!(
+            "Collaborator '{}' has been successfully renamed to '{}'",
+            old_name, request.data.new_name
+        ),
+        "COLLABORATOR_RENAMED".to_string(),
         conversation_id,
     )))
 }
