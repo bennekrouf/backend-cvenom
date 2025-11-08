@@ -5,6 +5,7 @@ pub mod services;
 pub mod types;
 
 pub use handlers::*;
+use rocket::config::{Config, LogLevel};
 pub use types::*;
 
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
@@ -271,7 +272,13 @@ pub async fn start_web_server(
     );
     app_log!(info, "Attempting to bind to port: {}", port);
 
-    let _rocket = rocket::build()
+    let config = Config {
+        port,
+        log_level: LogLevel::Off,
+        ..Config::default()
+    };
+
+    let _rocket = rocket::custom(config)
         .configure(rocket::Config::figment().merge(("port", port)))
         .attach(Cors)
         .manage(server_config)
