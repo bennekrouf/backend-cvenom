@@ -415,6 +415,7 @@ dependencies = [
  "csv",
  "graflog",
  "jsonwebtoken",
+ "percent-encoding",
  "reqwest",
  "rocket",
  "serde",
@@ -423,6 +424,7 @@ dependencies = [
  "sqlx",
  "tokio",
  "toml 0.9.5",
+ "tower-http",
  "uuid",
 ]
 

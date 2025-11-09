@@ -41,12 +41,7 @@ impl Fairing for Cors {
     }
 
     async fn on_response<'r>(&self, request: &'r Request<'_>, response: &mut Response<'r>) {
-        let origin = request
-            .headers()
-            .get_one("Origin")
-            .unwrap_or("https://studio.cvenom.com");
-
-        app_log!(info, "CORS: Processing response for origin: {}", origin);
+        let origin = request.headers().get_one("Origin");
 
         let allowed_origins = [
             "https://studio.cvenom.com",
@@ -54,8 +49,10 @@ impl Fairing for Cors {
             "http://127.0.0.1:4001",
         ];
 
-        if allowed_origins.contains(&origin) {
-            response.set_header(Header::new("Access-Control-Allow-Origin", origin));
+        if let Some(origin) = origin {
+            if allowed_origins.contains(&origin) {
+                response.set_header(Header::new("Access-Control-Allow-Origin", origin));
+            }
         } else {
             response.set_header(Header::new(
                 "Access-Control-Allow-Origin",
@@ -63,16 +60,15 @@ impl Fairing for Cors {
             ));
         }
 
+        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         response.set_header(Header::new(
-            "Access-Control-Allow-Headers", 
-            "authorization, content-type, referer, sec-ch-ua, sec-ch-ua-mobile, sec-ch-ua-platform, user-agent"
+            "Access-Control-Allow-Headers",
+            "authorization, content-type, accept, origin, x-requested-with",
         ));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",
-            "POST, GET, PATCH, OPTIONS, DELETE, PUT",
+            "GET, POST, PUT, DELETE, OPTIONS",
         ));
-        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
-        response.set_header(Header::new("Access-Control-Max-Age", "86400"));
     }
 }
 

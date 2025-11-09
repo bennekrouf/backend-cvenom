@@ -1,12 +1,24 @@
 // src/generator.rs
 use crate::config::CvConfig;
+use chrono::Utc;
+
 use crate::core::TemplateEngine;
 use crate::template_processor::TemplateProcessor;
 use crate::workspace::WorkspaceManager;
 use anyhow::{Context, Result};
 use graflog::app_log;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use std::path::PathBuf;
 use std::{fs, process::Command};
+
+fn sanitize_filename(input: &str) -> String {
+    utf8_percent_encode(input, NON_ALPHANUMERIC)
+        .to_string()
+        .replace("%20", "_")
+        .chars()
+        .filter(|c| c.is_alphanumeric() || *c == '_')
+        .collect()
+}
 
 pub struct CvGenerator {
     pub config: CvConfig,
@@ -63,7 +75,14 @@ impl CvGenerator {
         Ok(output_path)
     }
 
-    pub async fn generate_pdf_data(&self) -> Result<Vec<u8>> {
+    pub async fn generate_pdf_data(&self) -> Result<(Vec<u8>, String)> {
+        // Generate filename using available data
+        let filename = format!(
+            "{}_CV_{}.pdf",
+            sanitize_filename(&self.config.person_name),
+            Utc::now().format("%Y")
+        );
+
         self.setup_output_dir()?;
 
         let workspace = WorkspaceManager::new(&self.config, &self.template_manager);
@@ -74,7 +93,7 @@ impl CvGenerator {
 
         workspace.cleanup_workspace()?;
 
-        Ok(pdf_data)
+        Ok((pdf_data, filename))
     }
 
     pub async fn watch(&self) -> Result<()> {

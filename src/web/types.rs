@@ -8,14 +8,42 @@ use rocket::serde::{Deserialize, Serialize};
 use rocket::{Request, Response};
 use std::path::PathBuf;
 
-pub struct PdfResponse(pub Vec<u8>);
+pub struct PdfResponse {
+    pub data: Vec<u8>,
+    pub filename: Option<String>,
+}
+
+impl PdfResponse {
+    pub fn new(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            filename: None,
+        }
+    }
+
+    pub fn with_filename(data: Vec<u8>, filename: String) -> Self {
+        Self {
+            data,
+            filename: Some(filename),
+        }
+    }
+}
 
 impl<'r> Responder<'r, 'static> for PdfResponse {
     fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
-        Response::build()
+        let mut binding = Response::build();
+        let mut response = binding
             .header(ContentType::PDF)
-            .sized_body(self.0.len(), std::io::Cursor::new(self.0))
-            .ok()
+            .sized_body(self.data.len(), std::io::Cursor::new(self.data));
+
+        if let Some(filename) = self.filename {
+            response = response.raw_header(
+                "Content-Disposition",
+                format!("attachment; filename=\"{}\"", filename),
+            );
+        }
+
+        response.ok()
     }
 }
 

@@ -161,14 +161,15 @@ pub async fn generate_cv_handler(
         Ok(generator) => {
             app_log!(info, "CV generator created successfully");
             match generator.generate_pdf_data().await {
-                Ok(pdf_data) => {
+                Ok((pdf_data, filename)) => {
                     app_log!(
                         info,
-                        "CV generation completed successfully, person: {}, pdf_size: {}",
-                        normalized_person,
-                        pdf_data.len()
-                    );
-                    Ok(PdfResponse(pdf_data))
+                            "CV generation completed successfully, person: {}, pdf_size: {}, filename: {}",
+                            normalized_person,
+                            pdf_data.len(),
+                            filename
+                        );
+                    Ok(PdfResponse::with_filename(pdf_data, filename))
                 }
                 Err(e) => {
                     app_log!(
@@ -438,4 +439,3 @@ fn normalize_template(template: Option<&str>, template_manager: &TemplateEngine)
 
     "default".to_string()
 }
-
