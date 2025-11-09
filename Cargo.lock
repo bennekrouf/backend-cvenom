@@ -796,9 +796,9 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "graflog"
-version = "1.4.2"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56b80c433a6bb7e125d59a49f4ea6f4afca2f584314fbf10c6cfa1d5a0246694"
+checksum = "001e51dbf1e2c6f55883f78428a8601458958a42389f001b2254377c16082487"
 dependencies = [
  "chrono",
  "tracing",
