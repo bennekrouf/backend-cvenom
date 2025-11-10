@@ -139,15 +139,15 @@ cargo run -- list-templates
 ## API Endpoints
 
 ### Public
-- `GET /api/health` - Health check
-- `GET /api/templates` - List templates
+- `GET /health` - Health check
+- `GET /templates` - List templates
 
 ### Protected (Firebase auth + tenant)
-- `POST /api/generate` - Generate CV PDF
-- `POST /api/create` - Create person
-- `POST /api/upload-picture` - Upload profile picture
-- `POST /api/analyze-job-fit` - LinkedIn job analysis
-- `GET /api/me` - Current user info
+- `POST /generate` - Generate CV PDF
+- `POST /create` - Create person
+- `POST /upload-picture` - Upload profile picture
+- `POST /analyze-job-fit` - LinkedIn job analysis
+- `GET /me` - Current user info
 
 ## Directory Structure
 

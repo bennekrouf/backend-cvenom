@@ -31,7 +31,7 @@ impl ServiceClient {
     /// Upload CV file for conversion
     pub async fn upload_cv(&self, file_path: &Path, file_name: &str) -> Result<String> {
         let content_type = self.get_content_type(file_name)?;
-        let url = format!("{}/api/v1/upload-cv", self.base_url);
+        let url = format!("{}/v1/upload-cv", self.base_url);
 
         let file_content = tokio::fs::read(file_path)
             .await

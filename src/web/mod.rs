@@ -297,9 +297,9 @@ pub async fn start_web_server(
         .manage(auth_config)
         .manage(db_config)
         .manage(cv_service_url)
-        .register("/api", catchers![bad_request, internal_error])
+        .register("/", catchers![bad_request, internal_error])
         .mount(
-            "/api",
+            "/",
             routes![
                 analyze_job_fit,
                 generate_cv,
