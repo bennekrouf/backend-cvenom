@@ -1,6 +1,5 @@
 // src/web/file_handlers.rs - Updated for new tenant structure
 
-use graflog::app_log;
 use crate::auth::AuthenticatedUser;
 use crate::core::FsOps;
 use crate::database::{get_tenant_folder_path, DatabaseConfig};
@@ -8,6 +7,7 @@ use crate::web::types::{
     ActionResponse, SaveFileRequest, StandardErrorResponse, StandardRequest, WithConversationId,
 };
 use async_recursion::async_recursion;
+use graflog::app_log;
 use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::State;
@@ -32,18 +32,18 @@ impl AuthenticatedUser {
         FsOps::ensure_dir_exists(&person_dir).await?;
 
         // Create default files if they don't exist
-        let cv_params_path = person_dir.join("cv_params.toml");
-        if !cv_params_path.exists() {
-            // Use core TemplateEngine to create person files
-            let template_engine = crate::core::TemplateEngine::new(config.templates_dir.clone())?;
-            template_engine
-                .create_person_from_templates(
-                    &normalized_person,
-                    &tenant_data_dir,
-                    Some(person_name),
-                )
-                .await?;
-        }
+        // let cv_params_path = person_dir.join("cv_params.toml");
+        // if !cv_params_path.exists() {
+        //     // Use core TemplateEngine to create person files
+        //     let template_engine = crate::core::TemplateEngine::new(config.templates_dir.clone())?;
+        //     template_engine
+        //         .create_person_from_templates(
+        //             &normalized_person,
+        //             &tenant_data_dir,
+        //             Some(person_name),
+        //         )
+        //         .await?;
+        // }
 
         Ok(())
     }
@@ -215,12 +215,12 @@ pub async fn save_tenant_file_content_handler(
 pub async fn get_tenant_files_handler(
     auth: AuthenticatedUser,
     config: &State<crate::web::types::ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    // db_config: &State<DatabaseConfig>,
 ) -> Result<Json<serde_json::Value>, Status> {
     // Auto-create person if doesn't exist
-    if let Err(e) = auth.ensure_person_exists(config, db_config).await {
-        app_log!(error, "Failed to ensure person exists: {}", e);
-    }
+    // if let Err(e) = auth.ensure_person_exists(config, db_config).await {
+    //     app_log!(error, "Failed to ensure person exists: {}", e);
+    // }
 
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
@@ -287,4 +287,3 @@ pub async fn get_tenant_file_tree(
     let tenant_path = get_tenant_folder_path(email, tenant_data_path);
     build_file_tree(&tenant_path).await
 }
-

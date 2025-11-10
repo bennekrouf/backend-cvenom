@@ -193,10 +193,9 @@ pub async fn save_tenant_file_content(
 pub async fn get_tenant_files(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
 ) -> Result<Json<serde_json::Value>, Status> {
     // Changed return type
-    file_handlers::get_tenant_files_handler(auth, config, db_config).await
+    file_handlers::get_tenant_files_handler(auth, config).await
 }
 
 #[options("/files/tree")]

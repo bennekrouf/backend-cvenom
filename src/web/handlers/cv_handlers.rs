@@ -277,12 +277,12 @@ pub async fn upload_and_convert_cv_handler(
 
         return Err(Json(StandardErrorResponse::new(
             format!(
-                "Only PDF and Word documents (.docx) are supported. Received content type: {}",
+                "Only Word documents (.docx) are supported. Received content type: {}",
                 received_type
             ),
             "INVALID_FORMAT".to_string(),
             vec![
-                "Upload a PDF file (.pdf)".to_string(),
+                // "Upload a PDF file (.pdf)".to_string(),
                 "Upload a Word document (.docx)".to_string(),
             ],
             None,

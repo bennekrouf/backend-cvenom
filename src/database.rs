@@ -1,7 +1,7 @@
 // src/database.rs
-use graflog::app_log;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
+use graflog::app_log;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use std::path::PathBuf;
@@ -365,18 +365,13 @@ impl<'a> TenantService<'a> {
         base_data_dir: &PathBuf,
         tenant: &Tenant,
     ) -> Result<PathBuf> {
-        let tenant_dir = self.get_tenant_data_dir(base_data_dir, tenant);
+        let tenant_data_dir = base_data_dir
+            .join("tenants")
+            .join("independent")
+            .join(&tenant.tenant_name);
 
-        if !tenant_dir.exists() {
-            tokio::fs::create_dir_all(&tenant_dir).await?;
-            app_log!(
-                info,
-                "Created tenant data directory: {}",
-                tenant_dir.display()
-            );
-        }
-
-        Ok(tenant_dir)
+        tokio::fs::create_dir_all(&tenant_data_dir).await?;
+        Ok(tenant_data_dir)
     }
 
     /// Create default person structure for new tenant users

@@ -1,13 +1,14 @@
 // src/auth.rs
 use crate::database::{DatabaseConfig, Tenant, TenantService};
+use crate::web::ServerConfig;
 use anyhow::Result;
+use graflog::app_log;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use rocket::http::Status;
 use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use graflog::app_log;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FirebaseUser {
@@ -92,6 +93,22 @@ impl AuthenticatedUser {
     pub fn tenant_name(&self) -> &str {
         &self.tenant.tenant_name
     }
+
+    pub async fn ensure_tenant_exists(
+        &self,
+        config: &ServerConfig,
+        db_config: &DatabaseConfig,
+    ) -> Result<(), anyhow::Error> {
+        let pool = db_config.pool()?;
+        let tenant_service = TenantService::new(pool);
+
+        // Only ensure tenant directory exists, don't create default files
+        tenant_service
+            .ensure_tenant_data_dir(&config.data_dir, &self.tenant)
+            .await?;
+
+        Ok(())
+    }
 }
 
 #[rocket::async_trait]
@@ -155,17 +172,21 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         {
             Ok(tenant) => tenant,
             Err(e) => {
-                app_log!(error, 
+                app_log!(
+                    error,
                     "Failed to get or create tenant for {}: {}",
-                    firebase_user.email, e
+                    firebase_user.email,
+                    e
                 );
                 return Outcome::Error((Status::InternalServerError, AuthError::DatabaseError));
             }
         };
 
-        app_log!(info, 
+        app_log!(
+            info,
             "User {} authenticated for tenant: {}",
-            firebase_user.email, tenant.tenant_name
+            firebase_user.email,
+            tenant.tenant_name
         );
 
         Outcome::Success(AuthenticatedUser {
