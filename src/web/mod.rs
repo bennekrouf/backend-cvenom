@@ -78,7 +78,6 @@ impl Fairing for Cors {
     }
 }
 
-// Standard API Routes (clean, no v1/v2 confusion)
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit(
     request: Json<StandardRequest<crate::linkedin_analysis::JobAnalysisRequest>>,

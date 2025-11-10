@@ -2,10 +2,10 @@
 //! Unified HTTP service client - eliminates duplicate HTTP client code
 
 use anyhow::{Context, Result};
+use graflog::app_log;
 use reqwest::multipart::{Form, Part};
 use std::path::Path;
 use std::time::Duration;
-use graflog::app_log;
 
 pub struct ServiceClient {
     client: reqwest::Client,
@@ -31,7 +31,7 @@ impl ServiceClient {
     /// Upload CV file for conversion
     pub async fn upload_cv(&self, file_path: &Path, file_name: &str) -> Result<String> {
         let content_type = self.get_content_type(file_name)?;
-        let url = format!("{}/v1/upload-cv", self.base_url);
+        let url = format!("{}/upload-cv", self.base_url);
 
         let file_content = tokio::fs::read(file_path)
             .await

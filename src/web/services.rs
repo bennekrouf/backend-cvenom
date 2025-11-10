@@ -26,7 +26,7 @@ impl CvConversionService {
             .context("Failed to load service configuration")?;
 
         Ok(Self {
-            service_url: service_config.job_matching_url + "/v1/upload-cv",
+            service_url: service_config.job_matching_url + "/upload-cv",
             timeout_seconds: service_config.timeout_seconds,
         })
     }

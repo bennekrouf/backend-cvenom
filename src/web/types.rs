@@ -47,7 +47,6 @@ impl<'r> Responder<'r, 'static> for PdfResponse {
     }
 }
 
-// Keep existing ErrorResponse for v1 compatibility
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct ErrorResponse {
@@ -63,7 +62,6 @@ pub struct RenameCollaboratorRequest {
     pub new_name: String,
 }
 
-// Keep existing response types for v1 compatibility
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct ValidationError {
