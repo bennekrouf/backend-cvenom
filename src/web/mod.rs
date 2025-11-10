@@ -14,6 +14,7 @@ use anyhow::Result;
 use graflog::app_log;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::form::Form;
+use rocket::http::Method;
 use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
 use rocket::{catchers, get, options, post, routes, Request, Response, State};
@@ -69,6 +70,11 @@ impl Fairing for Cors {
             "Access-Control-Allow-Methods",
             "GET, POST, PUT, DELETE, OPTIONS",
         ));
+
+        // Ensure OPTIONS requests always return 200
+        if request.method() == Method::Options {
+            response.set_status(Status::Ok);
+        }
     }
 }
 
@@ -193,6 +199,16 @@ pub async fn get_tenant_files(
     file_handlers::get_tenant_files_handler(auth, config, db_config).await
 }
 
+#[options("/files/tree")]
+pub async fn options_files_tree() -> Status {
+    Status::Ok
+}
+
+#[options("/files/<_..>")]
+pub async fn options_files() -> Status {
+    Status::Ok
+}
+
 #[options("/<_..>")]
 pub async fn options_handler() -> Status {
     Status::Ok
@@ -298,6 +314,8 @@ pub async fn start_web_server(
                 get_tenant_files,
                 get_tenant_file_content,
                 save_tenant_file_content,
+                options_files_tree,
+                options_files,
                 options_handler,
                 rename_collaborator_handler,
             ],
