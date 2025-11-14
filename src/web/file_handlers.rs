@@ -1,8 +1,8 @@
 // src/web/file_handlers.rs - Updated for new tenant structure
 
 use crate::auth::AuthenticatedUser;
+use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::FsOps;
-use crate::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::web::types::{
     ActionResponse, SaveFileRequest, StandardErrorResponse, StandardRequest, WithConversationId,
 };

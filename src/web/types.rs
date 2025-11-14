@@ -62,6 +62,17 @@ pub struct RenameCollaboratorRequest {
     pub new_name: String,
 }
 
+#[derive(serde::Deserialize)]
+pub struct TranslateCvRequest {
+    pub target_lang: Option<String>,
+}
+
+#[derive(serde::Deserialize)]
+pub struct OptimizeCvRequest {
+    pub cv_json: String,
+    pub job_url: String,
+}
+
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct ValidationError {

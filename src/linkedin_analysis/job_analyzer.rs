@@ -10,7 +10,6 @@ use tokio::fs;
 pub struct JobAnalyzer {
     client: Client,
     job_matching_url: String,
-    // timeout_seconds: u64,
 }
 
 impl JobAnalyzer {
@@ -25,7 +24,8 @@ impl JobAnalyzer {
             .context("SERVICE_TIMEOUT must be a valid number")?;
 
         let client = Client::builder()
-            .timeout(std::time::Duration::from_secs(timeout_seconds))
+            // .timeout(std::time::Duration::from_secs(timeout_seconds))
+            .timeout(std::time::Duration::from_secs(400))
             .build()
             .context("Failed to create HTTP client")?;
 
@@ -39,7 +39,6 @@ impl JobAnalyzer {
         Ok(Self {
             client,
             job_matching_url,
-            // timeout_seconds,
         })
     }
 
@@ -161,7 +160,7 @@ impl JobAnalyzer {
         let experiences_en = person_dir.join("experiences_en.typ");
         let experiences_fr = person_dir.join("experiences_fr.typ");
 
-        let experiences = if experiences_en.exists() {
+        let work_experience = if experiences_en.exists() {
             fs::read_to_string(&experiences_en).await?
         } else if experiences_fr.exists() {
             fs::read_to_string(&experiences_fr).await?
@@ -169,11 +168,11 @@ impl JobAnalyzer {
             return Err(anyhow::anyhow!("No experience files found"));
         };
 
-        Ok(experiences)
+        Ok(work_experience)
     }
 
     /// Create JSON representation of CV data
-    async fn create_cv_json(&self, person_dir: &PathBuf, experiences: &str) -> Result<String> {
+    async fn create_cv_json(&self, person_dir: &PathBuf, work_experience: &str) -> Result<String> {
         let cv_params_path = person_dir.join("cv_params.toml");
         let cv_params = if cv_params_path.exists() {
             fs::read_to_string(&cv_params_path).await?
@@ -183,7 +182,7 @@ impl JobAnalyzer {
 
         let cv_data = serde_json::json!({
             "cv_params": cv_params,
-            "experiences": experiences,
+            "work_experience": work_experience,
             "person_dir": person_dir.display().to_string()
         });
 

@@ -1,11 +1,15 @@
 // src/core/template_engine.rs
-//! Unified template processing engine - consolidates template_system and template_processor
+//! Unified template processing engine - consolidates all template functionality
+
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::core::FsOps;
+use crate::types::response::ConversionResponse;
 use graflog::app_log;
+
+// ===== Template Models =====
 
 #[derive(Debug, Clone)]
 pub struct TemplateInfo {
@@ -20,7 +24,13 @@ pub struct TemplateManifest {
     pub description: Option<String>,
     pub author: Option<String>,
     pub version: Option<String>,
+    pub main_file: Option<String>,
+    pub dependencies: Option<Vec<String>>,
+    pub features: Option<Vec<String>>,
+    pub languages: Option<Vec<String>>,
 }
+
+// ===== Main Template Engine =====
 
 pub struct TemplateEngine {
     templates_dir: PathBuf,
@@ -65,7 +75,15 @@ impl TemplateEngine {
             if path.is_dir() {
                 if let Some(template_name) = path.file_name().and_then(|n| n.to_str()) {
                     match self.load_template_info(template_name, &path) {
-                        Ok(template) => self.templates.push(template),
+                        Ok(template) => {
+                            app_log!(
+                                trace,
+                                "Loaded template: {} from {}",
+                                template.id,
+                                template.path.display()
+                            );
+                            self.templates.push(template);
+                        }
                         Err(e) => {
                             app_log!(warn, "Failed to load template {}: {}", template_name, e)
                         }
@@ -93,6 +111,10 @@ impl TemplateEngine {
                 description: None,
                 author: None,
                 version: None,
+                main_file: None,
+                dependencies: None,
+                features: None,
+                languages: None,
             }
         };
 
@@ -118,15 +140,36 @@ impl TemplateEngine {
         self.get_template(template_id).is_some()
     }
 
-    /// Process template variables in content
+    /// Get templates directory
+    pub fn templates_dir(&self) -> &PathBuf {
+        &self.templates_dir
+    }
+
+    // ===== Variable Processing =====
+
+    /// Process template variables in content (supports both {{var}} and ${var} syntax)
     pub fn process_variables(content: &str, variables: &HashMap<String, String>) -> String {
         let mut result = content.to_string();
         for (key, value) in variables {
-            let placeholder = format!("${{{}}}", key);
-            result = result.replace(&placeholder, value);
+            // Support both syntaxes for backward compatibility
+            let placeholder_mustache = format!("{{{{{}}}}}", key);
+            let placeholder_shell = format!("${{{}}}", key);
+            result = result.replace(&placeholder_mustache, value);
+            result = result.replace(&placeholder_shell, value);
         }
         result
     }
+
+    /// Process a template string with variables
+    pub fn process_template(
+        &self,
+        template_content: &str,
+        variables: &HashMap<String, String>,
+    ) -> String {
+        Self::process_variables(template_content, variables)
+    }
+
+    // ===== Template Workspace Management =====
 
     /// Prepare template workspace by copying template files
     pub async fn prepare_template_workspace(
@@ -134,13 +177,13 @@ impl TemplateEngine {
         template_id: &str,
         workspace_dir: &Path,
     ) -> Result<()> {
-        app_log!(info, "Looking for template: '{}'", template_id);
+        app_log!(trace, "Looking for template: '{}'", template_id);
         app_log!(
-            info,
+            trace,
             "Templates directory: {}",
             self.templates_dir.display()
         );
-        app_log!(info, "Available templates: {:?}", self.list_templates());
+        app_log!(trace, "Available templates: {:?}", self.list_templates());
 
         let template = self.get_template(template_id).ok_or_else(|| {
             anyhow::anyhow!(
@@ -155,17 +198,17 @@ impl TemplateEngine {
 
         // Copy all template files to workspace
         app_log!(
-            info,
+            trace,
             "Reading template files from: {}",
             template.path.display()
         );
 
         let mut entries = tokio::fs::read_dir(&template.path).await.with_context(|| {
-    format!(
-        "Failed to read template directory: {}. Check if directory exists and has proper permissions.",
-        template.path.display()
-    )
-})?;
+            format!(
+                "Failed to read template directory: {}. Check if directory exists and has proper permissions.",
+                template.path.display()
+            )
+        })?;
 
         while let Some(entry) = entries.next_entry().await? {
             let src_path = entry.path();
@@ -180,7 +223,7 @@ impl TemplateEngine {
         }
 
         app_log!(
-            info,
+            trace,
             "Prepared template workspace: {} -> {}",
             template_id,
             workspace_dir.display()
@@ -188,8 +231,21 @@ impl TemplateEngine {
         Ok(())
     }
 
-    /// Create person from templates
-    pub async fn create_person_from_templates(
+    // ===== Person Creation Functions =====
+
+    /// Create person from templates (legacy compatibility)
+    pub fn create_person_from_templates(
+        &self,
+        person_name: &str,
+        data_dir: &PathBuf,
+        display_name: Option<&str>,
+    ) -> Result<()> {
+        let rt = tokio::runtime::Handle::current();
+        rt.block_on(self.create_person_from_templates_async(person_name, data_dir, display_name))
+    }
+
+    /// Create person from templates (async version)
+    pub async fn create_person_from_templates_async(
         &self,
         person_name: &str,
         data_dir: &Path,
@@ -216,36 +272,96 @@ impl TemplateEngine {
         Ok(())
     }
 
-    /// Create person with typst content
+    /// Create person with typst content and toml config from CV import service
     pub async fn create_person_with_typst_content(
         &self,
         person_name: &str,
-        typst_content: &str,
+        conversion_response: &str,
         data_dir: &Path,
     ) -> Result<()> {
-        let person_dir = data_dir.join(person_name);
-        FsOps::ensure_dir_exists(&person_dir).await?;
+        app_log!(
+            info,
+            "Creating person '{}' with CV import data",
+            person_name
+        );
 
-        // Create cv_params.toml using template
-        self.create_cv_params(&person_dir, person_name, Some(person_name))
-            .await?;
-
-        // Create experiences_en.typ with the converted Typst content
-        FsOps::write_file_safe(&person_dir.join("experiences_en.typ"), typst_content).await?;
-
-        // Create experiences_fr.typ with default template
-        self.create_experiences_fr(&person_dir).await?;
-
-        // Create README
-        self.create_readme(&person_dir, person_name).await?;
+        // Parse the JSON response
+        let response: ConversionResponse =
+            serde_json::from_str(conversion_response).with_context(|| {
+                format!(
+                    "Failed to parse conversion response JSON for person '{}'",
+                    person_name
+                )
+            })?;
 
         app_log!(
             info,
-            "Successfully created person with typst content: {}",
+            "Successfully parsed CV import response for '{}'",
+            person_name
+        );
+
+        let person_dir = data_dir.join(person_name);
+        FsOps::ensure_dir_exists(&person_dir)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to create person directory: {}",
+                    person_dir.display()
+                )
+            })?;
+
+        app_log!(trace, "Created directory: {}", person_dir.display());
+
+        // Save the TOML config as cv_params.toml
+        FsOps::write_file_safe(&person_dir.join("cv_params.toml"), &response.toml_content)
+            .await
+            .with_context(|| {
+                format!(
+                    "Failed to write cv_params.toml for person '{}'",
+                    person_name
+                )
+            })?;
+
+        // Save the English Typst content as experiences_en.typ
+        FsOps::write_file_safe(
+            &person_dir.join("experiences_en.typ"),
+            &response.typst_content,
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to write experiences_en.typ for person '{}'",
+                person_name
+            )
+        })?;
+
+        // Save the French Typst content as experiences_fr.typ
+        FsOps::write_file_safe(
+            &person_dir.join("experiences_fr.typ"),
+            &response.typst_content,
+        )
+        .await
+        .with_context(|| {
+            format!(
+                "Failed to write experiences_fr.typ for person '{}'",
+                person_name
+            )
+        })?;
+
+        // Create README
+        self.create_readme(&person_dir, person_name)
+            .await
+            .with_context(|| format!("Failed to create README for person '{}'", person_name))?;
+
+        app_log!(
+            info,
+            "Successfully created person with CV import data: {}",
             person_name
         );
         Ok(())
     }
+
+    // ===== Private Helper Methods =====
 
     /// Create cv_params.toml
     async fn create_cv_params(
@@ -316,62 +432,45 @@ show_contact = true\n",
 
     /// Create French experiences file
     async fn create_experiences_fr(&self, person_dir: &Path) -> Result<()> {
-        let default_experiences_fr = r#"#import "../templates/default/template.typ": *
+        let default_experiences_fr = r#"#import "template.typ": *
 
-// Expériences en français
-#let get_work_experience() = {
-  // Ajoutez vos expériences professionnelles ici
-  [
-    #experience(
-      title: "Votre poste",
-      date: "2023 - Présent",
-      description: "Nom de l'entreprise",
-      details: [
-        - Vos responsabilités et réalisations
-        - Ajoutez plus de points selon vos besoins
-      ]
-    )
-  ]
-}
-
-#let get_key_insights() = {
-  [
-    - Point clé ou réalisation #1
-    - Point clé ou réalisation #2
-    - Point clé ou réalisation #3
-  ]
-}
-
-#let get_skills() = {
-  (
-    "Langages": ("Rust", "Python", "JavaScript"),
-    "Frameworks": ("React", "Vue.js", "FastAPI"),
-    "Outils": ("Git", "Docker", "CI/CD"),
+#let get_work_experience() = [
+  = Expérience Professionnelle
+  
+  == Entreprise Actuelle
+  #dated_experience(
+    "Titre du Poste",
+    date: "Date de début - Présent",
+    description: "Brève description de l'entreprise et du secteur d'activité",
+    content: [
+      #experience_details(
+        "Responsabilité clé ou réalisation avec des métriques spécifiques si possible"
+      )
+      #experience_details(
+        "Autre responsabilité axée sur le leadership technique ou la livraison"
+      )
+      #experience_details(
+        "Responsabilité supplémentaire mettant en avant l'impact ou la résolution de problèmes"
+      )
+    ]
   )
-}
-
-#let get_education() = {
-  [
-    #experience(
-      title: "Votre diplôme",
-      date: "2019 - 2023",
-      description: "Université/École",
-      details: [
-        - Spécialisation ou mention
-        - Projets remarquables
-      ]
-    )
-  ]
-}
-
-#let get_languages() = {
-  (
-    "Français": "Langue maternelle",
-    "Anglais": "Courant",
-    "Allemand": "Notions",
+  
+  == Entreprise Précédente
+  #dated_experience(
+    "Titre du Poste Précédent",
+    date: "Date de début - Date de fin", 
+    description: "Brève description de l'entreprise précédente",
+    content: [
+      #experience_details(
+        "Responsabilité clé du rôle précédent"
+      )
+      #experience_details(
+        "Autre responsabilité de l'expérience précédente"
+      )
+    ]
   )
-}
-"#;
+]"#;
+
         FsOps::write_file_safe(
             &person_dir.join("experiences_fr.typ"),
             default_experiences_fr,
@@ -383,96 +482,98 @@ show_contact = true\n",
     /// Create README file
     async fn create_readme(&self, person_dir: &Path, person_name: &str) -> Result<()> {
         let readme_content = format!(
-            "# CV Data for {}\n\n\
-This directory contains CV data for {}.\n\n\
-## Files\n\n\
-- `cv_params.toml` - Personal information and configuration\n\
-- `experiences_en.typ` - Work experience and content in English\n\
-- `experiences_fr.typ` - Work experience and content in French\n\
-- `profile.png` - Profile image (add your own)\n\n\
-## Usage\n\n\
-Generate CV in English:\n\
-```bash\n\
-cargo run -- generate {} en\n\
-```\n\n\
-Generate CV in French:\n\
-```bash\n\
-cargo run -- generate {} fr\n\
-```\n\n\
-## Customization\n\n\
-1. Edit `cv_params.toml` to update personal information\n\
-2. Modify `experiences_*.typ` files to add your experience\n\
-3. Replace `profile.png` with your profile image\n",
-            person_name, person_name, person_name, person_name
+            "# {} CV Data\n\n\
+            Add your profile image as `profile.png` in this directory.\n\
+            Add your company logo as `company_logo.png` (optional).\n\n\
+            Edit the following files:\n\
+            - `cv_params.toml` - Personal information, skills, and key insights\n\
+            - `experiences_*.typ` - Work experience for each language (en/fr)\n\n\
+            ## Available Languages\n\
+            - English: experiences_en.typ\n\
+            - French: experiences_fr.typ\n",
+            person_name
         );
 
         FsOps::write_file_safe(&person_dir.join("README.md"), &readme_content).await?;
         Ok(())
     }
 
-    /// Get default experiences content
+    /// Get default experiences content for English
     fn get_default_experiences_content(&self) -> String {
-        r#"#import "../templates/default/template.typ": *
+        r#"#import "template.typ": *
 
-// English experiences
-#let get_work_experience() = {
-  // Add your work experiences here
-  [
-    #experience(
-      title: "Your Job Title",
-      date: "2023 - Present",
-      description: "Company Name",
-      details: [
-        - Your responsibilities and achievements
-        - Add more bullet points as needed
-      ]
-    )
-  ]
-}
-
-#let get_key_insights() = {
-  [
-    - Key insight or achievement #1
-    - Key insight or achievement #2
-    - Key insight or achievement #3
-  ]
-}
-
-#let get_skills() = {
-  (
-    "Languages": ("Rust", "Python", "JavaScript"),
-    "Frameworks": ("React", "Vue.js", "FastAPI"),
-    "Tools": ("Git", "Docker", "CI/CD"),
+#let get_work_experience() = [
+  = Work Experience
+  
+  == Current Company
+  #dated_experience(
+    "Job Title",
+    date: "Start Date - Present",
+    description: "Brief description of the company and industry",
+    content: [
+      #experience_details(
+        "Key responsibility or achievement with specific metrics if possible"
+      )
+      #experience_details(
+        "Another responsibility focusing on technical leadership or delivery"
+      )
+      #experience_details(
+        "Additional responsibility highlighting impact or problem-solving"
+      )
+    ]
   )
-}
-
-#let get_education() = {
-  [
-    #experience(
-      title: "Your Degree",
-      date: "2019 - 2023",
-      description: "University/School",
-      details: [
-        - Specialization or honors
-        - Notable projects
-      ]
-    )
-  ]
-}
-
-#let get_languages() = {
-  (
-    "English": "Native",
-    "French": "Fluent",
-    "German": "Basic",
+  
+  == Previous Company
+  #dated_experience(
+    "Previous Job Title",
+    date: "Start Date - End Date", 
+    description: "Brief description of previous company",
+    content: [
+      #experience_details(
+        "Previous role key responsibility"
+      )
+      #experience_details(
+        "Another responsibility from previous experience"
+      )
+    ]
   )
-}
-"#
+]"#
         .to_string()
     }
+}
 
-    /// Reload templates (useful for development)
-    pub fn reload(&mut self) -> Result<()> {
-        self.discover_templates()
+// ===== Legacy Compatibility =====
+
+/// Legacy TemplateProcessor for backward compatibility
+pub struct TemplateProcessor {
+    engine: TemplateEngine,
+}
+
+impl TemplateProcessor {
+    pub fn new(templates_dir: PathBuf) -> Self {
+        let engine = TemplateEngine::new(templates_dir).expect("Failed to create template engine");
+        Self { engine }
+    }
+
+    pub fn process_variables(content: &str, vars: &HashMap<String, String>) -> String {
+        TemplateEngine::process_variables(content, vars)
+    }
+
+    pub fn process_template(
+        &self,
+        template_content: &str,
+        variables: &HashMap<String, String>,
+    ) -> String {
+        self.engine.process_template(template_content, variables)
+    }
+
+    pub fn create_person_from_templates(
+        &self,
+        person_name: &str,
+        data_dir: &PathBuf,
+        display_name: Option<&str>,
+    ) -> Result<()> {
+        self.engine
+            .create_person_from_templates(person_name, data_dir, display_name)
     }
 }

@@ -3,7 +3,6 @@ use crate::config::CvConfig;
 use chrono::Utc;
 
 use crate::core::TemplateEngine;
-use crate::template_processor::TemplateProcessor;
 use crate::workspace::WorkspaceManager;
 use anyhow::{Context, Result};
 use graflog::app_log;
@@ -122,8 +121,8 @@ impl CvGenerator {
     }
 
     pub fn create_person_unchecked(&self) -> Result<()> {
-        let template_processor = TemplateProcessor::new(self.config.templates_dir.clone());
-        template_processor.create_person_from_templates(
+        let template_engine = TemplateEngine::new(self.config.templates_dir.clone());
+        template_engine?.create_person_from_templates(
             &self.config.person_name,
             &self.config.data_dir,
             Some(&self.config.person_name),

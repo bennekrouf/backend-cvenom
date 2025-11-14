@@ -7,13 +7,12 @@ pub use web::start_web_server;
 pub mod auth;
 pub mod config;
 pub mod core; // Unified core module
-pub mod database;
 pub mod environment;
 pub mod font_validator;
 pub mod generator;
 pub mod image_validator;
 pub mod linkedin_analysis;
-pub mod template_processor;
+pub mod types;
 pub mod utils;
 pub mod web;
 pub mod workspace;
@@ -23,7 +22,6 @@ pub use config::CvConfig;
 pub use core::{ConfigManager, Database, FsOps, TemplateEngine};
 pub use environment::EnvironmentConfig;
 pub use generator::CvGenerator;
-pub use template_processor::TemplateProcessor;
 
 /// List all available persons - now uses core FsOps
 pub fn list_persons(data_dir: &PathBuf) -> Result<Vec<String>> {

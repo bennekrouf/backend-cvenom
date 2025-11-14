@@ -1,7 +1,7 @@
 // src/web/handlers/person_handlers.rs - Updated with new tenant structure
 use crate::auth::AuthenticatedUser;
+use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::FsOps;
-use crate::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::web::types::{
     ActionResponse, CreatePersonRequest, DeletePersonRequest, StandardErrorResponse,
     StandardRequest, UploadForm, WithConversationId,
@@ -60,13 +60,12 @@ pub async fn create_person_handler(
         }
     };
 
-    if let Err(e) = template_engine
-        .create_person_from_templates(
-            &normalized_person,
-            &tenant_data_dir,
-            Some(&request.data.person),
-        )
-        .await
+    if let Err(e) = template_engine.create_person_from_templates(
+        &normalized_person,
+        &tenant_data_dir,
+        Some(&request.data.person),
+    )
+    // .await
     {
         app_log!(error, "Failed to create person: {}", e);
         return Err(Json(StandardErrorResponse::new(

@@ -14,7 +14,7 @@
   icons: (
     github: "\u{f09b}",
     linkedin: "\u{f08c}", 
-    personal: "\u{f268}",
+    personal_info: "\u{f268}",
     website: "\u{f0ac}",
   )
 )

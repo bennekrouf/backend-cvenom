@@ -72,9 +72,9 @@
       "displayname": "LinkedIn",
       "logo": get_icon("linkedin", font_type: "brands")
     ),
-    "personal": (
+    "personal_info": (
       "displayname": "Personal",
-      "logo": get_icon("personal", font_type: "solid")
+      "logo": get_icon("personal_info", font_type: "solid")
     ),
     "orcid": ("displayname": "ORCID", "logo": box(baseline: 0.2em, circle(
       radius: 0.5em,
@@ -120,7 +120,7 @@
     // If links is an array, treat each item as a URL with default icon
     for link in links {
       if link != "" and link != none {
-        link_pairs.push(("personal", link))
+        link_pairs.push(("personal_info", link))
       }
     }
   } else if type(links) == dictionary {

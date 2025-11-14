@@ -1,24 +1,28 @@
 // src/web/mod.rs
 pub mod file_handlers;
 pub mod handlers;
-pub mod services;
 pub mod types;
-
-pub use handlers::*;
-use rocket::config::{Config, LogLevel};
-pub use types::*;
-
 use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
-use crate::database::DatabaseConfig;
+use crate::core::database::DatabaseConfig;
+use crate::linkedin_analysis::JobAnalysisRequest;
+use crate::types::response::{OptimizeResponse, TranslateResponse};
+use crate::web::handlers::{
+    optimize_cv_handler, translate_cv_handler, upload_and_convert_cv_handler,
+};
 use anyhow::Result;
 use graflog::app_log;
+
+use rocket::config::{Config, LogLevel};
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::form::Form;
 use rocket::http::Method;
 use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
-use rocket::{catchers, get, options, post, routes, Request, Response, State};
+use rocket::{catchers, get, post, routes, Data, Request, Response, State};
 use std::path::PathBuf;
+pub use types::*;
+mod cors_utils;
+use cors_utils::universal_options_handler;
 
 // CORS Fairing
 pub struct Cors;
@@ -80,13 +84,13 @@ impl Fairing for Cors {
 
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit(
-    request: Json<StandardRequest<crate::linkedin_analysis::JobAnalysisRequest>>,
+    request: Json<StandardRequest<JobAnalysisRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    cv_service_url: &State<String>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<TextResponse>, Json<StandardErrorResponse>> {
-    // Changed return type
-    handlers::analyze_job_fit_handler(request, auth, config, db_config).await
+    handlers::analyze_job_fit_handler(request, auth, config, cv_service_url, db_config).await
 }
 
 #[rocket::put("/collaborators/<old_name>/rename", data = "<request>")]
@@ -143,9 +147,9 @@ pub async fn upload_and_convert_cv(
     upload: Form<CvUploadForm<'_>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    db_config: &State<DatabaseConfig>,
+    cv_service_url: &State<String>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::upload_and_convert_cv_handler(upload, auth, config, db_config).await
+    upload_and_convert_cv_handler(upload, auth, config, cv_service_url).await
 }
 
 #[get("/templates")]
@@ -197,19 +201,23 @@ pub async fn get_tenant_files(
     file_handlers::get_tenant_files_handler(auth, config).await
 }
 
-#[options("/files/tree")]
-pub async fn options_files_tree() -> Status {
-    Status::Ok
+#[post("/optimize", data = "<request>")]
+pub async fn optimize_cv(
+    request: Json<StandardRequest<OptimizeCvRequest>>,
+    auth: AuthenticatedUser,
+    cv_service_url: &State<String>,
+) -> Result<Json<DataResponse<OptimizeResponse>>, Json<StandardErrorResponse>> {
+    optimize_cv_handler(request, auth, cv_service_url).await
 }
 
-#[options("/files/<_..>")]
-pub async fn options_files() -> Status {
-    Status::Ok
-}
-
-#[options("/<_..>")]
-pub async fn options_handler() -> Status {
-    Status::Ok
+#[post("/translate?<target_lang>", data = "<data>")]
+pub async fn translate_cv(
+    data: Data<'_>,
+    target_lang: Option<String>,
+    auth: AuthenticatedUser,
+    cv_service_url: &State<String>,
+) -> Result<Json<DataResponse<TranslateResponse>>, Json<StandardErrorResponse>> {
+    translate_cv_handler(data, target_lang.as_deref(), auth, cv_service_url).await
 }
 
 // Error catchers
@@ -307,14 +315,11 @@ pub async fn start_web_server(
                 upload_and_convert_cv,
                 get_templates,
                 get_current_user,
-                get_current_user_error,
                 health,
                 get_tenant_files,
                 get_tenant_file_content,
                 save_tenant_file_content,
-                options_files_tree,
-                options_files,
-                options_handler,
+                universal_options_handler,
                 rename_collaborator_handler,
             ],
         )

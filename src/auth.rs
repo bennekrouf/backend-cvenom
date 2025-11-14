@@ -1,5 +1,5 @@
+use crate::core::database::{DatabaseConfig, Tenant, TenantService};
 // src/auth.rs
-use crate::database::{DatabaseConfig, Tenant, TenantService};
 use crate::web::ServerConfig;
 use anyhow::Result;
 use graflog::app_log;

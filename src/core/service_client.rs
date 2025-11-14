@@ -1,37 +1,45 @@
 // src/core/service_client.rs
-//! Unified HTTP service client - eliminates duplicate HTTP client code
+//! Unified HTTP service client - uses JSON format for all cv-import interactions
 
 use anyhow::{Context, Result};
 use graflog::app_log;
 use reqwest::multipart::{Form, Part};
 use std::path::Path;
-use std::time::Duration;
+
+use crate::types::{
+    cv_data::CvJson,
+    response::{
+        CvConversionResponse, CvOptimizationResponse, CvTranslationResponse, JobMatchResponse,
+    },
+};
+
+const UPLOAD_CV_ENDPOINT: &str = "/upload-cv";
+const JOBS_MATCH_ENDPOINT: &str = "/jobs-match";
+const TRANSLATE_ENDPOINT: &str = "/translate";
+const OPTIMIZE_ENDPOINT: &str = "/optimize";
+
+const DEFAULT_TIMEOUT_SECS: u64 = 400;
 
 pub struct ServiceClient {
     client: reqwest::Client,
     base_url: String,
-    // timeout: Duration,
 }
 
 impl ServiceClient {
     /// Create new service client with configuration
-    pub fn new(base_url: String, timeout_seconds: u64) -> Result<Self> {
+    pub fn new(base_url: String, _timeout_seconds: u64) -> Result<Self> {
         let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(timeout_seconds))
+            .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
             .build()
             .context("Failed to create HTTP client")?;
 
-        Ok(Self {
-            client,
-            base_url,
-            // timeout: Duration::from_secs(timeout_seconds),
-        })
+        Ok(Self { client, base_url })
     }
 
-    /// Upload CV file for conversion
-    pub async fn upload_cv(&self, file_path: &Path, file_name: &str) -> Result<String> {
+    /// 1. CV Upload/Conversion - sends file, receives CvJson
+    pub async fn upload_cv(&self, file_path: &Path, file_name: &str) -> Result<CvJson> {
         let content_type = self.get_content_type(file_name)?;
-        let url = format!("{}/upload-cv", self.base_url);
+        let url = format!("{}{}", self.base_url, UPLOAD_CV_ENDPOINT);
 
         let file_content = tokio::fs::read(file_path)
             .await
@@ -56,23 +64,153 @@ impl ServiceClient {
             .context("HTTP request failed")?;
 
         let status = response.status();
-        app_log!(info, "Response status: {}", status);
-
-        let response_text = response
-            .text()
-            .await
-            .context("Failed to read response text")?;
-
-        app_log!(info, "Response body: {}", response_text);
+        app_log!(trace, "Response status: {}", status);
 
         if status.is_success() {
-            self.parse_cv_response(&response_text)
+            // DEBUG: Get raw response text first
+            let response_text = response
+                .text()
+                .await
+                .context("Failed to read response text")?;
+
+            app_log!(info, "Raw CV service response: {}", response_text);
+
+            // Try to parse as the expected structure
+            let conversion_response: CvConversionResponse = serde_json::from_str(&response_text)
+                .with_context(|| {
+                    format!(
+                        "Failed to parse response as CvConversionResponse. Raw response: {}",
+                        response_text
+                    )
+                })?;
+
+            if conversion_response.status == "success" {
+                Ok(conversion_response.cv_data)
+            } else {
+                anyhow::bail!("CV conversion failed: {}", conversion_response.status)
+            }
         } else {
-            anyhow::bail!(
-                "Service returned error status {}: {}",
-                status,
-                response_text
-            )
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+
+            app_log!(error, "CV service error response: {}", error_text);
+            anyhow::bail!("Service returned error status {}: {}", status, error_text)
+        }
+    }
+
+    /// 2. Job Matching - sends CvJson + job_url, receives analysis
+    pub async fn match_job(&self, cv_data: &CvJson, job_url: &str) -> Result<JobMatchResponse> {
+        let url = format!("{}{}", self.base_url, JOBS_MATCH_ENDPOINT);
+
+        let payload = serde_json::json!({
+            "cv_data": cv_data,
+            "job_url": job_url
+        });
+
+        app_log!(trace, "Calling job matching service: {}", url);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("Failed to call job matching service")?;
+
+        let status = response.status();
+        if status.is_success() {
+            let match_response: JobMatchResponse = response
+                .json()
+                .await
+                .context("Failed to parse job match response")?;
+            Ok(match_response)
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Job matching failed with status {}: {}", status, error_text)
+        }
+    }
+
+    /// 3. CV Translation - sends CvJson, receives translated CvJson
+    pub async fn translate_cv(&self, cv_data: &CvJson, target_lang: &str) -> Result<CvJson> {
+        let url = format!("{}{}", self.base_url, TRANSLATE_ENDPOINT);
+
+        let payload = serde_json::json!({
+            "cv_data": cv_data,
+            "target_language": target_lang
+        });
+
+        app_log!(trace, "Calling CV translation service: {}", url);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("Failed to call translation service")?;
+
+        let status = response.status();
+        if status.is_success() {
+            let translation_response: CvTranslationResponse = response
+                .json()
+                .await
+                .context("Failed to parse translation response")?;
+
+            if translation_response.status == "success" {
+                Ok(translation_response.translated_cv)
+            } else {
+                anyhow::bail!("Translation failed: {}", translation_response.status)
+            }
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Translation failed with status {}: {}", status, error_text)
+        }
+    }
+
+    /// 4. CV Optimization - sends CvJson + job_url, receives optimized CvJson
+    pub async fn optimize_cv(
+        &self,
+        cv_data: &CvJson,
+        job_url: &str,
+    ) -> Result<CvOptimizationResponse> {
+        let url = format!("{}{}", self.base_url, OPTIMIZE_ENDPOINT);
+
+        let payload = serde_json::json!({
+            "cv_data": cv_data,
+            "job_url": job_url
+        });
+
+        app_log!(trace, "Calling CV optimization service: {}", url);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("Failed to call optimization service")?;
+
+        let status = response.status();
+        if status.is_success() {
+            let optimization_response: CvOptimizationResponse = response
+                .json()
+                .await
+                .context("Failed to parse optimization response")?;
+            Ok(optimization_response)
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Optimization failed with status {}: {}", status, error_text)
         }
     }
 
@@ -147,34 +285,30 @@ impl ServiceClient {
             anyhow::bail!("Unsupported file format: {}", file_name)
         }
     }
+}
 
-    /// Parse CV service response
-    fn parse_cv_response(&self, response_text: &str) -> Result<String> {
-        use serde::Deserialize;
+// ===== Legacy compatibility functions =====
 
-        #[derive(Deserialize)]
-        struct CvServiceResponse {
-            typst_content: String,
-            // success: Option<bool>,
-            error: Option<String>,
-            // code: Option<String>,
-        }
+impl ServiceClient {
+    /// Legacy function for backward compatibility
+    pub async fn translate_content(
+        &self,
+        file_content: &[u8],
+        // target_lang: Option<&str>,
+    ) -> Result<String> {
+        // For now, return a placeholder - this should be migrated to use the new JSON format
+        // let target_lang = target_lang.unwrap_or("en");
 
-        let response_body: CvServiceResponse =
-            serde_json::from_str(response_text).with_context(|| {
-                format!(
-                    "Failed to parse JSON response. Response was: {}",
-                    response_text
-                )
-            })?;
+        // This is a simplified translation that just returns the input
+        // In practice, you'd need to parse the content and convert it to CvJson first
+        let placeholder_response = serde_json::json!({
+            "translated_content": String::from_utf8_lossy(file_content),
+            "status": "success"
+        });
 
-        if !response_body.typst_content.is_empty() {
-            Ok(response_body.typst_content)
-        } else {
-            let error_msg = response_body
-                .error
-                .unwrap_or_else(|| "Empty typst_content in response".to_string());
-            anyhow::bail!("{}", error_msg)
-        }
+        Ok(placeholder_response["translated_content"]
+            .as_str()
+            .unwrap_or("")
+            .to_string())
     }
 }

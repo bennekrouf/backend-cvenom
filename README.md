@@ -85,7 +85,7 @@ production:
 
 job_matching:
   api_url: "http://127.0.0.1:5555"
-  timeout_seconds: 60
+  timeout_seconds: 120
 ```
 
 **New environment variables:**
