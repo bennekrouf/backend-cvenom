@@ -112,33 +112,42 @@ impl CvConverter {
     pub fn to_toml(cv_data: &CvJson) -> Result<String> {
         let mut toml_content = String::new();
 
-        // Personal section
-        toml_content.push_str("[personal]\n");
+        // Personal info - FLAT structure (no [personal] section)
         toml_content.push_str(&format!("name = \"{}\"\n", cv_data.personal_info.name));
 
         if let Some(title) = &cv_data.personal_info.title {
             toml_content.push_str(&format!("title = \"{}\"\n", title));
+        } else {
+            toml_content.push_str("title = \"\"\n");
         }
 
         if let Some(email) = &cv_data.personal_info.email {
             toml_content.push_str(&format!("email = \"{}\"\n", email));
+        } else {
+            toml_content.push_str("email = \"\"\n");
         }
 
         if let Some(phone) = &cv_data.personal_info.phone {
             toml_content.push_str(&format!("phonenumber = \"{}\"\n", phone));
+        } else {
+            toml_content.push_str("phonenumber = \"\"\n");
         }
 
         if let Some(address) = &cv_data.personal_info.address {
             toml_content.push_str(&format!("address = \"{}\"\n", address));
+        } else {
+            toml_content.push_str("address = \"\"\n");
         }
 
         if let Some(summary) = &cv_data.personal_info.summary {
             toml_content.push_str(&format!("summary = \"{}\"\n", summary));
+        } else {
+            toml_content.push_str("summary = \"\"\n");
         }
 
-        // Links section
+        // Links - FLAT structure (no [personal.links] section)
         if let Some(links) = &cv_data.personal_info.links {
-            toml_content.push_str("\n[personal.links]\n");
+            toml_content.push_str("\n[links]\n");
             for (key, value) in links {
                 toml_content.push_str(&format!("{} = \"{}\"\n", key, value));
             }

@@ -73,7 +73,7 @@ impl Template {
     fn generate_description(id: &str) -> String {
         match id {
             "default" => "Standard CV layout".to_string(),
-            name if name.contains("keyteo") => "CV with Keyteo branding".to_string(),
+            name if name.contains("mycompany") => "CV with Keyteo branding".to_string(),
             name if name.contains("modern") => "Modern CV template".to_string(),
             name if name.contains("minimal") => "Minimal CV template".to_string(),
             _ => format!("{} CV template", id),

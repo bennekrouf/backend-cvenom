@@ -1,4 +1,4 @@
-name = "keyteo"
+name = "mycompany"
 description = "CV with Keyteo branding and logo"
 main_file = "main.typ"
 dependencies = ["template.typ"]

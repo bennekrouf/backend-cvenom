@@ -252,7 +252,7 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
             app_log!(info, "");
             app_log!(info, "Usage:");
             app_log!(info, "  cargo run -- tenant add <email> <tenant-name>           # Add email-specific tenant");
-            app_log!(info, "  cargo run -- tenant add-domain <domain> <tenant-name>   # Add domain tenant (e.g., keyteo.ch)");
+            app_log!(info, "  cargo run -- tenant add-domain <domain> <tenant-name>   # Add domain tenant (e.g., mycompany.ch)");
             app_log!(info, 
                 "  cargo run -- tenant check <email>                       # Check authorization"
             );

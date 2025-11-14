@@ -37,7 +37,7 @@
       "points_cles": "Key insights",
       "skills_file": "Skills file",
       "confidential_document": "Confidential document, reproduction prohibited",
-      "website": "www.keyteo.ch"
+      "website": "www.mycompany.ch"
     ),
     "fr": (
       "technical_skills": "Compétences techniques",
@@ -54,7 +54,7 @@
       "points_cles": "Points clés",
       "skills_file": "Fiche de compétences",
       "confidential_document": "Document confidentiel, reproduction interdite",
-      "website": "www.keyteo.ch"
+      "website": "www.mycompany.ch"
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)

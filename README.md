@@ -45,8 +45,8 @@ cargo run -- tenant init
 
 3. **Add tenants:**
 ```bash
-# Add domain tenant (all @keyteo.ch emails)
-cargo run -- tenant add-domain keyteo.ch keyteo
+# Add domain tenant (all @mycompany.ch emails)
+cargo run -- tenant add-domain mycompany.ch mycompany
 
 # Add specific email
 cargo run -- tenant add user@company.com company-name
@@ -155,7 +155,7 @@ cargo run -- list-templates
 data/
   tenants.db              # SQLite tenant database
   tenants/                # Tenant-isolated data
-    keyteo/               # Tenant directory
+    mycompany/               # Tenant directory
       user@domain.com/    # User directory
         cv_params.toml    # Personal info
         experiences_*.typ # Experience files

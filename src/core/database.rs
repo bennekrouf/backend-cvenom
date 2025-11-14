@@ -575,7 +575,7 @@ pub fn get_tenant_for_email(email: &str) -> String {
     if let Some(domain) = email.split('@').nth(1) {
         // For known company domains, return the company tenant
         match domain {
-            "keyteo.ch" => "keyteo".to_string(),
+            "mycompany.ch" => "mycompany".to_string(),
             // Add other company domains here
             _ => std::env::var("DEFAULT_TENANT").unwrap_or_else(|_| "independent".to_string()),
         }

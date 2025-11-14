@@ -95,7 +95,7 @@
   if "manager_name" in details and "manager_email" in details and "manager_phone" in details { 
     text(size: 11pt, details.manager_name + " – " + details.manager_email + " – " + details.manager_phone) 
   } else { 
-    text(size: 11pt, "Anthony Levavasseur – alevavasseur@keyteo.ch – 078 230 36 38") 
+    text(size: 11pt, "Anthony Levavasseur – alevavasseur@mycompany.ch – 078 230 36 38") 
   }
 )
 
