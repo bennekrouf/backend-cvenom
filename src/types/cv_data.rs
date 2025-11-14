@@ -166,7 +166,9 @@ impl CvConverter {
         // Education section
         if !cv_data.education.is_empty() {
             toml_content.push_str("\n[[education]]\n");
+            // Education section - FIXED
             for edu in &cv_data.education {
+                toml_content.push_str("[[education]]\n");
                 toml_content.push_str(&format!(
                     "title = \"{} - {}\"\n",
                     edu.degree, edu.institution
