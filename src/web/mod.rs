@@ -6,6 +6,7 @@ use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::core::database::DatabaseConfig;
 use crate::linkedin_analysis::JobAnalysisRequest;
 use crate::types::response::{OptimizeResponse, TranslateResponse};
+use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
     optimize_cv_handler, translate_cv_handler, upload_and_convert_cv_handler,
 };
@@ -210,14 +211,14 @@ pub async fn optimize_cv(
     optimize_cv_handler(request, auth, cv_service_url).await
 }
 
-#[post("/translate?<target_lang>", data = "<data>")]
+#[post("/translate", data = "<request>")]
 pub async fn translate_cv(
-    data: Data<'_>,
-    target_lang: Option<String>,
+    request: Json<StandardRequest<TranslateCvRequest>>,
     auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<TranslateResponse>>, Json<StandardErrorResponse>> {
-    translate_cv_handler(data, target_lang.as_deref(), auth, cv_service_url).await
+    translate_cv_handler(request, auth, config, cv_service_url).await
 }
 
 // Error catchers

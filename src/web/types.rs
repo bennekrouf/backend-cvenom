@@ -63,11 +63,6 @@ pub struct RenameProfileRequest {
 }
 
 #[derive(serde::Deserialize)]
-pub struct TranslateCvRequest {
-    pub target_lang: Option<String>,
-}
-
-#[derive(serde::Deserialize)]
 pub struct OptimizeCvRequest {
     pub cv_json: String,
     pub job_url: String,
