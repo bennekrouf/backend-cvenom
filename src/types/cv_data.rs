@@ -321,35 +321,43 @@ impl CvConverter {
             toml::from_str(&toml_content).context("Failed to parse TOML")?;
 
         // Helper function to get field from either root level or personal section
-        let get_personal_field = |field_name: &str| -> Option<&str> {
+        let get_personal_field = |field_name: &str| -> String {
             // Try root level first (flat structure)
             if let Some(value) = toml_value.get(field_name).and_then(|v| v.as_str()) {
-                return Some(value);
+                return value.to_string();
             }
             // Try personal section (nested structure)
             if let Some(personal_section) = get_section_ci(&toml_value, "personal") {
                 if let Some(value) = personal_section.get(field_name).and_then(|v| v.as_str()) {
-                    return Some(value);
+                    return value.to_string();
                 }
             }
             // Try personal_info section (alternative nested structure)
             if let Some(personal_section) = get_section_ci(&toml_value, "personal_info") {
                 if let Some(value) = personal_section.get(field_name).and_then(|v| v.as_str()) {
-                    return Some(value);
+                    return value.to_string();
                 }
             }
-            None
+            // Return empty string instead of None
+            String::new()
         };
 
         let personal_info = PersonalInfo {
-            name: get_personal_field("name").unwrap_or("Unknown").to_string(),
-            title: get_personal_field("title").map(|s| s.to_string()),
-            email: get_personal_field("email").map(|s| s.to_string()),
-            phone: get_personal_field("phonenumber").map(|s| s.to_string()),
-            address: get_personal_field("address").map(|s| s.to_string()),
-            linkedin: get_personal_field("linkedin").map(|s| s.to_string()),
-            website: get_personal_field("website").map(|s| s.to_string()),
-            summary: get_personal_field("summary").map(|s| s.to_string()),
+            name: {
+                let name = get_personal_field("name");
+                if name.is_empty() {
+                    "Unknown".to_string()
+                } else {
+                    name
+                }
+            },
+            title: Some(get_personal_field("title")),
+            email: Some(get_personal_field("email")),
+            phone: Some(get_personal_field("phonenumber")),
+            address: Some(get_personal_field("address")),
+            linkedin: Some(get_personal_field("linkedin")),
+            website: Some(get_personal_field("website")),
+            summary: Some(get_personal_field("summary")),
             links: None, // TODO: Parse links if needed
         };
 
@@ -492,4 +500,3 @@ impl CvConverter {
         })
     }
 }
-

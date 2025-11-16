@@ -287,28 +287,3 @@ impl ServiceClient {
     }
 }
 
-// ===== Legacy compatibility functions =====
-
-impl ServiceClient {
-    /// Legacy function for backward compatibility
-    pub async fn translate_content(
-        &self,
-        file_content: &[u8],
-        // target_lang: Option<&str>,
-    ) -> Result<String> {
-        // For now, return a placeholder - this should be migrated to use the new JSON format
-        // let target_lang = target_lang.unwrap_or("en");
-
-        // This is a simplified translation that just returns the input
-        // In practice, you'd need to parse the content and convert it to CvJson first
-        let placeholder_response = serde_json::json!({
-            "translated_content": String::from_utf8_lossy(file_content),
-            "status": "success"
-        });
-
-        Ok(placeholder_response["translated_content"]
-            .as_str()
-            .unwrap_or("")
-            .to_string())
-    }
-}
