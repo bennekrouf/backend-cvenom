@@ -10,14 +10,14 @@ pub use job_analyzer::JobAnalyzer;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobAnalysisRequest {
     pub job_url: String,
-    pub person_name: String,
+    pub profile_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobAnalysisResponse {
     pub success: bool,
     pub job_content: Option<JobContent>,
-    pub person_experiences: Option<String>,
+    pub profile_experiences: Option<String>,
     pub fit_analysis: Option<String>,
     pub raw_job_content: Option<String>,
     pub error: Option<String>,

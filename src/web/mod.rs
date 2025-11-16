@@ -93,14 +93,14 @@ pub async fn analyze_job_fit(
     handlers::analyze_job_fit_handler(request, auth, config, cv_service_url, db_config).await
 }
 
-#[rocket::put("/collaborators/<old_name>/rename", data = "<request>")]
-pub async fn rename_collaborator_handler(
+#[rocket::put("/profiles/<old_name>/rename", data = "<request>")]
+pub async fn rename_profile_handler(
     old_name: String,
-    request: Json<StandardRequest<RenameCollaboratorRequest>>,
+    request: Json<StandardRequest<RenameProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::rename_collaborator_handler(old_name, request, auth, config).await
+    handlers::rename_profile_handler(old_name, request, auth, config).await
 }
 
 #[post("/generate", data = "<request>")]
@@ -114,22 +114,22 @@ pub async fn generate_cv(
 }
 
 #[post("/create", data = "<request>")]
-pub async fn create_person(
-    request: Json<StandardRequest<CreatePersonRequest>>,
+pub async fn create_profile(
+    request: Json<StandardRequest<CreateProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::create_person_handler(request, auth, config).await
+    handlers::create_profile_handler(request, auth, config).await
 }
 
-#[post("/delete-person", data = "<request>")]
-pub async fn delete_person(
-    request: Json<StandardRequest<DeletePersonRequest>>,
+#[post("/delete-profile", data = "<request>")]
+pub async fn delete_profile(
+    request: Json<StandardRequest<DeleteProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::delete_person_handler(request, auth, config, db_config).await
+    handlers::delete_profile_handler(request, auth, config, db_config).await
 }
 
 #[post("/upload-picture", data = "<upload>")]
@@ -309,8 +309,8 @@ pub async fn start_web_server(
             routes![
                 analyze_job_fit,
                 generate_cv,
-                create_person,
-                delete_person,
+                create_profile,
+                delete_profile,
                 upload_picture,
                 upload_and_convert_cv,
                 get_templates,
@@ -320,7 +320,7 @@ pub async fn start_web_server(
                 get_tenant_file_content,
                 save_tenant_file_content,
                 universal_options_handler,
-                rename_collaborator_handler,
+                rename_profile_handler,
             ],
         )
         .launch()

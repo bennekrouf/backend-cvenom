@@ -29,7 +29,7 @@ impl<'a> WorkspaceManager<'a> {
             std::env::set_current_dir("tmp_workspace")
                 .context("Failed to change to temporary workspace")?;
 
-            self.copy_person_files()?;
+            self.copy_profile_files()?;
             self.copy_logo_files()?;
 
             // ADD THESE 5 LINES:
@@ -97,9 +97,9 @@ impl<'a> WorkspaceManager<'a> {
         Ok(())
     }
 
-    fn copy_person_files(&self) -> Result<()> {
+    fn copy_profile_files(&self) -> Result<()> {
         // Copy config (existing code)
-        let config_source = self.config.person_config_path();
+        let config_source = self.config.profile_config_path();
         let config_dest = PathBuf::from("cv_params.toml");
 
         app_log!(info, "DEBUG: config_source = {}", config_source.display());
@@ -109,29 +109,29 @@ impl<'a> WorkspaceManager<'a> {
             config_source.exists()
         );
 
-        fs::copy(&config_source, &config_dest).context("Failed to copy person config")?;
+        fs::copy(&config_source, &config_dest).context("Failed to copy profile config")?;
 
         // Copy experiences (existing code)
-        let exp_source = self.config.person_experiences_path();
+        let exp_source = self.config.profile_experiences_path();
         let exp_dest = PathBuf::from("experiences.typ");
-        fs::copy(&exp_source, &exp_dest).context("Failed to copy person experiences")?;
+        fs::copy(&exp_source, &exp_dest).context("Failed to copy profile experiences")?;
 
         // Copy profile image with validation
-        let person_image_png = self.config.person_image_path();
+        let profile_image_png = self.config.profile_image_path();
 
         app_log!(
             info,
             "DEBUG: Looking for image at: {}",
-            person_image_png.display()
+            profile_image_png.display()
         );
-        app_log!(info, "DEBUG: Image exists: {}", person_image_png.exists());
+        app_log!(info, "DEBUG: Image exists: {}", profile_image_png.exists());
 
-        if person_image_png.exists() {
+        if profile_image_png.exists() {
             // Validate the image before copying
-            match self.validate_image_sync(&person_image_png) {
+            match self.validate_image_sync(&profile_image_png) {
                 Ok(_) => {
                     let profile_dest = PathBuf::from("profile.png");
-                    fs::copy(&person_image_png, &profile_dest)?;
+                    fs::copy(&profile_image_png, &profile_dest)?;
                     app_log!(info, "✅ Copied valid profile image");
                 }
                 Err(error_msg) => {
@@ -151,12 +151,12 @@ impl<'a> WorkspaceManager<'a> {
 
     fn copy_logo_files(&self) -> Result<()> {
         let tenant_logo_source = self.config.data_dir_absolute().join("company_logo.png");
-        let person_logo_source = self.config.person_data_dir().join("company_logo.png");
+        let profile_logo_source = self.config.profile_data_dir().join("company_logo.png");
         let logo_dest = PathBuf::from("company_logo.png");
 
-        if person_logo_source.exists() {
-            fs::copy(&person_logo_source, &logo_dest)?;
-            app_log!(info, "Person logo copied successfully");
+        if profile_logo_source.exists() {
+            fs::copy(&profile_logo_source, &logo_dest)?;
+            app_log!(info, "Profile logo copied successfully");
         } else if tenant_logo_source.exists() {
             fs::copy(&tenant_logo_source, &logo_dest)?;
             app_log!(info, "Tenant logo copied successfully");
@@ -224,7 +224,7 @@ impl<'a> WorkspaceManager<'a> {
             .join(&self.config.output_dir)
             .join(format!(
                 "{}_{}_{}.pdf",
-                self.config.person_name,
+                self.config.profile_name,
                 self.config.template.as_str(),
                 self.config.lang
             ));

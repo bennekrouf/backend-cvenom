@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 pub struct CvConfig {
-    pub person_name: String,
+    pub profile_name: String,
     pub lang: String,
     pub template: String,
     pub output_dir: PathBuf,
@@ -13,7 +13,7 @@ pub struct CvConfig {
 }
 
 impl CvConfig {
-    pub fn new(person_name: &str, lang: &str) -> Self {
+    pub fn new(profile_name: &str, lang: &str) -> Self {
         let normalized_lang = match lang.to_lowercase().as_str() {
             "fr" | "french" | "français" => "fr",
             "en" | "english" | "anglais" => "en",
@@ -24,7 +24,7 @@ impl CvConfig {
         let current_dir = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
 
         Self {
-            person_name: person_name.to_string(),
+            profile_name: profile_name.to_string(),
             lang: normalized_lang.to_string(),
             template: "default".to_string(),
             output_dir: PathBuf::from("output"),
@@ -66,20 +66,20 @@ impl CvConfig {
         self.absolute_path(&self.data_dir)
     }
 
-    pub fn person_data_dir(&self) -> PathBuf {
-        self.absolute_path(&self.data_dir.join(&self.person_name))
+    pub fn profile_data_dir(&self) -> PathBuf {
+        self.absolute_path(&self.data_dir.join(&self.profile_name))
     }
 
-    pub fn person_config_path(&self) -> PathBuf {
-        self.person_data_dir().join("cv_params.toml")
+    pub fn profile_config_path(&self) -> PathBuf {
+        self.profile_data_dir().join("cv_params.toml")
     }
 
-    pub fn person_experiences_path(&self) -> PathBuf {
-        self.person_data_dir()
+    pub fn profile_experiences_path(&self) -> PathBuf {
+        self.profile_data_dir()
             .join(format!("experiences_{}.typ", self.lang))
     }
 
-    pub fn person_image_path(&self) -> PathBuf {
-        self.person_data_dir().join("profile.png")
+    pub fn profile_image_path(&self) -> PathBuf {
+        self.profile_data_dir().join("profile.png")
     }
 }

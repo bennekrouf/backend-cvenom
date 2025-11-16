@@ -490,47 +490,46 @@ impl<'a> TenantService<'a> {
         Ok(tenant_data_dir)
     }
 
-    /// Create default person structure for new tenant users
-    pub async fn create_default_person(
+    /// Create default profile structure for new tenant users
+    pub async fn create_default_profile(
         &self,
         base_data_dir: &PathBuf,
         templates_dir: &PathBuf,
         tenant: &Tenant,
-        person_name: &str,
+        profile_name: &str,
         display_name: Option<&str>,
     ) -> Result<()> {
         let tenant_data_dir = self.ensure_tenant_data_dir(base_data_dir, tenant).await?;
-        let person_dir = tenant_data_dir.join(person_name);
+        let profile_dir = tenant_data_dir.join(profile_name);
 
-        if person_dir.exists() {
+        if profile_dir.exists() {
             return Ok(()); // Already exists
         }
 
-        tokio::fs::create_dir_all(&person_dir).await?;
+        tokio::fs::create_dir_all(&profile_dir).await?;
 
         // Copy default templates
-        let person_template = templates_dir.join("person_template.toml");
+        let profile_template = templates_dir.join("profile_template.toml");
         let experience_template = templates_dir.join("experiences_template.typ");
 
-        if person_template.exists() {
-            let template_content = tokio::fs::read_to_string(&person_template).await?;
-            // Use display_name if provided, otherwise use person_name
-            let name_for_template = display_name.unwrap_or(person_name);
+        if profile_template.exists() {
+            let template_content = tokio::fs::read_to_string(&profile_template).await?;
+            // Use display_name if provided, otherwise use profile_name
+            let name_for_template = display_name.unwrap_or(profile_name);
             let processed = template_content.replace("{{name}}", name_for_template);
-            tokio::fs::write(person_dir.join("cv_params.toml"), processed).await?;
+            tokio::fs::write(profile_dir.join("cv_params.toml"), processed).await?;
         }
 
         if experience_template.exists() {
             let exp_content = tokio::fs::read_to_string(&experience_template).await?;
-            tokio::fs::write(person_dir.join("experiences_en.typ"), &exp_content).await?;
-            tokio::fs::write(person_dir.join("experiences_fr.typ"), &exp_content).await?;
+            tokio::fs::write(profile_dir.join("experiences_en.typ"), &exp_content).await?;
         }
 
         app_log!(
             info,
-            "Created default person structure for {} (display: {}) in tenant {}",
-            person_name,
-            display_name.unwrap_or(person_name),
+            "Created default profile structure for {} (display: {}) in tenant {}",
+            profile_name,
+            display_name.unwrap_or(profile_name),
             tenant.tenant_name
         );
         Ok(())
@@ -593,4 +592,3 @@ pub fn get_tenant_folder_path(
 
     tenant_data_path.join(tenant).join(user_folder)
 }
-

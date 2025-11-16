@@ -130,8 +130,8 @@ cargo run -- tenant list
 cargo run -- tenant check <email>
 
 # CV generation
-cargo run -- generate <person> --lang <en|fr> --template <template>
-cargo run -- create <person-name>
+cargo run -- generate <profile> --lang <en|fr> --template <template>
+cargo run -- create <profile-name>
 cargo run -- list
 cargo run -- list-templates
 ```
@@ -144,7 +144,7 @@ cargo run -- list-templates
 
 ### Protected (Firebase auth + tenant)
 - `POST /generate` - Generate CV PDF
-- `POST /create` - Create person
+- `POST /create` - Create profile
 - `POST /upload-picture` - Upload profile picture
 - `POST /analyze-job-fit` - LinkedIn job analysis
 - `GET /me` - Current user info

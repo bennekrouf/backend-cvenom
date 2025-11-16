@@ -32,17 +32,17 @@ impl CvGenerator {
         // Validate and normalize template
         config.template = normalize_template_for_generator(&config.template, &template_manager);
 
-        // Validate person directory exists
-        let person_dir = config.person_data_dir();
-        if !person_dir.exists() {
+        // Validate profile directory exists
+        let profile_dir = config.profile_data_dir();
+        if !profile_dir.exists() {
             anyhow::bail!(
-                "Person directory not found: {}. Create it with required files.",
-                person_dir.display()
+                "Profile directory not found: {}. Create it with required files.",
+                profile_dir.display()
             );
         }
 
         // Validate experiences file exists
-        let experiences_path = config.person_experiences_path();
+        let experiences_path = config.profile_experiences_path();
         if !experiences_path.exists() {
             anyhow::bail!("Experiences file not found: {}", experiences_path.display());
         }
@@ -65,7 +65,7 @@ impl CvGenerator {
         app_log!(
             info,
             "✅ Successfully compiled CV for {} ({} template, {} lang) to {}",
-            self.config.person_name,
+            self.config.profile_name,
             self.config.template,
             self.config.lang,
             output_path.display()
@@ -78,7 +78,7 @@ impl CvGenerator {
         // Generate filename using available data
         let filename = format!(
             "{}_CV_{}.pdf",
-            sanitize_filename(&self.config.person_name),
+            sanitize_filename(&self.config.profile_name),
             Utc::now().format("%Y")
         );
 
@@ -103,7 +103,7 @@ impl CvGenerator {
 
         let output_path = self.config.output_dir.join(format!(
             "{}_{}_{}.pdf",
-            self.config.person_name, self.config.template, self.config.lang
+            self.config.profile_name, self.config.template, self.config.lang
         ));
 
         let status = Command::new("typst")
@@ -120,18 +120,18 @@ impl CvGenerator {
         Ok(())
     }
 
-    pub fn create_person_unchecked(&self) -> Result<()> {
+    pub fn create_profile_unchecked(&self) -> Result<()> {
         let template_engine = TemplateEngine::new(self.config.templates_dir.clone());
-        template_engine?.create_person_from_templates(
-            &self.config.person_name,
+        template_engine?.create_profile_from_templates(
+            &self.config.profile_name,
             &self.config.data_dir,
-            Some(&self.config.person_name),
+            Some(&self.config.profile_name),
         )?;
 
         app_log!(
             info,
-            "Created person directory structure for: {}",
-            self.config.person_name
+            "Created profile directory structure for: {}",
+            self.config.profile_name
         );
         Ok(())
     }

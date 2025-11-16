@@ -29,7 +29,7 @@ pub struct ServiceConfig {
 
 #[derive(Debug, Clone)]
 pub struct CvConfig {
-    pub person_name: String,
+    pub profile_name: String,
     pub lang: String,
     pub template: String,
     pub data_dir: PathBuf,
@@ -110,14 +110,14 @@ impl ConfigManager {
     /// Create CV configuration
     pub fn create_cv_config(
         &self,
-        person_name: String,
+        profile_name: String,
         lang: String,
         template: Option<String>,
         data_dir: Option<PathBuf>,
         output_dir: Option<PathBuf>,
     ) -> CvConfig {
         CvConfig {
-            person_name,
+            profile_name,
             lang,
             template: template.unwrap_or_else(|| "default".to_string()),
             data_dir: data_dir.unwrap_or_else(|| self.environment.tenant_data_path.clone()),
@@ -144,26 +144,26 @@ impl ConfigManager {
 }
 
 impl CvConfig {
-    /// Get person configuration file path
-    pub fn person_config_path(&self) -> PathBuf {
-        self.data_dir.join(&self.person_name).join("cv_params.toml")
+    /// Get profile configuration file path
+    pub fn profile_config_path(&self) -> PathBuf {
+        self.data_dir.join(&self.profile_name).join("cv_params.toml")
     }
 
-    /// Get person experiences file path
-    pub fn person_experiences_path(&self) -> PathBuf {
+    /// Get profile experiences file path
+    pub fn profile_experiences_path(&self) -> PathBuf {
         self.data_dir
-            .join(&self.person_name)
+            .join(&self.profile_name)
             .join(format!("experiences_{}.typ", self.lang))
     }
 
-    /// Get person image path
-    pub fn person_image_path(&self) -> PathBuf {
-        self.data_dir.join(&self.person_name).join("profile.png")
+    /// Get profile image path
+    pub fn profile_image_path(&self) -> PathBuf {
+        self.data_dir.join(&self.profile_name).join("profile.png")
     }
 
-    /// Get person data directory
-    pub fn person_data_dir(&self) -> PathBuf {
-        self.data_dir.join(&self.person_name)
+    /// Get profile data directory
+    pub fn profile_data_dir(&self) -> PathBuf {
+        self.data_dir.join(&self.profile_name)
     }
 
     /// Get absolute data directory

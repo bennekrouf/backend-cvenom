@@ -2,8 +2,8 @@
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
-/// Normalize person name for file system usage
-pub fn normalize_person_name(name: &str) -> String {
+/// Normalize profile name for file system usage
+pub fn normalize_profile_name(name: &str) -> String {
     name.to_lowercase()
         .chars()
         .map(|c| {
@@ -27,16 +27,16 @@ pub fn normalize_language(lang: Option<&str>) -> String {
     }
 }
 
-/// Build tenant person directory path
-pub fn tenant_person_path(base: &PathBuf, tenant: &str, person: &str) -> PathBuf {
-    base.join(tenant).join(person)
+/// Build tenant profile directory path
+pub fn tenant_profile_path(base: &PathBuf, tenant: &str, profile: &str) -> PathBuf {
+    base.join(tenant).join(profile)
 }
 
 /// Build output file path
-pub fn output_file_path(base: &PathBuf, person: &str, template: &str, lang: &str) -> PathBuf {
+pub fn output_file_path(base: &PathBuf, profile: &str, template: &str, lang: &str) -> PathBuf {
     base.join(format!(
         "{}_{}_{}_{}.pdf",
-        person,
+        profile,
         template,
         lang,
         chrono::Utc::now().format("%Y%m%d_%H%M%S")
@@ -124,10 +124,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_normalize_person_name() {
-        assert_eq!(normalize_person_name("John Doe"), "john_doe");
-        assert_eq!(normalize_person_name("jean-paul"), "jean-paul");
-        assert_eq!(normalize_person_name("Marie@Company"), "marie_company");
+    fn test_normalize_profile_name() {
+        assert_eq!(normalize_profile_name("John Doe"), "john_doe");
+        assert_eq!(normalize_profile_name("jean-paul"), "jean-paul");
+        assert_eq!(normalize_profile_name("Marie@Company"), "marie_company");
     }
 
     #[test]

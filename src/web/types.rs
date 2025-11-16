@@ -58,7 +58,7 @@ pub struct ErrorResponse {
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct RenameCollaboratorRequest {
+pub struct RenameProfileRequest {
     pub new_name: String,
 }
 
@@ -79,7 +79,7 @@ pub struct ValidationError {
     pub success: bool,
     pub error: String,
     pub error_code: String,
-    pub missing_person: String,
+    pub missing_profile: String,
     pub tenant: String,
     pub suggestions: Vec<String>,
 }
@@ -96,36 +96,36 @@ pub struct ImageValidationErrorResponse {
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct DeletePersonRequest {
-    pub person: String,
+pub struct DeleteProfileRequest {
+    pub profile: String,
 }
 
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
-pub struct DeletePersonResponse {
+pub struct DeleteProfileResponse {
     pub success: bool,
     pub message: String,
-    pub deleted_person: String,
+    pub deleted_profile: String,
     pub tenant: String,
 }
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct GenerateRequest {
-    pub person: String,
+    pub profile: String,
     pub lang: Option<String>,
     pub template: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
-pub struct CreatePersonRequest {
-    pub person: String,
+pub struct CreateProfileRequest {
+    pub profile: String,
 }
 
 #[derive(FromForm)]
 pub struct UploadForm<'f> {
-    pub person: String,
+    pub profile: String,
     pub file: TempFile<'f>,
 }
 
@@ -136,10 +136,10 @@ pub struct CvUploadForm<'f> {
 
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
-pub struct CreatePersonResponse {
+pub struct CreateProfileResponse {
     pub success: bool,
     pub message: String,
-    pub person_dir: String,
+    pub profile_dir: String,
     pub created_by: Option<String>,
     pub tenant: String,
 }
@@ -158,9 +158,9 @@ pub struct UploadResponse {
 pub struct CvConvertResponse {
     pub success: bool,
     pub message: String,
-    pub person_name: String,
+    pub profile_name: String,
     pub tenant: String,
-    pub person_dir: String,
+    pub profile_dir: String,
 }
 
 #[derive(Serialize)]
@@ -330,7 +330,7 @@ impl<T> WithConversationId for StandardRequest<T> {
 #[serde(crate = "rocket::serde")]
 pub struct JobAnalysisData {
     pub job_content: Option<crate::linkedin_analysis::JobContent>,
-    pub person_experiences: Option<String>,
+    pub profile_experiences: Option<String>,
     pub fit_analysis: Option<String>,
     pub raw_job_content: Option<String>,
 }

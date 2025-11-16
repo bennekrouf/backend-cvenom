@@ -42,7 +42,7 @@ impl JobAnalyzer {
         })
     }
 
-    /// Analyze job fit for a person
+    /// Analyze job fit for a profile
     pub async fn analyze_job_fit(
         &self,
         request: JobAnalysisRequest,
@@ -50,21 +50,21 @@ impl JobAnalyzer {
     ) -> JobAnalysisResponse {
         app_log!(
             info,
-            "Starting job analysis for person: {}",
-            request.person_name
+            "Starting job analysis for profile: {}",
+            request.profile_name
         );
 
-        // Check if person directory exists
-        let person_dir = tenant_data_dir.join(&request.person_name);
-        if !person_dir.exists() {
+        // Check if profile directory exists
+        let profile_dir = tenant_data_dir.join(&request.profile_name);
+        if !profile_dir.exists() {
             return JobAnalysisResponse {
                 success: false,
                 error: Some(format!(
-                    "Person directory not found: {}",
-                    request.person_name
+                    "Profile directory not found: {}",
+                    request.profile_name
                 )),
                 job_content: None,
-                person_experiences: None,
+                profile_experiences: None,
                 fit_analysis: None,
                 raw_job_content: None,
             };
@@ -79,23 +79,23 @@ impl JobAnalyzer {
                     success: false,
                     error: Some(format!("Failed to extract job content: {}", e)),
                     job_content: None,
-                    person_experiences: None,
+                    profile_experiences: None,
                     fit_analysis: None,
                     raw_job_content: None,
                 };
             }
         };
 
-        // Read person's experiences
-        let person_experiences = match self.read_person_experiences(&person_dir).await {
+        // Read profile's experiences
+        let profile_experiences = match self.read_profile_experiences(&profile_dir).await {
             Ok(exp) => exp,
             Err(e) => {
-                app_log!(error, "Failed to read person experiences: {}", e);
+                app_log!(error, "Failed to read profile experiences: {}", e);
                 return JobAnalysisResponse {
                     success: false,
-                    error: Some(format!("Failed to read person experiences: {}", e)),
+                    error: Some(format!("Failed to read profile experiences: {}", e)),
                     job_content: Some(job_content),
-                    person_experiences: None,
+                    profile_experiences: None,
                     fit_analysis: None,
                     raw_job_content: None,
                 };
@@ -103,7 +103,10 @@ impl JobAnalyzer {
         };
 
         // Create JSON representation of CV data
-        let cv_json = match self.create_cv_json(&person_dir, &person_experiences).await {
+        let cv_json = match self
+            .create_cv_json(&profile_dir, &profile_experiences)
+            .await
+        {
             Ok(json) => json,
             Err(e) => {
                 app_log!(error, "Failed to create CV JSON: {}", e);
@@ -111,7 +114,7 @@ impl JobAnalyzer {
                     success: false,
                     error: Some(format!("Failed to process CV data: {}", e)),
                     job_content: Some(job_content.clone()),
-                    person_experiences: Some(person_experiences),
+                    profile_experiences: Some(profile_experiences),
                     fit_analysis: None,
                     raw_job_content: Some(job_content.description),
                 };
@@ -124,7 +127,7 @@ impl JobAnalyzer {
                 success: true,
                 error: None,
                 job_content: Some(job_content.clone()),
-                person_experiences: Some(person_experiences),
+                profile_experiences: Some(profile_experiences),
                 fit_analysis: Some(fit_analysis),
                 raw_job_content: Some(job_content.description),
             },
@@ -134,7 +137,7 @@ impl JobAnalyzer {
                     success: false,
                     error: Some(format!("Job matching analysis failed: {}", e)),
                     job_content: Some(job_content.clone()),
-                    person_experiences: Some(person_experiences),
+                    profile_experiences: Some(profile_experiences),
                     fit_analysis: None,
                     raw_job_content: Some(job_content.description),
                 }
@@ -155,15 +158,12 @@ impl JobAnalyzer {
         })
     }
 
-    /// Read person's experiences from files
-    async fn read_person_experiences(&self, person_dir: &PathBuf) -> Result<String> {
-        let experiences_en = person_dir.join("experiences_en.typ");
-        let experiences_fr = person_dir.join("experiences_fr.typ");
+    /// Read profile's experiences from files
+    async fn read_profile_experiences(&self, profile_dir: &PathBuf) -> Result<String> {
+        let experiences_en = profile_dir.join("experiences_en.typ");
 
         let work_experience = if experiences_en.exists() {
             fs::read_to_string(&experiences_en).await?
-        } else if experiences_fr.exists() {
-            fs::read_to_string(&experiences_fr).await?
         } else {
             return Err(anyhow::anyhow!("No experience files found"));
         };
@@ -172,8 +172,8 @@ impl JobAnalyzer {
     }
 
     /// Create JSON representation of CV data
-    async fn create_cv_json(&self, person_dir: &PathBuf, work_experience: &str) -> Result<String> {
-        let cv_params_path = person_dir.join("cv_params.toml");
+    async fn create_cv_json(&self, profile_dir: &PathBuf, work_experience: &str) -> Result<String> {
+        let cv_params_path = profile_dir.join("cv_params.toml");
         let cv_params = if cv_params_path.exists() {
             fs::read_to_string(&cv_params_path).await?
         } else {
@@ -183,7 +183,7 @@ impl JobAnalyzer {
         let cv_data = serde_json::json!({
             "cv_params": cv_params,
             "work_experience": work_experience,
-            "person_dir": person_dir.display().to_string()
+            "profile_dir": profile_dir.display().to_string()
         });
 
         Ok(cv_data.to_string())

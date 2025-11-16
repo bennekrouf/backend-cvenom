@@ -275,7 +275,7 @@
   }
 }
 
-/* return text info about a person */
+/* return text info about a profile */
 #let show_details_text(
   alignment: center + horizon,
   icons: none,
@@ -372,7 +372,7 @@
 }
 
 
-/* the main info about the person (including picture) */
+/* the main info about the profile (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
   if details.at("picture", default: "").len() > 0 {
     grid(

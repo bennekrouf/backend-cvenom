@@ -4,7 +4,7 @@ use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::{FsOps, TemplateEngine};
 use crate::image_validator::ImageValidator;
-use crate::utils::{normalize_language, normalize_person_name};
+use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::types::WithConversationId;
 use crate::web::types::{
     GenerateRequest, PdfResponse, ServerConfig, StandardErrorResponse, StandardRequest,
@@ -29,7 +29,7 @@ pub async fn generate_cv_handler(
     let generate_span = app_span!("cv_generation",
         user_email = %user.email,
         tenant = %tenant.tenant_name,
-        person = %request.data.person,
+        profile = %request.data.profile,
         template = %request.data.template.as_deref().unwrap_or("default"),
         lang = %request.data.lang.as_deref().unwrap_or("en")
     );
@@ -65,12 +65,12 @@ pub async fn generate_cv_handler(
 
     let lang = normalize_language(request.data.lang.as_deref());
     let template_id = normalize_template(request.data.template.as_deref(), &template_manager);
-    let normalized_person = normalize_person_name(&request.data.person);
+    let normalized_profile = normalize_profile_name(&request.data.profile);
 
     app_log!(
         info,
-        "Parameters normalized, person: {}, template: {}, lang: {}",
-        normalized_person,
+        "Parameters normalized, profile: {}, template: {}, lang: {}",
+        normalized_profile,
         template_id,
         lang
     );
@@ -98,36 +98,39 @@ pub async fn generate_cv_handler(
         )));
     }
 
-    let person_dir = tenant_data_dir.join(&normalized_person);
+    let profile_dir = tenant_data_dir.join(&normalized_profile);
     app_log!(
         debug,
-        "Person directory, path: {}, exists: {}",
-        person_dir.display(),
-        person_dir.exists()
+        "Profile directory, path: {}, exists: {}",
+        profile_dir.display(),
+        profile_dir.exists()
     );
 
-    // Check if person directory exists
-    if !person_dir.exists() {
+    // Check if profile directory exists
+    if !profile_dir.exists() {
         app_log!(
             warn,
-            "Person directory does not exist: {}",
-            person_dir.display()
+            "Profile directory does not exist: {}",
+            profile_dir.display()
         );
         return Err(Json(StandardErrorResponse::new(
-            format!("Person '{}' not found in your account", request.data.person),
-            "PERSON_NOT_FOUND".to_string(),
+            format!(
+                "Profile '{}' not found in your account",
+                request.data.profile
+            ),
+            "PROFILE_NOT_FOUND".to_string(),
             vec![
                 format!(
-                    "Create person '{}' first using the create endpoint",
-                    request.data.person
+                    "Create profile '{}' first using the create endpoint",
+                    request.data.profile
                 ),
-                "Check the person name spelling".to_string(),
+                "Check the profile name spelling".to_string(),
             ],
             conversation_id,
         )));
     }
 
-    let profile_image_path = person_dir.join("profile.png");
+    let profile_image_path = profile_dir.join("profile.png");
     app_log!(
         info,
         "Checking profile image, path: {}, exists: {}",
@@ -144,17 +147,17 @@ pub async fn generate_cv_handler(
         );
     }
 
-    app_log!(info, "Creating CV configuration, person: {}, lang: {}, template: {}, data_dir: {}, output_dir: {}, templates_dir: {}",
-        normalized_person, lang, template_id, tenant_data_dir.display(), config.output_dir.display(), config.templates_dir.display()
+    app_log!(info, "Creating CV configuration, profile: {}, lang: {}, template: {}, data_dir: {}, output_dir: {}, templates_dir: {}",
+        normalized_profile, lang, template_id, tenant_data_dir.display(), config.output_dir.display(), config.templates_dir.display()
     );
 
-    let cv_config = CvConfig::new(&normalized_person, &lang)
+    let cv_config = CvConfig::new(&normalized_profile, &lang)
         .with_template(template_id.to_string())
         .with_data_dir(tenant_data_dir)
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
 
-    let pdf_gen_span = app_span!("pdf_generation", person = %normalized_person);
+    let pdf_gen_span = app_span!("pdf_generation", profile = %normalized_profile);
     let _pdf_enter = pdf_gen_span.enter();
 
     match CvGenerator::new(cv_config) {
@@ -164,8 +167,8 @@ pub async fn generate_cv_handler(
                 Ok((pdf_data, filename)) => {
                     app_log!(
                         info,
-                        "CV generation completed successfully, person: {}, pdf_size: {}, filename: {}",
-                        normalized_person,
+                        "CV generation completed successfully, profile: {}, pdf_size: {}, filename: {}",
+                        normalized_profile,
                         pdf_data.len(),
                         filename
                     );
@@ -174,8 +177,8 @@ pub async fn generate_cv_handler(
                 Err(e) => {
                     app_log!(
                         error,
-                        "CV generation failed, person: {}, error: {}, error_debug: {:?}",
-                        normalized_person,
+                        "CV generation failed, profile: {}, error: {}, error_debug: {:?}",
+                        normalized_profile,
                         e,
                         e
                     );
@@ -203,7 +206,7 @@ pub async fn generate_cv_handler(
                 "CONFIG_ERROR".to_string(),
                 vec![
                     "Check your request parameters".to_string(),
-                    "Verify the person exists".to_string(),
+                    "Verify the profile exists".to_string(),
                 ],
                 conversation_id,
             )))

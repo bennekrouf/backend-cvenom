@@ -14,4 +14,4 @@ pub use translate::translate_cv_handler;
 pub use upload_convert::upload_and_convert_cv_handler;
 
 // Re-export helper functions for use in other modules
-pub use helpers::{create_person_from_cv_data, load_person_cv_data, normalize_template};
+pub use helpers::{create_profile_from_cv_data, load_profile_cv_data, normalize_template};

@@ -23,11 +23,11 @@ pub use core::{ConfigManager, Database, FsOps, TemplateEngine};
 pub use environment::EnvironmentConfig;
 pub use generator::CvGenerator;
 
-/// List all available persons - now uses core FsOps
-pub fn list_persons(data_dir: &PathBuf) -> Result<Vec<String>> {
+/// List all available profiles - now uses core FsOps
+pub fn list_profiles(data_dir: &PathBuf) -> Result<Vec<String>> {
     // Use async runtime for the async core function
     let rt = tokio::runtime::Runtime::new().context("Failed to create tokio runtime")?;
-    rt.block_on(FsOps::list_persons(data_dir))
+    rt.block_on(FsOps::list_profiles(data_dir))
 }
 
 /// List all available templates - now uses core TemplateEngine
@@ -39,12 +39,12 @@ pub fn list_templates(templates_dir: &PathBuf) -> Result<Vec<String>> {
 
 /// Convenience function for quick CV generation - API unchanged
 pub async fn generate_cv(
-    person_name: &str,
+    profile_name: &str,
     lang: &str,
     template: Option<&str>,
     output_dir: Option<PathBuf>,
 ) -> Result<PathBuf> {
-    let mut config = CvConfig::new(person_name, lang);
+    let mut config = CvConfig::new(profile_name, lang);
 
     if let Some(template_str) = template {
         config = config.with_template(template_str.to_string());

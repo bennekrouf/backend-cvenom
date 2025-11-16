@@ -14,33 +14,33 @@ use rocket::State;
 use std::collections::HashMap;
 
 impl AuthenticatedUser {
-    /// Ensure person directory exists for this user
-    pub async fn ensure_person_exists(
+    /// Ensure profile directory exists for this user
+    pub async fn ensure_profile_exists(
         &self,
         config: &crate::web::types::ServerConfig,
         _db_config: &DatabaseConfig,
     ) -> Result<(), anyhow::Error> {
-        // Extract person name from email (before @)
-        let person_name = self.firebase_user.email.split('@').next().unwrap_or("user");
-        let normalized_person = crate::utils::normalize_person_name(person_name);
+        // Extract profile name from email (before @)
+        let profile_name = self.firebase_user.email.split('@').next().unwrap_or("user");
+        let normalized_profile = crate::utils::normalize_profile_name(profile_name);
 
         // Use new tenant folder path
         let tenant_data_dir = get_tenant_folder_path(&self.firebase_user.email, &config.data_dir);
-        let person_dir = tenant_data_dir.join(&normalized_person);
+        let profile_dir = tenant_data_dir.join(&normalized_profile);
 
         // Ensure directories exist
-        FsOps::ensure_dir_exists(&person_dir).await?;
+        FsOps::ensure_dir_exists(&profile_dir).await?;
 
         // Create default files if they don't exist
-        // let cv_params_path = person_dir.join("cv_params.toml");
+        // let cv_params_path = profile_dir.join("cv_params.toml");
         // if !cv_params_path.exists() {
-        //     // Use core TemplateEngine to create person files
+        //     // Use core TemplateEngine to create profile files
         //     let template_engine = crate::core::TemplateEngine::new(config.templates_dir.clone())?;
         //     template_engine
-        //         .create_person_from_templates(
-        //             &normalized_person,
+        //         .create_profile_from_templates(
+        //             &normalized_profile,
         //             &tenant_data_dir,
-        //             Some(person_name),
+        //             Some(profile_name),
         //         )
         //         .await?;
         // }
@@ -217,9 +217,9 @@ pub async fn get_tenant_files_handler(
     config: &State<crate::web::types::ServerConfig>,
     // db_config: &State<DatabaseConfig>,
 ) -> Result<Json<serde_json::Value>, Status> {
-    // Auto-create person if doesn't exist
-    // if let Err(e) = auth.ensure_person_exists(config, db_config).await {
-    //     app_log!(error, "Failed to ensure person exists: {}", e);
+    // Auto-create profile if doesn't exist
+    // if let Err(e) = auth.ensure_profile_exists(config, db_config).await {
+    //     app_log!(error, "Failed to ensure profile exists: {}", e);
     // }
 
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);

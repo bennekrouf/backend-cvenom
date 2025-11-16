@@ -231,132 +231,119 @@ impl TemplateEngine {
         Ok(())
     }
 
-    // ===== Person Creation Functions =====
+    // ===== Profile Creation Functions =====
 
-    /// Create person from templates (legacy compatibility)
-    pub fn create_person_from_templates(
+    /// Create profile from templates (legacy compatibility)
+    pub fn create_profile_from_templates(
         &self,
-        person_name: &str,
+        profile_name: &str,
         data_dir: &PathBuf,
         display_name: Option<&str>,
     ) -> Result<()> {
         let rt = tokio::runtime::Handle::current();
-        rt.block_on(self.create_person_from_templates_async(person_name, data_dir, display_name))
+        rt.block_on(self.create_profile_from_templates_async(profile_name, data_dir, display_name))
     }
 
-    /// Create person from templates (async version)
-    pub async fn create_person_from_templates_async(
+    /// Create profile from templates (async version)
+    pub async fn create_profile_from_templates_async(
         &self,
-        person_name: &str,
+        profile_name: &str,
         data_dir: &Path,
         display_name: Option<&str>,
     ) -> Result<()> {
-        let person_dir = data_dir.join(person_name);
-        FsOps::ensure_dir_exists(&person_dir).await?;
+        let profile_dir = data_dir.join(profile_name);
+        FsOps::ensure_dir_exists(&profile_dir).await?;
 
         // Create cv_params.toml using template
-        self.create_cv_params(&person_dir, person_name, display_name)
+        self.create_cv_params(&profile_dir, profile_name, display_name)
             .await?;
 
         // Create experiences files
-        self.create_experiences_files(&person_dir).await?;
+        self.create_experiences_files(&profile_dir).await?;
 
         // Create README
-        self.create_readme(&person_dir, person_name).await?;
+        self.create_readme(&profile_dir, profile_name).await?;
 
         app_log!(
             info,
-            "Successfully created person from templates: {}",
-            person_name
+            "Successfully created profile from templates: {}",
+            profile_name
         );
         Ok(())
     }
 
-    /// Create person with typst content and toml config from CV import service
-    pub async fn create_person_with_typst_content(
+    /// Create profile with typst content and toml config from CV import service
+    pub async fn create_profile_with_typst_content(
         &self,
-        person_name: &str,
+        profile_name: &str,
         conversion_response: &str,
         data_dir: &Path,
     ) -> Result<()> {
         app_log!(
             info,
-            "Creating person '{}' with CV import data",
-            person_name
+            "Creating profile '{}' with CV import data",
+            profile_name
         );
 
         // Parse the JSON response
         let response: ConversionResponse =
             serde_json::from_str(conversion_response).with_context(|| {
                 format!(
-                    "Failed to parse conversion response JSON for person '{}'",
-                    person_name
+                    "Failed to parse conversion response JSON for profile '{}'",
+                    profile_name
                 )
             })?;
 
         app_log!(
             info,
             "Successfully parsed CV import response for '{}'",
-            person_name
+            profile_name
         );
 
-        let person_dir = data_dir.join(person_name);
-        FsOps::ensure_dir_exists(&person_dir)
+        let profile_dir = data_dir.join(profile_name);
+        FsOps::ensure_dir_exists(&profile_dir)
             .await
             .with_context(|| {
                 format!(
-                    "Failed to create person directory: {}",
-                    person_dir.display()
+                    "Failed to create profile directory: {}",
+                    profile_dir.display()
                 )
             })?;
 
-        app_log!(trace, "Created directory: {}", person_dir.display());
+        app_log!(trace, "Created directory: {}", profile_dir.display());
 
         // Save the TOML config as cv_params.toml
-        FsOps::write_file_safe(&person_dir.join("cv_params.toml"), &response.toml_content)
+        FsOps::write_file_safe(&profile_dir.join("cv_params.toml"), &response.toml_content)
             .await
             .with_context(|| {
                 format!(
-                    "Failed to write cv_params.toml for person '{}'",
-                    person_name
+                    "Failed to write cv_params.toml for profile '{}'",
+                    profile_name
                 )
             })?;
 
         // Save the English Typst content as experiences_en.typ
         FsOps::write_file_safe(
-            &person_dir.join("experiences_en.typ"),
+            &profile_dir.join("experiences_en.typ"),
             &response.typst_content,
         )
         .await
         .with_context(|| {
             format!(
-                "Failed to write experiences_en.typ for person '{}'",
-                person_name
-            )
-        })?;
-
-        // Save the French Typst content as experiences_fr.typ
-        FsOps::write_file_safe(
-            &person_dir.join("experiences_fr.typ"),
-            &response.typst_content,
-        )
-        .await
-        .with_context(|| {
-            format!(
-                "Failed to write experiences_fr.typ for person '{}'",
-                person_name
+                "Failed to write experiences_en.typ for profile '{}'",
+                profile_name
             )
         })?;
 
         // Create README
-        self.create_readme(&person_dir, person_name)
+        self.create_readme(&profile_dir, profile_name)
             .await
-            .with_context(|| format!("Failed to create README for person '{}'", person_name))?;
+            .with_context(|| format!("Failed to create README for profile '{}'", profile_name))?;
 
         app_log!(
             info,
-            "Successfully created person with CV import data: {}",
-            person_name
+            "Successfully created profile with CV import data: {}",
+            profile_name
         );
         Ok(())
     }
@@ -366,26 +353,26 @@ impl TemplateEngine {
     /// Create cv_params.toml
     async fn create_cv_params(
         &self,
-        person_dir: &Path,
-        person_name: &str,
+        profile_dir: &Path,
+        profile_name: &str,
         display_name: Option<&str>,
     ) -> Result<()> {
-        let person_template_path = self.templates_dir.join("person_template.toml");
+        let profile_template_path = self.templates_dir.join("profile_template.toml");
 
-        if person_template_path.exists() {
-            let template_content = FsOps::read_file_safe(&person_template_path).await?;
+        if profile_template_path.exists() {
+            let template_content = FsOps::read_file_safe(&profile_template_path).await?;
             let mut vars = HashMap::new();
             vars.insert(
                 "name".to_string(),
-                display_name.unwrap_or(person_name).to_string(),
+                display_name.unwrap_or(profile_name).to_string(),
             );
 
             let processed_content = Self::process_variables(&template_content, &vars);
-            FsOps::write_file_safe(&person_dir.join("cv_params.toml"), &processed_content).await?;
+            FsOps::write_file_safe(&profile_dir.join("cv_params.toml"), &processed_content).await?;
         } else {
             app_log!(
                 warn,
-                "Person template not found, creating basic cv_params.toml"
+                "Profile template not found, creating basic cv_params.toml"
             );
             let basic_config = format!(
                 "[personal]\n\
@@ -404,83 +391,35 @@ secondary_color = \"#757575\"\n\
 [content]\n\
 show_picture = true\n\
 show_contact = true\n",
-                display_name.unwrap_or(person_name)
+                display_name.unwrap_or(profile_name)
             );
-            FsOps::write_file_safe(&person_dir.join("cv_params.toml"), &basic_config).await?;
+            FsOps::write_file_safe(&profile_dir.join("cv_params.toml"), &basic_config).await?;
         }
         Ok(())
     }
 
     /// Create experiences files (English and French)
-    async fn create_experiences_files(&self, person_dir: &Path) -> Result<()> {
+    async fn create_experiences_files(&self, profile_dir: &Path) -> Result<()> {
         // Create experiences_en.typ
         let experiences_template_path = self.templates_dir.join("experiences_template.typ");
         if experiences_template_path.exists() {
             let template_content = FsOps::read_file_safe(&experiences_template_path).await?;
-            FsOps::write_file_safe(&person_dir.join("experiences_en.typ"), &template_content)
+            FsOps::write_file_safe(&profile_dir.join("experiences_en.typ"), &template_content)
                 .await?;
         } else {
             let default_experiences = self.get_default_experiences_content();
-            FsOps::write_file_safe(&person_dir.join("experiences_en.typ"), &default_experiences)
-                .await?;
+            FsOps::write_file_safe(
+                &profile_dir.join("experiences_en.typ"),
+                &default_experiences,
+            )
+            .await?;
         }
 
-        // Create experiences_fr.typ
-        self.create_experiences_fr(person_dir).await?;
-        Ok(())
-    }
-
-    /// Create French experiences file
-    async fn create_experiences_fr(&self, person_dir: &Path) -> Result<()> {
-        let default_experiences_fr = r#"#import "template.typ": *
-
-#let get_work_experience() = [
-  = Expérience Professionnelle
-  
-  == Entreprise Actuelle
-  #dated_experience(
-    "Titre du Poste",
-    date: "Date de début - Présent",
-    description: "Brève description de l'entreprise et du secteur d'activité",
-    content: [
-      #experience_details(
-        "Responsabilité clé ou réalisation avec des métriques spécifiques si possible"
-      )
-      #experience_details(
-        "Autre responsabilité axée sur le leadership technique ou la livraison"
-      )
-      #experience_details(
-        "Responsabilité supplémentaire mettant en avant l'impact ou la résolution de problèmes"
-      )
-    ]
-  )
-  
-  == Entreprise Précédente
-  #dated_experience(
-    "Titre du Poste Précédent",
-    date: "Date de début - Date de fin", 
-    description: "Brève description de l'entreprise précédente",
-    content: [
-      #experience_details(
-        "Responsabilité clé du rôle précédent"
-      )
-      #experience_details(
-        "Autre responsabilité de l'expérience précédente"
-      )
-    ]
-  )
-]"#;
-
-        FsOps::write_file_safe(
-            &person_dir.join("experiences_fr.typ"),
-            default_experiences_fr,
-        )
-        .await?;
         Ok(())
     }
 
     /// Create README file
-    async fn create_readme(&self, person_dir: &Path, person_name: &str) -> Result<()> {
+    async fn create_readme(&self, profile_dir: &Path, profile_name: &str) -> Result<()> {
         let readme_content = format!(
             "# {} CV Data\n\n\
             Add your profile image as `profile.png` in this directory.\n\
@@ -489,12 +428,11 @@ show_contact = true\n",
             - `cv_params.toml` - Personal information, skills, and key insights\n\
             - `experiences_*.typ` - Work experience for each language (en/fr)\n\n\
             ## Available Languages\n\
-            - English: experiences_en.typ\n\
-            - French: experiences_fr.typ\n",
-            person_name
+            - English: experiences_en.typ\n",
+            profile_name
         );
 
-        FsOps::write_file_safe(&person_dir.join("README.md"), &readme_content).await?;
+        FsOps::write_file_safe(&profile_dir.join("README.md"), &readme_content).await?;
         Ok(())
     }
 
@@ -567,13 +505,13 @@ impl TemplateProcessor {
         self.engine.process_template(template_content, variables)
     }
 
-    pub fn create_person_from_templates(
+    pub fn create_profile_from_templates(
         &self,
-        person_name: &str,
+        profile_name: &str,
         data_dir: &PathBuf,
         display_name: Option<&str>,
     ) -> Result<()> {
         self.engine
-            .create_person_from_templates(person_name, data_dir, display_name)
+            .create_profile_from_templates(profile_name, data_dir, display_name)
     }
 }

@@ -103,6 +103,31 @@ pub struct CvMetadata {
     pub version: Option<String>,
 }
 
+// Helper function to get section case-insensitively
+fn get_section_ci<'a>(
+    toml_value: &'a toml::Value,
+    section_name: &str,
+) -> Option<&'a toml::value::Table> {
+    if let Some(table) = toml_value.as_table() {
+        for (key, value) in table {
+            if key.to_lowercase() == section_name.to_lowercase() {
+                // Handle both [section] (table) and [[section]] (array of tables - return first)
+                if let Some(table) = value.as_table() {
+                    return Some(table);
+                } else if let Some(array) = value.as_array() {
+                    // For [[section]], return the first table in the array
+                    if let Some(first_item) = array.first() {
+                        if let Some(first_table) = first_item.as_table() {
+                            return Some(first_table);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
 // ===== Local Conversion Logic =====
 
 pub struct CvConverter;
@@ -295,170 +320,160 @@ impl CvConverter {
         let toml_value: toml::Value =
             toml::from_str(&toml_content).context("Failed to parse TOML")?;
 
-        // Extract personal info
-        let personal_section = toml_value
-            .get("personal_info")
-            .and_then(|v| v.as_table())
-            .context("Missing personal section in TOML")?;
+        // Helper function to get field from either root level or personal section
+        let get_personal_field = |field_name: &str| -> Option<&str> {
+            // Try root level first (flat structure)
+            if let Some(value) = toml_value.get(field_name).and_then(|v| v.as_str()) {
+                return Some(value);
+            }
+            // Try personal section (nested structure)
+            if let Some(personal_section) = get_section_ci(&toml_value, "personal") {
+                if let Some(value) = personal_section.get(field_name).and_then(|v| v.as_str()) {
+                    return Some(value);
+                }
+            }
+            // Try personal_info section (alternative nested structure)
+            if let Some(personal_section) = get_section_ci(&toml_value, "personal_info") {
+                if let Some(value) = personal_section.get(field_name).and_then(|v| v.as_str()) {
+                    return Some(value);
+                }
+            }
+            None
+        };
 
         let personal_info = PersonalInfo {
-            name: personal_section
-                .get("name")
-                .and_then(|v| v.as_str())
-                .unwrap_or("Unknown")
-                .to_string(),
-            title: personal_section
-                .get("title")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            email: personal_section
-                .get("email")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            phone: personal_section
-                .get("phonenumber")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            address: personal_section
-                .get("address")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            linkedin: personal_section
-                .get("linkedin")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            website: personal_section
-                .get("website")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
-            summary: personal_section
-                .get("summary")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string()),
+            name: get_personal_field("name").unwrap_or("Unknown").to_string(),
+            title: get_personal_field("title").map(|s| s.to_string()),
+            email: get_personal_field("email").map(|s| s.to_string()),
+            phone: get_personal_field("phonenumber").map(|s| s.to_string()),
+            address: get_personal_field("address").map(|s| s.to_string()),
+            linkedin: get_personal_field("linkedin").map(|s| s.to_string()),
+            website: get_personal_field("website").map(|s| s.to_string()),
+            summary: get_personal_field("summary").map(|s| s.to_string()),
             links: None, // TODO: Parse links if needed
         };
 
-        // Extract skills (simplified)
-        let skills =
-            if let Some(skills_section) = toml_value.get("skills").and_then(|v| v.as_table()) {
-                Skills {
-                    technical: skills_section
-                        .get("technical")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    programming_languages: skills_section
-                        .get("programming_languages")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    frameworks: skills_section
-                        .get("frameworks")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    tools: skills_section
-                        .get("tools")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    soft_skills: None,
-                    other: None,
-                }
-            } else {
-                Skills {
-                    technical: None,
-                    programming_languages: None,
-                    frameworks: None,
-                    tools: None,
-                    soft_skills: None,
-                    other: None,
-                }
-            };
+        // Extract skills using case-insensitive lookup
+        let skills = if let Some(skills_section) = get_section_ci(&toml_value, "skills") {
+            Skills {
+                technical: skills_section
+                    .get("technical")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                programming_languages: skills_section
+                    .get("programming_languages")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                frameworks: skills_section
+                    .get("frameworks")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                tools: skills_section
+                    .get("tools")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                soft_skills: None,
+                other: None,
+            }
+        } else {
+            Skills {
+                technical: None,
+                programming_languages: None,
+                frameworks: None,
+                tools: None,
+                soft_skills: None,
+                other: None,
+            }
+        };
 
-        // Extract languages
-        let languages =
-            if let Some(lang_section) = toml_value.get("languages").and_then(|v| v.as_table()) {
-                Languages {
-                    native: lang_section
-                        .get("native")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    fluent: lang_section
-                        .get("fluent")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    intermediate: lang_section
-                        .get("intermediate")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                    basic: lang_section
-                        .get("basic")
-                        .and_then(|v| v.as_array())
-                        .map(|arr| {
-                            arr.iter()
-                                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                                .collect()
-                        }),
-                }
-            } else {
-                Languages {
-                    native: None,
-                    fluent: None,
-                    intermediate: None,
-                    basic: None,
-                }
-            };
+        // Extract languages using case-insensitive lookup
+        let languages = if let Some(lang_section) = get_section_ci(&toml_value, "languages") {
+            Languages {
+                native: lang_section
+                    .get("native")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                fluent: lang_section
+                    .get("fluent")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                intermediate: lang_section
+                    .get("intermediate")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+                basic: lang_section
+                    .get("basic")
+                    .and_then(|v| v.as_array())
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                            .collect()
+                    }),
+            }
+        } else {
+            Languages {
+                native: None,
+                fluent: None,
+                intermediate: None,
+                basic: None,
+            }
+        };
 
-        // Extract education
-        let education =
-            if let Some(edu_array) = toml_value.get("education").and_then(|v| v.as_array()) {
-                edu_array
-                    .iter()
-                    .filter_map(|edu| {
-                        let table = edu.as_table()?;
-                        Some(Education {
-                            institution: "Unknown Institution".to_string(), // TODO: Parse from title
-                            degree: table.get("title")?.as_str()?.to_string(),
-                            field: None,
-                            start_date: "Unknown".to_string(),
-                            end_date: None,
-                            gpa: None,
-                            honors: None,
-                            location: table
-                                .get("location")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string()),
-                        })
+        // Extract education using case-insensitive lookup
+        let education = if let Some(edu_array) = get_section_ci(&toml_value, "education")
+            .and_then(|_| toml_value.get("education"))
+            .and_then(|v| v.as_array())
+        {
+            edu_array
+                .iter()
+                .filter_map(|edu| {
+                    let table = edu.as_table()?;
+                    Some(Education {
+                        institution: "Unknown Institution".to_string(), // TODO: Parse from title
+                        degree: table.get("title")?.as_str()?.to_string(),
+                        field: None,
+                        start_date: "Unknown".to_string(),
+                        end_date: None,
+                        gpa: None,
+                        honors: None,
+                        location: table
+                            .get("location")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
                     })
-                    .collect()
-            } else {
-                Vec::new()
-            };
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         Ok(CvJson {
             personal_info,
@@ -477,3 +492,4 @@ impl CvConverter {
         })
     }
 }
+

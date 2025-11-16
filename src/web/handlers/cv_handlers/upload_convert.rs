@@ -4,14 +4,14 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::get_tenant_folder_path;
 use crate::core::{FsOps, ServiceClient};
-use crate::utils::normalize_person_name;
+use crate::utils::normalize_profile_name;
 use crate::web::types::{ActionResponse, CvUploadForm, StandardErrorResponse};
 use graflog::{app_log, app_span};
 use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::State;
 
-use super::helpers::create_person_from_cv_data;
+use super::helpers::create_profile_from_cv_data;
 
 pub async fn upload_and_convert_cv_handler(
     mut upload: Form<CvUploadForm<'_>>,
@@ -170,35 +170,35 @@ pub async fn upload_and_convert_cv_handler(
 
     let _ = tokio::fs::remove_file(&temp_path).await;
 
-    let person_name = original_filename
+    let profile_name = original_filename
         .split('.')
         .next()
         .unwrap_or(&original_filename);
 
-    let normalized_person = normalize_person_name(person_name);
-    let person_dir = tenant_data_dir.join(&normalized_person);
+    let normalized_profile = normalize_profile_name(profile_name);
+    let profile_dir = tenant_data_dir.join(&normalized_profile);
 
     // Convert CvJson to local file structure
-    match create_person_from_cv_data(&person_dir, &cv_data, &normalized_person).await {
+    match create_profile_from_cv_data(&profile_dir, &cv_data, &normalized_profile).await {
         Ok(_) => {
             app_log!(
                 info,
-                "CV converted and person created: {} by {} (tenant: {})",
-                normalized_person,
+                "CV converted and profile created: {} by {} (tenant: {})",
+                normalized_profile,
                 user.email,
                 tenant.tenant_name
             );
 
             let next_actions = vec![
-                format!("Upload profile picture for {}", person_name),
-                format!("Edit CV parameters for {}", person_name),
-                format!("Generate CV PDF for {}", person_name),
+                format!("Upload profile picture for {}", profile_name),
+                format!("Edit CV parameters for {}", profile_name),
+                format!("Generate CV PDF for {}", profile_name),
             ];
 
             let response = ActionResponse::success(
                 format!(
-                    "CV successfully converted and collaborator '{}' created",
-                    person_name
+                    "CV successfully converted and profile '{}' created",
+                    profile_name
                 ),
                 "created".to_string(),
                 None,
@@ -208,10 +208,10 @@ pub async fn upload_and_convert_cv_handler(
             Ok(Json(response))
         }
         Err(e) => {
-            app_log!(error, "Failed to create person from converted CV: {}", e);
+            app_log!(error, "Failed to create profile from converted CV: {}", e);
             Err(Json(StandardErrorResponse::new(
-                "Failed to create collaborator directory".to_string(),
-                "PERSON_CREATE_ERROR".to_string(),
+                "Failed to create profile directory".to_string(),
+                "PROFILE_CREATE_ERROR".to_string(),
                 vec![
                     "Try again in a few moments".to_string(),
                     "Contact support if the problem persists".to_string(),

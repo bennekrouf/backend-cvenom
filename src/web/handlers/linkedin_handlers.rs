@@ -29,7 +29,7 @@ pub async fn analyze_job_fit_handler(
         "User {} (tenant: {}) requesting job fit analysis for {}",
         user.email,
         tenant.tenant_name,
-        request.data.person_name
+        request.data.profile_name
     );
 
     // Use new tenant folder path
@@ -63,30 +63,29 @@ pub async fn analyze_job_fit_handler(
         }
     };
 
-    // Load person's CV data as CvJson (UPDATED)
-    let cv_data = match load_person_cv_data(&request.data.person_name, &tenant_data_dir).await {
+    // Load profile's CV data as CvJson (UPDATED)
+    // In the load_profile_cv_data function error handling (around line 9565)
+    let cv_data = match load_profile_cv_data(&request.data.profile_name, &tenant_data_dir).await {
         Ok(data) => data,
         Err(e) => {
             app_log!(
                 error,
                 "Failed to load CV data for {}: {}",
-                request.data.person_name,
+                request.data.profile_name,
                 e
             );
+
+            let error_message = e.to_string();
+            let (error_code, suggestions) =
+                categorize_cv_error(&error_message, &request.data.profile_name);
+
             return Err(Json(StandardErrorResponse::new(
                 format!(
-                    "Person '{}' not found or CV data incomplete",
-                    request.data.person_name
+                    "Profile '{}' has invalid CV data: {}",
+                    request.data.profile_name, error_message
                 ),
-                "PERSON_NOT_FOUND".to_string(),
-                vec![
-                    format!(
-                        "Create person '{}' first using the create endpoint",
-                        request.data.person_name
-                    ),
-                    "Check the person name spelling".to_string(),
-                    "Use 'Show collaborators' to see available persons".to_string(),
-                ],
+                error_code,
+                suggestions,
                 conversation_id,
             )));
         }
@@ -101,7 +100,7 @@ pub async fn analyze_job_fit_handler(
             app_log!(
                 info,
                 "Successfully analyzed job fit for {} by {} (tenant: {})",
-                request.data.person_name,
+                request.data.profile_name,
                 user.email,
                 tenant.tenant_name
             );
@@ -116,13 +115,14 @@ pub async fn analyze_job_fit_handler(
             app_log!(
                 error,
                 "Job analysis failed for {} by {} (tenant: {}): {}",
-                request.data.person_name,
+                request.data.profile_name,
                 user.email,
                 tenant.tenant_name,
                 error_msg
             );
 
-            let (error_code, suggestions) = categorize_error(&error_msg, &request.data.person_name);
+            let (error_code, suggestions) =
+                categorize_error(&error_msg, &request.data.profile_name);
             Err(Json(StandardErrorResponse::new(
                 error_msg,
                 error_code,
@@ -133,24 +133,27 @@ pub async fn analyze_job_fit_handler(
     }
 }
 
-// UPDATED: Load person CV data as CvJson instead of String
-async fn load_person_cv_data(
-    person_name: &str,
+// UPDATED: Load profile CV data as CvJson instead of String
+async fn load_profile_cv_data(
+    profile_name: &str,
     tenant_data_dir: &std::path::Path,
 ) -> Result<CvJson> {
-    let person_dir = tenant_data_dir.join(person_name);
-    let toml_path = person_dir.join("cv_params.toml");
-    let typst_path = person_dir.join("experiences_en.typ"); // Default to English
+    let profile_dir = tenant_data_dir.join(profile_name);
+    let toml_path = profile_dir.join("cv_params.toml");
+    let typst_path = profile_dir.join("experiences_en.typ"); // Default to English
+    app_log!(info, "Looking for profile at: {}", profile_dir.display());
+    app_log!(info, "TOML exists: {}", toml_path.exists());
+    app_log!(info, "Typst exists: {}", typst_path.exists());
 
     if !toml_path.exists() {
         return Err(anyhow::anyhow!(
-            "Person directory not found: cv_params.toml missing"
+            "Profile directory not found: cv_params.toml missing"
         ));
     }
 
     if !typst_path.exists() {
         return Err(anyhow::anyhow!(
-            "Person directory not found: experiences_en.typ missing"
+            "Profile directory not found: experiences_en.typ missing"
         ));
     }
 
@@ -159,20 +162,106 @@ async fn load_person_cv_data(
         .map_err(|e| anyhow::anyhow!("Failed to load CV data: {}", e))
 }
 
-fn categorize_error(error_msg: &str, person_name: &str) -> (String, Vec<String>) {
-    if error_msg.contains("Person directory not found")
+fn categorize_cv_error(error_msg: &str, profile_name: &str) -> (String, Vec<String>) {
+    if error_msg.contains("Missing") && error_msg.contains("section") {
+        let missing_section = extract_missing_section(error_msg);
+        (
+            "MISSING_CV_SECTION".to_string(),
+            vec![
+                format!("Add [{}] section to cv_params.toml", missing_section),
+                "Check cv_params.toml structure matches expected format".to_string(),
+                "Re-upload your CV or recreate the profile".to_string(),
+            ],
+        )
+    } else if error_msg.contains("Missing") && error_msg.contains("field") {
+        let missing_field = extract_missing_field(error_msg);
+        (
+            "MISSING_CV_FIELD".to_string(),
+            vec![
+                format!("Add '{}' field to cv_params.toml", missing_field),
+                "Check required fields are present".to_string(),
+                "Edit cv_params.toml manually or re-upload CV".to_string(),
+            ],
+        )
+    } else if error_msg.contains("Invalid") || error_msg.contains("malformed") {
+        (
+            "INVALID_CV_FORMAT".to_string(),
+            vec![
+                "Check cv_params.toml syntax is valid".to_string(),
+                "Verify TOML structure is correct".to_string(),
+                "Re-upload your CV to regenerate files".to_string(),
+            ],
+        )
+    } else if error_msg.contains("cv_params.toml missing")
+        || error_msg.contains("experiences_en.typ missing")
+    {
+        (
+            "PROFILE_INCOMPLETE".to_string(),
+            vec![
+                format!(
+                    "Create profile '{}' first using the create endpoint",
+                    profile_name
+                ),
+                "Check the profile name spelling".to_string(),
+                "Use 'Show profiles' to see available profiles".to_string(),
+            ],
+        )
+    } else {
+        (
+            "CV_DATA_ERROR".to_string(),
+            vec![
+                "Check CV data structure and content".to_string(),
+                "Try recreating the profile".to_string(),
+                "Contact support if the problem persists".to_string(),
+            ],
+        )
+    }
+}
+
+fn categorize_error(error_msg: &str, profile_name: &str) -> (String, Vec<String>) {
+    // Handle CV data structure errors first
+    if error_msg.contains("Missing") && error_msg.contains("section") {
+        let missing_section = extract_missing_section(error_msg);
+        (
+            "MISSING_CV_SECTION".to_string(),
+            vec![
+                format!("Add [{}] section to cv_params.toml", missing_section),
+                "Check cv_params.toml structure matches expected format".to_string(),
+                "Re-upload your CV or recreate the profile".to_string(),
+            ],
+        )
+    } else if error_msg.contains("Missing") && error_msg.contains("field") {
+        let missing_field = extract_missing_field(error_msg);
+        (
+            "MISSING_CV_FIELD".to_string(),
+            vec![
+                format!("Add '{}' field to cv_params.toml", missing_field),
+                "Check required fields are present".to_string(),
+                "Edit cv_params.toml manually or re-upload CV".to_string(),
+            ],
+        )
+    } else if error_msg.contains("Invalid") || error_msg.contains("malformed") {
+        (
+            "INVALID_CV_FORMAT".to_string(),
+            vec![
+                "Check cv_params.toml syntax is valid".to_string(),
+                "Verify TOML structure is correct".to_string(),
+                "Re-upload your CV to regenerate files".to_string(),
+            ],
+        )
+    } else if error_msg.contains("Profile directory not found")
         || error_msg.contains("cv_params.toml missing")
         || error_msg.contains("experiences_en.typ missing")
     {
         (
-            "PERSON_NOT_FOUND".to_string(),
+            "PROFILE_NOT_FOUND".to_string(),
             vec![
                 format!(
-                    "Create person '{}' first using the create endpoint",
-                    person_name
+                    "Create profile '{}' first using the create endpoint",
+                    profile_name
                 ),
-                "Check the person name spelling".to_string(),
-                "Use 'Show collaborators' to see available persons".to_string(),
+                "Check the profile name spelling".to_string(),
+                "Use 'Show profiles' to see available profiles".to_string(),
             ],
         )
     } else if error_msg.contains("Failed to scrape") || error_msg.contains("extract job content") {
@@ -198,10 +287,33 @@ fn categorize_error(error_msg: &str, person_name: &str) -> (String, Vec<String>)
             "ANALYSIS_ERROR".to_string(),
             vec![
                 "Try again with a different job URL".to_string(),
-                "Ensure the person's CV data is complete".to_string(),
+                "Ensure the profile's CV data is complete".to_string(),
                 "Contact support if the problem persists".to_string(),
             ],
         )
     }
 }
 
+fn extract_missing_section(error_msg: &str) -> String {
+    // Extract section name from "Missing personal section" or similar
+    if let Some(start) = error_msg.find("Missing ") {
+        if let Some(end) = error_msg[start + 8..].find(" section") {
+            return error_msg[start + 8..start + 8 + end].to_string();
+        }
+    }
+    "required".to_string()
+}
+
+fn extract_missing_field(error_msg: &str) -> String {
+    // Extract field name from "Missing field 'name'" or similar
+    if let Some(start) = error_msg.find("field '") {
+        if let Some(end) = error_msg[start + 7..].find("'") {
+            return error_msg[start + 7..start + 7 + end].to_string();
+        }
+    } else if let Some(start) = error_msg.find("Missing ") {
+        if let Some(end) = error_msg[start + 8..].find(" ") {
+            return error_msg[start + 8..start + 8 + end].to_string();
+        }
+    }
+    "required".to_string()
+}

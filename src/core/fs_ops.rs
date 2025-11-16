@@ -67,17 +67,17 @@ impl FsOps {
         Ok(())
     }
 
-    /// Check if person directory is valid (has cv_params.toml)
-    pub async fn is_valid_person_dir(path: &Path) -> bool {
+    /// Check if profile directory is valid (has cv_params.toml)
+    pub async fn is_valid_profile_dir(path: &Path) -> bool {
         path.is_dir() && path.join("cv_params.toml").exists()
     }
 
-    /// List valid person directories
-    pub async fn list_persons(data_dir: &Path) -> Result<Vec<String>> {
-        let mut persons = Vec::new();
+    /// List valid profile directories
+    pub async fn list_profiles(data_dir: &Path) -> Result<Vec<String>> {
+        let mut profiles = Vec::new();
 
         if !data_dir.exists() {
-            return Ok(persons);
+            return Ok(profiles);
         }
 
         let mut entries = fs::read_dir(data_dir)
@@ -86,15 +86,15 @@ impl FsOps {
 
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
-            if Self::is_valid_person_dir(&path).await {
+            if Self::is_valid_profile_dir(&path).await {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    persons.push(name.to_string());
+                    profiles.push(name.to_string());
                 }
             }
         }
 
-        persons.sort();
-        Ok(persons)
+        profiles.sort();
+        Ok(profiles)
     }
 
     /// Normalize path - replaces scattered path normalization patterns
@@ -106,8 +106,8 @@ impl FsOps {
         }
     }
 
-    /// Normalize person name - replaces utils::normalize_person_name
-    pub fn normalize_person_name(name: &str) -> String {
+    /// Normalize profile name - replaces utils::normalize_profile_name
+    pub fn normalize_profile_name(name: &str) -> String {
         name.trim()
             .to_lowercase()
             .chars()
