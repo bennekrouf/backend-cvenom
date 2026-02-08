@@ -19,7 +19,7 @@ use rocket::form::Form;
 use rocket::http::Method;
 use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
-use rocket::{catchers, get, post, routes, Data, Request, Response, State};
+use rocket::{catchers, get, post, routes, Request, Response, State};
 use std::path::PathBuf;
 pub use types::*;
 mod cors_utils;
