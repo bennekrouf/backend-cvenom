@@ -8,7 +8,8 @@ use crate::linkedin_analysis::JobAnalysisRequest;
 use crate::types::response::{OptimizeResponse, TranslateResponse};
 use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
-    optimize_cv_handler, translate_cv_handler, upload_and_convert_cv_handler,
+    optimize_and_generate_handler, optimize_cv_handler, translate_cv_handler,
+    upload_and_convert_cv_handler,
 };
 use anyhow::Result;
 use graflog::app_log;
@@ -206,9 +207,23 @@ pub async fn get_tenant_files(
 pub async fn optimize_cv(
     request: Json<StandardRequest<OptimizeCvRequest>>,
     auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<OptimizeResponse>>, Json<StandardErrorResponse>> {
-    optimize_cv_handler(request, auth, cv_service_url).await
+    optimize_cv_handler(request, auth, config, cv_service_url).await
+}
+
+/// Optimize the CV with ATS keyword injection **and** immediately compile + stream the PDF.
+/// The optimized profile files are also persisted to disk for future use.
+#[post("/optimize-and-generate", data = "<request>")]
+pub async fn optimize_and_generate(
+    request: Json<StandardRequest<OptimizeCvRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+    cv_service_url: &State<String>,
+) -> Result<PdfResponse, Json<StandardErrorResponse>> {
+    optimize_and_generate_handler(request, auth, config, db_config, cv_service_url).await
 }
 
 #[post("/translate", data = "<request>")]
@@ -322,6 +337,9 @@ pub async fn start_web_server(
                 save_tenant_file_content,
                 universal_options_handler,
                 rename_profile_handler,
+                optimize_cv,
+                optimize_and_generate,
+                translate_cv,
             ],
         )
         .launch()

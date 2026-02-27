@@ -1,0 +1,7 @@
+name = "tech"
+description = "Modern two-column layout for software engineers and developers"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["two_column", "tech_skills", "github_link"]
+languages = ["en", "fr"]
+version = "1.0.0"

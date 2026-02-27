@@ -1,0 +1,7 @@
+name = "creative"
+description = "Bold asymmetric layout for designers, UX and creative professionals"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["sidebar", "portfolio_link", "visual_skills", "bold_header"]
+languages = ["en", "fr"]
+version = "1.0.0"

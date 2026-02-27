@@ -1,0 +1,7 @@
+name = "academic"
+description = "Publication-rich layout for researchers, PhDs, professors and scientists"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["publications", "grants", "research_interests", "teaching_experience"]
+languages = ["en", "fr"]
+version = "1.0.0"

@@ -62,11 +62,9 @@ pub struct RenameProfileRequest {
     pub new_name: String,
 }
 
-#[derive(serde::Deserialize)]
-pub struct OptimizeCvRequest {
-    pub cv_json: String,
-    pub job_url: String,
-}
+// OptimizeCvRequest is defined in web::handlers::cv_handlers::optimize
+// and re-exported via the handlers module.
+pub use crate::web::handlers::cv_handlers::OptimizeCvRequest;
 
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]

@@ -1,0 +1,7 @@
+name = "consulting"
+description = "Structured mission-based layout for consultants, analysts and freelancers"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["key_competencies", "sector_expertise", "availability", "mission_format"]
+languages = ["en", "fr"]
+version = "1.0.0"

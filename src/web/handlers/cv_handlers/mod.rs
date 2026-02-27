@@ -9,7 +9,7 @@ pub mod upload_convert;
 
 // Re-export all handler functions
 pub use generate::generate_cv_handler;
-pub use optimize::optimize_cv_handler;
+pub use optimize::{optimize_and_generate_handler, optimize_cv_handler, OptimizeCvRequest};
 pub use translate::translate_cv_handler;
 pub use upload_convert::upload_and_convert_cv_handler;
 

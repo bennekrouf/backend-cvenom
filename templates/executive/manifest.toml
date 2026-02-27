@@ -1,0 +1,7 @@
+name = "executive"
+description = "Elegant single-column layout for directors, VPs and C-suite profiles"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["key_achievements", "metrics_focus", "classic_style"]
+languages = ["en", "fr"]
+version = "1.0.0"
