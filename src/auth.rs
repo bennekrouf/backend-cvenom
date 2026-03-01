@@ -61,11 +61,16 @@ impl AuthConfig {
     pub async fn update_firebase_keys(&mut self) -> Result<()> {
         let url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 
-        let response = reqwest::get(url).await?;
+        // Force IPv4 because Google aggressively blocks OVH IPv6 address ranges (returns 403 HTML)
+        let client = reqwest::Client::builder()
+            .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED))
+            .build()?;
+            
+        let response = client.get(url).send().await?;
         let keys: HashMap<String, String> = response.json().await?;
 
         self.firebase_keys = keys;
-        app_log!(info, "Updated Firebase public keys");
+        app_log!(info, "Updated Firebase public keys via IPv4");
 
         Ok(())
     }
