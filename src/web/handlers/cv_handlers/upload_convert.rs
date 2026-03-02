@@ -154,15 +154,46 @@ pub async fn upload_and_convert_cv_handler(
         Ok(data) => data,
         Err(e) => {
             let _ = tokio::fs::remove_file(&temp_path).await;
-            app_log!(error, "CV conversion failed: {}", e);
+            let err_str = e.to_string();
+            app_log!(error, "CV conversion failed: {}", err_str);
+
+            // Detect LLM-specific errors (model not found, API key, quota, etc.)
+            let (message, suggestions) = if err_str.contains("not_found_error")
+                || err_str.contains("LLMError")
+                || err_str.contains("Claude API Error")
+                || err_str.contains("model:")
+            {
+                (
+                    "AI model error — the configured LLM model is unavailable or misconfigured".to_string(),
+                    vec![
+                        "The AI model may be deprecated or misspelled — check CV_IMPORT_MODEL".to_string(),
+                        "Verify the CLAUDE_API_KEY is valid and has access to the model".to_string(),
+                        "Contact the administrator to update the model configuration".to_string(),
+                    ],
+                )
+            } else if err_str.contains("API key") || err_str.contains("authentication") || err_str.contains("401") {
+                (
+                    "AI service authentication failed".to_string(),
+                    vec![
+                        "The API key for the AI provider is invalid or expired".to_string(),
+                        "Contact the administrator to renew the API key".to_string(),
+                    ],
+                )
+            } else {
+                (
+                    "CV conversion failed".to_string(),
+                    vec![
+                        "Ensure CV has readable text".to_string(),
+                        "Try a different file format".to_string(),
+                        "Check file is not corrupted".to_string(),
+                    ],
+                )
+            };
+
             return Err(Json(StandardErrorResponse::new(
-                "CV conversion failed".to_string(),
+                message,
                 "CONVERSION_ERROR".to_string(),
-                vec![
-                    "Ensure CV has readable text".to_string(),
-                    "Try a different file format".to_string(),
-                    "Check file is not corrupted".to_string(),
-                ],
+                suggestions,
                 None,
             )));
         }

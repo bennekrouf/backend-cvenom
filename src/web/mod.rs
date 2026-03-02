@@ -11,6 +11,7 @@ use crate::web::handlers::{
     optimize_and_generate_handler, optimize_cv_handler, translate_cv_handler,
     upload_and_convert_cv_handler,
 };
+use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest};
 use anyhow::Result;
 use graflog::app_log;
 
@@ -236,6 +237,27 @@ pub async fn translate_cv(
     translate_cv_handler(request, auth, config, cv_service_url).await
 }
 
+// ── Payment routes ────────────────────────────────────────────────────────────
+
+/// POST /payment/intent — create a Stripe PaymentIntent
+/// Returns { client_secret, publishable_key } to the frontend.
+#[post("/payment/intent", data = "<request>")]
+pub async fn payment_intent(
+    request: Json<CreateIntentRequest>,
+    auth: AuthenticatedUser,
+) -> Result<Json<crate::web::handlers::payment_handlers::CreateIntentResponse>, Json<StandardErrorResponse>> {
+    crate::web::handlers::payment_handlers::create_payment_intent_handler(request, auth).await
+}
+
+/// POST /payment/confirm — verify Stripe payment + top-up api0 credits
+#[post("/payment/confirm", data = "<request>")]
+pub async fn payment_confirm(
+    request: Json<ConfirmPaymentRequest>,
+    auth: AuthenticatedUser,
+) -> Result<Json<crate::web::handlers::payment_handlers::ConfirmPaymentResponse>, Json<StandardErrorResponse>> {
+    crate::web::handlers::payment_handlers::confirm_payment_handler(request, auth).await
+}
+
 // Error catchers
 #[rocket::catch(400)]
 pub fn bad_request() -> Json<StandardErrorResponse> {
@@ -340,6 +362,8 @@ pub async fn start_web_server(
                 optimize_cv,
                 optimize_and_generate,
                 translate_cv,
+                payment_intent,
+                payment_confirm,
             ],
         )
         .launch()

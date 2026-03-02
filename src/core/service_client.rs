@@ -87,7 +87,10 @@ impl ServiceClient {
             if conversion_response.status == "success" {
                 Ok(conversion_response.cv_data)
             } else {
-                anyhow::bail!("CV conversion failed: {}", conversion_response.status)
+                let detail = conversion_response
+                    .message
+                    .unwrap_or_else(|| conversion_response.status.clone());
+                anyhow::bail!("CV conversion failed: {}", detail)
             }
         } else {
             let error_text = response
