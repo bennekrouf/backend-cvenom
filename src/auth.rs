@@ -171,11 +171,11 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         let tenant_service = TenantService::new(pool);
 
         // Try to get existing tenant, or create new one
-        let tenant = match tenant_service
+        let (tenant, is_new_user) = match tenant_service
             .get_or_create_tenant(&firebase_user.email)
             .await
         {
-            Ok(tenant) => tenant,
+            Ok(result) => result,
             Err(e) => {
                 app_log!(
                     error,
@@ -186,6 +186,42 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                 return Outcome::Error((Status::InternalServerError, AuthError::DatabaseError));
             }
         };
+
+        // Grant 30 welcome credits to brand-new users (fire-and-forget)
+        if is_new_user {
+            let email_clone = firebase_user.email.clone();
+            tokio::spawn(async move {
+                const WELCOME_CREDITS: i64 = 30;
+                if let (Ok(store_url), Ok(secret)) = (
+                    std::env::var("API0_STORE_URL"),
+                    std::env::var("API0_INTERNAL_SECRET"),
+                ) {
+                    let client = reqwest::Client::new();
+                    let body = serde_json::json!({ "email": email_clone, "amount": WELCOME_CREDITS });
+                    match client
+                        .post(format!("{}/api/user/credits", store_url))
+                        .header("Content-Type", "application/json")
+                        .header("X-Internal-Secret", secret)
+                        .json(&body)
+                        .send()
+                        .await
+                    {
+                        Ok(_) => app_log!(
+                            info,
+                            "Granted {} welcome credits to new user: {}",
+                            WELCOME_CREDITS,
+                            email_clone
+                        ),
+                        Err(e) => app_log!(
+                            error,
+                            "Failed to grant welcome credits to {}: {}",
+                            email_clone,
+                            e
+                        ),
+                    }
+                }
+            });
+        }
 
         app_log!(
             info,

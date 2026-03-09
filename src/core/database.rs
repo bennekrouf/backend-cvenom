@@ -552,15 +552,19 @@ impl<'a> TenantService<'a> {
         tenant_repo.create_email_tenant(email, &tenant_name).await
     }
 
-    /// Get or create tenant for user
-    pub async fn get_or_create_tenant(&self, email: &str) -> Result<Tenant> {
+    /// Get or create tenant for user.
+    ///
+    /// Returns `(Tenant, is_new_user)`.  `is_new_user` is `true` the very
+    /// first time a given email address signs in (tenant was just created).
+    pub async fn get_or_create_tenant(&self, email: &str) -> Result<(Tenant, bool)> {
         // First try to find existing tenant
         if let Some(tenant) = self.validate_user_access(email).await? {
-            return Ok(tenant);
+            return Ok((tenant, false));
         }
 
-        // If none found, auto-create
-        self.auto_create_tenant(email).await
+        // Not found — auto-create and signal that this is a brand-new user
+        let tenant = self.auto_create_tenant(email).await?;
+        Ok((tenant, true))
     }
 }
 
