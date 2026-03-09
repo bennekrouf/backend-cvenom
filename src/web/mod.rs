@@ -11,7 +11,7 @@ use crate::web::handlers::{
     optimize_and_generate_handler, optimize_cv_handler, translate_cv_handler,
     upload_and_convert_cv_handler,
 };
-use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest};
+use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse};
 use anyhow::Result;
 use graflog::app_log;
 
@@ -258,6 +258,14 @@ pub async fn payment_confirm(
     crate::web::handlers::payment_handlers::confirm_payment_handler(request, auth).await
 }
 
+/// GET /payment/balance — return the authenticated user's current credit balance
+#[get("/payment/balance")]
+pub async fn payment_balance(
+    auth: AuthenticatedUser,
+) -> Result<Json<GetBalanceResponse>, Json<StandardErrorResponse>> {
+    crate::web::handlers::payment_handlers::get_balance_handler(auth).await
+}
+
 // Error catchers
 #[rocket::catch(400)]
 pub fn bad_request() -> Json<StandardErrorResponse> {
@@ -364,6 +372,7 @@ pub async fn start_web_server(
                 translate_cv,
                 payment_intent,
                 payment_confirm,
+                payment_balance,
             ],
         )
         .launch()

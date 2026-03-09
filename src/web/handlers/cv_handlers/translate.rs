@@ -3,6 +3,7 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::get_tenant_folder_path;
 use crate::core::ServiceClient;
+use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use crate::types::cv_data::CvConverter;
 use crate::types::response::TranslateResponse;
 use crate::web::types::{DataResponse, StandardErrorResponse, StandardRequest, WithConversationId};
@@ -26,6 +27,9 @@ pub async fn translate_cv_handler(
     let user = auth.user();
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
+
+    // Translation costs 1 credit
+    check_and_deduct_credits(&user.email, 1, conversation_id.clone()).await?;
 
     app_log!(
         info,

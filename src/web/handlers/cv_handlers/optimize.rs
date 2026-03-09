@@ -4,6 +4,7 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::{FsOps, ServiceClient, TemplateEngine};
+use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use crate::types::cv_data::{CvConverter, CvJson};
 use crate::types::response::OptimizeResponse;
 use crate::utils::{normalize_language, normalize_profile_name};
@@ -171,6 +172,9 @@ pub async fn optimize_cv_handler(
         })?,
     };
 
+    // Optimization uses 2 LLM passes — costs 2 credits
+    check_and_deduct_credits(&auth.user().email, 2, conversation_id.clone()).await?;
+
     let (response, _) = run_optimization(
         &cv_data,
         &profile,
@@ -227,6 +231,9 @@ pub async fn optimize_and_generate_handler(
             ))
         })?,
     };
+
+    // Optimization uses 2 LLM passes — costs 2 credits
+    check_and_deduct_credits(&auth.user().email, 2, conversation_id.clone()).await?;
 
     // ── Step 1: Optimize + save ───────────────────────────────────────────────
     let (optimize_resp, _) = run_optimization(

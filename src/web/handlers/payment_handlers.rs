@@ -7,17 +7,17 @@
 //      PaymentIntent and returns the client_secret to the browser.
 //   2. Browser confirms the payment with Stripe.js (no redirect).
 //   3. Frontend calls POST /payment/confirm { payment_intent_id } → backend verifies the
-//      PaymentIntent with Stripe, then calls api0 Store to top-up cvenom's tenant credit
-//      balance: credits_added = amount_dollars * 100.
+//      PaymentIntent with Stripe, then calls api0 Store to top-up the USER's credit balance.
+//      credits_added = amount_dollars * 100.
 //
 // Environment variables (read at call time so they can be hot-reloaded in dev):
 //   STRIPE_SECRET_KEY       – cvenom's own Stripe secret key (sk_live_… / sk_test_…)
 //   STRIPE_PUBLISHABLE_KEY  – cvenom's own Stripe publishable key (pk_live_… / pk_test_…)
 //   API0_STORE_URL          – base URL of the api0 Store service  (e.g. http://localhost:5007)
-//   API0_ACCOUNT_EMAIL      – the email address of cvenom's api0 account (tenant email)
 //   API0_INTERNAL_SECRET    – a shared secret accepted by api0 Store for internal credit top-up
 
 use graflog::app_log;
+use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
 use rocket::serde::json::Json;
 use serde::{Deserialize, Serialize};
 
@@ -162,30 +162,28 @@ async fn stripe_verify_payment_intent(
     Ok(amount_cents as u32)
 }
 
-// ── api0 Store helper ─────────────────────────────────────────────────────────
+// ── api0 Store helpers ────────────────────────────────────────────────────────
 
-/// Top up cvenom's credit balance in api0 Store.
+fn api0_store_url() -> Result<String, String> {
+    std::env::var("API0_STORE_URL")
+        .map_err(|_| "API0_STORE_URL environment variable not set".to_string())
+}
+
+fn api0_internal_secret() -> Result<String, String> {
+    std::env::var("API0_INTERNAL_SECRET")
+        .map_err(|_| "API0_INTERNAL_SECRET environment variable not set".to_string())
+}
+
+/// Top up a user's credit balance in api0 Store.
 ///
 /// Calls: POST {API0_STORE_URL}/api/user/credits
-/// Body:  { "email": "<cvenom api0 account email>", "amount": <credits> }
-///
-/// Returns the new balance reported by the store, or an error string.
-async fn api0_topup_credits(credits_to_add: i64) -> Result<i64, String> {
-    let store_url = std::env::var("API0_STORE_URL")
-        .map_err(|_| "API0_STORE_URL environment variable not set".to_string())?;
-
-    let account_email = std::env::var("API0_ACCOUNT_EMAIL")
-        .map_err(|_| "API0_ACCOUNT_EMAIL environment variable not set".to_string())?;
-
-    let internal_secret = std::env::var("API0_INTERNAL_SECRET")
-        .map_err(|_| "API0_INTERNAL_SECRET environment variable not set".to_string())?;
-
+/// Body:  { "email": "<user email>", "amount": <credits> }
+async fn api0_topup_credits(user_email: &str, credits_to_add: i64) -> Result<i64, String> {
+    let store_url = api0_store_url()?;
+    let internal_secret = api0_internal_secret()?;
     let client = reqwest::Client::new();
 
-    let body = serde_json::json!({
-        "email": account_email,
-        "amount": credits_to_add,
-    });
+    let body = serde_json::json!({ "email": user_email, "amount": credits_to_add });
 
     let res = client
         .post(format!("{store_url}/api/user/credits"))
@@ -197,22 +195,79 @@ async fn api0_topup_credits(credits_to_add: i64) -> Result<i64, String> {
         .map_err(|e| format!("api0 store request failed: {e}"))?;
 
     if !res.status().is_success() {
-        let status = res.status();
         let text = res.text().await.unwrap_or_default();
-        return Err(format!("api0 store error {status}: {text}"));
+        return Err(format!("api0 store error: {text}"));
     }
 
-    let json: serde_json::Value = res
-        .json()
-        .await
+    let json: serde_json::Value = res.json().await
         .map_err(|e| format!("api0 store JSON parse error: {e}"))?;
 
-    // The Store handler returns { "success": true, "balance": <new_balance>, ... }
-    let new_balance = json["balance"]
-        .as_i64()
-        .ok_or_else(|| "api0 store response missing 'balance'".to_string())?;
+    json["balance"].as_i64()
+        .ok_or_else(|| "api0 store response missing 'balance'".to_string())
+}
 
-    Ok(new_balance)
+/// Fetch a user's current credit balance from api0 Store.
+///
+/// Calls: GET {API0_STORE_URL}/api/user/credits/{email}
+pub async fn api0_get_balance(user_email: &str) -> Result<i64, String> {
+    let store_url = api0_store_url()?;
+    let internal_secret = api0_internal_secret()?;
+    let client = reqwest::Client::new();
+
+    let res = client
+        .get(format!("{store_url}/api/user/credits/{}", utf8_percent_encode(user_email, NON_ALPHANUMERIC)))
+        .header("X-Internal-Secret", &internal_secret)
+        .send()
+        .await
+        .map_err(|e| format!("api0 store request failed: {e}"))?;
+
+    if !res.status().is_success() {
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("api0 store error: {text}"));
+    }
+
+    let json: serde_json::Value = res.json().await
+        .map_err(|e| format!("api0 store JSON parse error: {e}"))?;
+
+    json["balance"].as_i64()
+        .ok_or_else(|| "api0 store response missing 'balance'".to_string())
+}
+
+/// Check that the user has at least `cost` credits, then deduct them.
+/// Returns a 402-like error response if the balance is insufficient.
+pub async fn check_and_deduct_credits(
+    user_email: &str,
+    cost: i64,
+    conversation_id: Option<String>,
+) -> Result<(), Json<StandardErrorResponse>> {
+    let balance = api0_get_balance(user_email).await.map_err(|e| {
+        Json(StandardErrorResponse::new(
+            format!("Could not retrieve credit balance: {}", e),
+            "BALANCE_CHECK_FAILED".to_string(),
+            vec!["Contact support if this persists".to_string()],
+            conversation_id.clone(),
+        ))
+    })?;
+
+    if balance < cost {
+        return Err(Json(StandardErrorResponse::new(
+            format!("Insufficient credits: you have {} but this operation costs {}", balance, cost),
+            "INSUFFICIENT_CREDITS".to_string(),
+            vec!["Top up your credits to continue".to_string()],
+            conversation_id,
+        )));
+    }
+
+    api0_topup_credits(user_email, -cost).await.map_err(|e| {
+        Json(StandardErrorResponse::new(
+            format!("Failed to deduct credits: {}", e),
+            "CREDIT_DEDUCT_FAILED".to_string(),
+            vec!["Contact support if this persists".to_string()],
+            conversation_id.clone(),
+        ))
+    })?;
+
+    Ok(())
 }
 
 // ── Route handlers ────────────────────────────────────────────────────────────
@@ -366,8 +421,8 @@ pub async fn confirm_payment_handler(
         "Payment verified – topping up api0 credit balance"
     );
 
-    // 3. Top up cvenom's api0 tenant credit balance
-    match api0_topup_credits(credits_to_add).await {
+    // 3. Top up this user's credit balance in api0
+    match api0_topup_credits(user_email, credits_to_add).await {
         Ok(new_balance) => {
             app_log!(
                 info,
@@ -404,6 +459,36 @@ pub async fn confirm_payment_handler(
                     format!("Payment ID: {payment_intent_id}"),
                     "Please contact support and provide your Payment ID.".to_string(),
                 ],
+                None,
+            )))
+        }
+    }
+}
+
+// ── GET /payment/balance ──────────────────────────────────────────────────────
+
+#[derive(Serialize)]
+pub struct GetBalanceResponse {
+    pub success: bool,
+    pub balance: i64,
+}
+
+/// GET /payment/balance
+///
+/// Returns the authenticated user's current credit balance.
+pub async fn get_balance_handler(
+    auth: AuthenticatedUser,
+) -> Result<Json<GetBalanceResponse>, Json<StandardErrorResponse>> {
+    let user_email = auth.email();
+
+    match api0_get_balance(user_email).await {
+        Ok(balance) => Ok(Json(GetBalanceResponse { success: true, balance })),
+        Err(e) => {
+            app_log!(error, user = %user_email, error = %e, "Failed to get credit balance");
+            Err(Json(StandardErrorResponse::new(
+                format!("Failed to retrieve credit balance: {}", e),
+                "BALANCE_ERROR".to_string(),
+                vec!["Contact support if this persists".to_string()],
                 None,
             )))
         }

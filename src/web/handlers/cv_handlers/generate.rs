@@ -3,6 +3,7 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::{FsOps, TemplateEngine};
+use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use crate::image_validator::ImageValidator;
 use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::types::WithConversationId;
@@ -25,6 +26,9 @@ pub async fn generate_cv_handler(
     let user = auth.user();
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
+
+    // PDF generation costs 1 credit
+    check_and_deduct_credits(&user.email, 1, conversation_id.clone()).await?;
 
     let generate_span = app_span!("cv_generation",
         user_email = %user.email,
