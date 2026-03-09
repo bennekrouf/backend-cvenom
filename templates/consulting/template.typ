@@ -110,7 +110,7 @@
 
 // ── Key competencies grid ──────────────────────────────────────────────────────
 #let show_competencies(items) = {
-  wrap(items.map(i => competency_tag(i)).join())
+  items.map(i => competency_tag(i)).join()
 }
 
 // ── Sector badge ───────────────────────────────────────────────────────────────

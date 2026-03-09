@@ -14,7 +14,7 @@
 // ── Research Interests ─────────────────────────────────────────────────────────
 #if details.at("research_interests", default: none) != none {
   section(get_text("research_interests"))
-  wrap(details.research_interests.map(i => interest_tag(i)).join())
+  details.research_interests.map(i => interest_tag(i)).join()
   v(0.3em)
 }
 

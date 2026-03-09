@@ -127,7 +127,7 @@
         v(0.15em)
         if type(items) == array and items.len() > 0 {
           let filtered = items.filter(v => v != "" and v != none)
-          wrap(filtered.map(i => { skill_chip(i); h(2pt) }).join())
+          filtered.map(i => { skill_chip(i); h(2pt) }).join()
         } else if type(items) == str and items != "" {
           skill_chip(items)
         }

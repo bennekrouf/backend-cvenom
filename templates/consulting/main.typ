@@ -29,7 +29,7 @@
 
   if domain_list.len() > 0 {
     section(get_text("sectors"))
-    wrap(domain_list.map(s => sector_badge(s)).join())
+    domain_list.map(s => sector_badge(s)).join()
     v(0.3em)
   }
 }
