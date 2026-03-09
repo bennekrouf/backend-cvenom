@@ -28,6 +28,8 @@ pub struct OptimizeCvRequest {
     pub cv_json: Option<String>,
     /// Public job posting URL (LinkedIn, Indeed, company careers page …)
     pub job_url: String,
+    /// Raw job description text — when provided, scraping is skipped entirely.
+    pub job_description: Option<String>,
     /// Profile name — used to save the optimised result back to disk.
     pub profile: String,
     /// Language for the Typst experiences file (defaults to "en").
@@ -48,6 +50,7 @@ async fn run_optimization(
     profile: &str,
     lang: &str,
     job_url: &str,
+    job_description: Option<&str>,
     tenant_data_dir: &std::path::Path,
     cv_service_url: &str,
     conversation_id: Option<String>,
@@ -66,7 +69,7 @@ async fn run_optimization(
     };
 
     // ── 2. Call cv-import optimization service ────────────────────────────────
-    let optimization_response = match service_client.optimize_cv(cv_data, job_url).await {
+    let optimization_response = match service_client.optimize_cv(cv_data, job_url, job_description).await {
         Ok(r) => r,
         Err(e) => {
             return Err(Json(StandardErrorResponse::new(
@@ -173,6 +176,7 @@ pub async fn optimize_cv_handler(
         &profile,
         &lang,
         &request.data.job_url,
+        request.data.job_description.as_deref(),
         &tenant_data_dir,
         cv_service_url.inner(),
         conversation_id.clone(),
@@ -230,6 +234,7 @@ pub async fn optimize_and_generate_handler(
         &profile,
         &lang,
         &request.data.job_url,
+        request.data.job_description.as_deref(),
         &tenant_data_dir,
         cv_service_url.inner(),
         conversation_id.clone(),

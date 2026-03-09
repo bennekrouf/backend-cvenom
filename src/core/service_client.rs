@@ -183,13 +183,17 @@ impl ServiceClient {
         &self,
         cv_data: &CvJson,
         job_url: &str,
+        job_description: Option<&str>,
     ) -> Result<CvOptimizationResponse> {
         let url = format!("{}{}", self.base_url, OPTIMIZE_ENDPOINT);
 
-        let payload = serde_json::json!({
+        let mut payload = serde_json::json!({
             "cv_data": cv_data,
             "job_url": job_url
         });
+        if let Some(desc) = job_description {
+            payload["job_description"] = serde_json::Value::String(desc.to_string());
+        }
 
         app_log!(trace, "Calling CV optimization service: {}", url);
 
@@ -207,6 +211,9 @@ impl ServiceClient {
                 .json()
                 .await
                 .context("Failed to parse optimization response")?;
+            if optimization_response.status.starts_with("error:") {
+                anyhow::bail!("{}", optimization_response.status.trim_start_matches("error: "));
+            }
             Ok(optimization_response)
         } else {
             let error_text = response
