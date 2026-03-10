@@ -29,8 +29,13 @@ use crate::web::types::StandardErrorResponse;
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct CreateIntentRequest {
-    /// Amount in whole dollars (minimum 1).
+    /// Amount in whole units of the chosen currency (minimum 1).
+    /// The field name stays `amount_dollars` for backwards-compatibility with
+    /// existing clients that don't send a `currency`.
     pub amount_dollars: u32,
+    /// ISO 4217 lowercase currency code (e.g. "usd", "eur", "chf", "gbp").
+    /// Defaults to "usd" when absent.
+    pub currency: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -70,18 +75,35 @@ fn stripe_publishable_key() -> Result<String, String> {
         .map_err(|_| "STRIPE_PUBLISHABLE_KEY environment variable not set".to_string())
 }
 
+/// Validate and normalise an ISO 4217 currency code.
+///
+/// Accepts lowercase codes for the currencies we support.
+/// Returns `"usd"` for any unrecognised or empty value so the form degrades
+/// gracefully instead of hard-failing.
+fn normalise_currency(raw: Option<&str>) -> &'static str {
+    match raw.unwrap_or("").to_ascii_lowercase().as_str() {
+        "eur" => "eur",
+        "gbp" => "gbp",
+        "chf" => "chf",
+        "cad" => "cad",
+        "aud" => "aud",
+        _     => "usd",
+    }
+}
+
 /// Call Stripe API to create a PaymentIntent.
 /// Returns the PaymentIntent ID and client_secret.
 async fn stripe_create_payment_intent(
     secret_key: &str,
     amount_cents: u32,
     user_email: &str,
+    currency: &str,
 ) -> Result<(String, String), String> {
     let client = reqwest::Client::new();
 
     let params = [
         ("amount", amount_cents.to_string()),
-        ("currency", "usd".to_string()),
+        ("currency", currency.to_string()),
         ("receipt_email", user_email.to_string()),
         // automatic_payment_methods = true lets Stripe.js render the right payment form
         ("automatic_payment_methods[enabled]", "true".to_string()),
@@ -281,12 +303,13 @@ pub async fn create_payment_intent_handler(
     auth: AuthenticatedUser,
 ) -> Result<Json<CreateIntentResponse>, Json<StandardErrorResponse>> {
     let amount_dollars = request.amount_dollars;
+    let currency = normalise_currency(request.currency.as_deref());
 
     if amount_dollars < 1 {
         return Err(Json(StandardErrorResponse::new(
-            "Minimum amount is $1.00".to_string(),
+            format!("Minimum amount is 1 {}", currency.to_uppercase()),
             "INVALID_AMOUNT".to_string(),
-            vec!["Provide an amount of at least 1 dollar".to_string()],
+            vec!["Provide an amount of at least 1".to_string()],
             None,
         )));
     }
@@ -323,11 +346,12 @@ pub async fn create_payment_intent_handler(
     app_log!(
         info,
         user = %user_email,
-        amount_dollars = amount_dollars,
+        amount = amount_dollars,
+        currency = currency,
         "Creating Stripe PaymentIntent"
     );
 
-    match stripe_create_payment_intent(&secret_key, amount_cents, user_email).await {
+    match stripe_create_payment_intent(&secret_key, amount_cents, user_email, currency).await {
         Ok((intent_id, client_secret)) => {
             app_log!(
                 info,

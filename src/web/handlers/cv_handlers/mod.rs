@@ -1,6 +1,7 @@
 // src/web/handlers/cv_handlers/mod.rs
 //! CV handlers module - refactored into separate files for better maintainability
 
+pub mod cv_data;
 pub mod generate;
 pub mod helpers;
 pub mod optimize;
@@ -8,6 +9,7 @@ pub mod translate;
 pub mod upload_convert;
 
 // Re-export all handler functions
+pub use cv_data::{get_cv_data_handler, put_cv_data_handler, CvFormData};
 pub use generate::generate_cv_handler;
 pub use optimize::{optimize_and_generate_handler, optimize_cv_handler, OptimizeCvRequest};
 pub use translate::translate_cv_handler;

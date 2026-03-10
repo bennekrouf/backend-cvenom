@@ -8,9 +8,11 @@ use crate::linkedin_analysis::JobAnalysisRequest;
 use crate::types::response::{OptimizeResponse, TranslateResponse};
 use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
+    get_cv_data_handler, put_cv_data_handler,
     optimize_and_generate_handler, optimize_cv_handler, translate_cv_handler,
     upload_and_convert_cv_handler,
 };
+use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse};
 use anyhow::Result;
 use graflog::app_log;
@@ -21,7 +23,7 @@ use rocket::form::Form;
 use rocket::http::Method;
 use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
-use rocket::{catchers, get, post, routes, Request, Response, State};
+use rocket::{catchers, get, post, put, routes, Request, Response, State};
 use std::path::PathBuf;
 pub use types::*;
 mod cors_utils;
@@ -193,6 +195,31 @@ pub async fn save_tenant_file_content(
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     file_handlers::save_tenant_file_content_handler(request, auth, config, db_config).await
+}
+
+// ── CV form-data routes ───────────────────────────────────────────────────────
+
+/// GET /profiles/:name/cv-data
+/// Returns a unified CvFormData JSON parsed from cv_params.toml + experiences.typ.
+#[get("/profiles/<name>/cv-data")]
+pub async fn get_cv_data(
+    name: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<CvFormData>, Json<StandardErrorResponse>> {
+    get_cv_data_handler(name, auth, config).await
+}
+
+/// PUT /profiles/:name/cv-data
+/// Accepts CvFormData JSON, regenerates cv_params.toml and experiences_en.typ.
+#[put("/profiles/<name>/cv-data", data = "<request>")]
+pub async fn put_cv_data(
+    name: String,
+    request: Json<CvFormData>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    put_cv_data_handler(name, request, auth, config).await
 }
 
 #[get("/files/tree")]
@@ -373,6 +400,8 @@ pub async fn start_web_server(
                 payment_intent,
                 payment_confirm,
                 payment_balance,
+                get_cv_data,
+                put_cv_data,
             ],
         )
         .launch()
