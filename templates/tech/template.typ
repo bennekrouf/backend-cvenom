@@ -248,7 +248,7 @@
     }
 
     // Picture
-    #if details.at("picture", default: "").len() > 0 {
+    #if details.at("picture", default: "").len() > 0 and details.at("styling", default: (:)).at("show_photo", default: false) {
       if sys.inputs.at("picture", default: none) != none {
         align(center,
           block(clip: true, radius: 50%,

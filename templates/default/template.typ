@@ -375,7 +375,8 @@
 
 /* the main info about the profile (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
-  if details.at("picture", default: "").len() > 0 {
+  let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+  if details.at("picture", default: "").len() > 0 and show_photo {
     grid(
       columns: (0.5fr, 1fr, 2.5fr),
       {

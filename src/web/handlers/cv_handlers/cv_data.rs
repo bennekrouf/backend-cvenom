@@ -75,6 +75,9 @@ pub struct WorkExperienceEntry {
 pub struct StylingData {
     pub primary_color: String,
     pub secondary_color: String,
+    /// Whether to render the uploaded photo on the CV (default: false)
+    #[serde(default)]
+    pub show_photo: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -202,6 +205,7 @@ fn parse_toml_cv(content: &str) -> CvFormData {
     let styling = StylingData {
         primary_color:   styling_raw.and_then(|t| t.get("primary_color")).and_then(|v| v.as_str()).unwrap_or("#14A4E6").to_string(),
         secondary_color: styling_raw.and_then(|t| t.get("secondary_color")).and_then(|v| v.as_str()).unwrap_or("#757575").to_string(),
+        show_photo:      styling_raw.and_then(|t| t.get("show_photo")).and_then(|v| v.as_bool()).unwrap_or(false),
     };
 
     CvFormData { personal, links, skills, education, languages, work_experience: vec![], styling }
@@ -261,6 +265,7 @@ fn generate_toml(data: &CvFormData) -> String {
     out.push_str("[styling]\n");
     out.push_str(&format!("primary_color = \"{}\"\n",   escape_toml(&data.styling.primary_color)));
     out.push_str(&format!("secondary_color = \"{}\"\n", escape_toml(&data.styling.secondary_color)));
+    out.push_str(&format!("show_photo = {}\n",          data.styling.show_photo));
     out.push('\n');
 
     out
