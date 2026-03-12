@@ -11,6 +11,7 @@ use rocket::form::Form;
 use rocket::serde::json::Json;
 use rocket::State;
 
+use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use super::helpers::create_profile_from_cv_data;
 
 pub async fn upload_and_convert_cv_handler(
@@ -21,6 +22,9 @@ pub async fn upload_and_convert_cv_handler(
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
+
+    // CV import calls Claude Sonnet — 25 credits ($5 free offer = 500 credits = 20 imports)
+    check_and_deduct_credits(&user.email, 25, None).await?;
 
     let upload_span = app_span!("cv_upload_conversion",
         user_email = %user.email,
