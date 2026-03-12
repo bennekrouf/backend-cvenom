@@ -28,8 +28,8 @@ pub async fn translate_cv_handler(
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
-    // Translation costs 1 credit
-    check_and_deduct_credits(&user.email, 1, conversation_id.clone()).await?;
+    // Translation costs 25 credits (1 LLM pass, same tier as generation)
+    check_and_deduct_credits(&user.email, 25, conversation_id.clone()).await?;
 
     app_log!(
         info,
