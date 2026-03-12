@@ -202,6 +202,16 @@ pub async fn rename_profile_handler(
         tenant.tenant_name
     );
 
+    // Touch profile.toml so its mtime reflects the rename — the frontend
+    // sorts profiles by most-recently-modified, and a directory rename alone
+    // does not update any file's mtime on Linux.
+    let profile_toml = new_profile_dir.join("profile.toml");
+    if profile_toml.exists() {
+        if let Ok(content) = tokio::fs::read(&profile_toml).await {
+            let _ = tokio::fs::write(&profile_toml, content).await;
+        }
+    }
+
     Ok(Json(ActionResponse::success(
         format!(
             "Profile '{}' has been successfully renamed to '{}'",
