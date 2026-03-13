@@ -272,6 +272,8 @@ async fn build_file_tree(
                     "type": "file",
                     "size": metadata.len(),
                     "modified": metadata.modified().ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs())
                 }),
             );
         }
