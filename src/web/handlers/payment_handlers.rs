@@ -432,9 +432,9 @@ pub async fn confirm_payment_handler(
         }
     };
 
-    // 2. Compute credits to add (1 dollar = 100 credits)
+    // 2. Compute credits to add (1 dollar = 4 credits; $5 = 20 credits = 20 CV generations)
     let amount_dollars = (amount_cents / 100) as i64;
-    let credits_to_add = amount_dollars * 100;
+    let credits_to_add = amount_dollars * 4;
 
     app_log!(
         info,

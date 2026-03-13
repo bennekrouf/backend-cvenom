@@ -23,8 +23,8 @@ pub async fn upload_and_convert_cv_handler(
     let user = auth.user();
     let tenant = auth.tenant();
 
-    // CV import calls Claude Sonnet — 25 credits ($5 free offer = 500 credits = 20 imports)
-    check_and_deduct_credits(&user.email, 25, None).await?;
+    // CV import calls Claude Sonnet — 4 credits ($1.00 at $0.25/credit)
+    check_and_deduct_credits(&user.email, 4, None).await?;
 
     let upload_span = app_span!("cv_upload_conversion",
         user_email = %user.email,

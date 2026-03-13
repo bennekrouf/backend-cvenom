@@ -28,8 +28,8 @@ pub async fn translate_cv_handler(
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
-    // Translation uses DeepSeek V3 (~$0.0025/call × 8.3 markup) — 2 credits
-    check_and_deduct_credits(&user.email, 2, conversation_id.clone()).await?;
+    // Translation uses DeepSeek V3 — 1 credit ($0.25)
+    check_and_deduct_credits(&user.email, 1, conversation_id.clone()).await?;
 
     app_log!(
         info,
