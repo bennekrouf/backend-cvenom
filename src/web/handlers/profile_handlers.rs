@@ -61,12 +61,12 @@ pub async fn create_profile_handler(
         }
     };
 
-    if let Err(e) = template_engine.create_profile_from_templates(
+    if let Err(e) = template_engine.create_profile_from_templates_async(
         &profile_name,
         &tenant_data_dir,
         Some(&request.data.profile),
     )
-    // .await
+    .await
     {
         app_log!(error, "Failed to create profile: {}", e);
         return Err(Json(StandardErrorResponse::new(
