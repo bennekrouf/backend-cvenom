@@ -131,6 +131,8 @@ async fn run_optimization(
         company_name: optimization_response.company_name,
         optimizations: optimization_response.optimizations,
         keyword_analysis: optimization_response.keyword_analysis,
+        before_score: optimization_response.before_score,
+        after_score: optimization_response.after_score,
         saved: true,
         status: optimization_response.status,
     };

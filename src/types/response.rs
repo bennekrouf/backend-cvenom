@@ -55,6 +55,10 @@ pub struct CvOptimizationResponse {
     pub optimizations: Option<Vec<String>>,
     /// Keyword analysis from the two-pass LLM pipeline (may be absent on older service versions)
     pub keyword_analysis: Option<KeywordAnalysis>,
+    /// ATS match percentage before optimization (0-100)
+    pub before_score: Option<u8>,
+    /// ATS match percentage after optimization (0-100)
+    pub after_score: Option<u8>,
     pub status: String,
 }
 
@@ -65,6 +69,10 @@ pub struct OptimizeResponse {
     pub company_name: String,
     pub optimizations: Option<Vec<String>>,
     pub keyword_analysis: Option<KeywordAnalysis>,
+    /// ATS match percentage before optimization (0-100)
+    pub before_score: Option<u8>,
+    /// ATS match percentage after optimization (0-100)
+    pub after_score: Option<u8>,
     /// Whether the optimized profile was saved back to disk
     pub saved: bool,
     pub status: String,
