@@ -41,18 +41,15 @@ pub struct OptimizeCvRequest {
 
 // ── Shared optimization pipeline ──────────────────────────────────────────────
 
-/// Runs the full optimization pipeline:
+/// Runs the optimization pipeline:
 /// 1. Call cv-import service  (scrape job → keyword extraction → ATS rewrite)
-/// 2. Save optimized TOML + Typst back to the profile directory on disk
-///
 /// Returns the enriched `OptimizeResponse` and the resolved `CvJson`.
+/// Disk persistence is the caller's responsibility.
 async fn run_optimization(
     cv_data: &CvJson,
-    profile: &str,
     lang: &str,
     job_url: &str,
     job_description: Option<&str>,
-    tenant_data_dir: &std::path::Path,
     cv_service_url: &str,
     conversation_id: Option<String>,
 ) -> Result<(OptimizeResponse, CvJson), Json<StandardErrorResponse>> {
@@ -101,39 +98,19 @@ async fn run_optimization(
         }
     };
 
-    // ── 4. Persist optimized files to disk ────────────────────────────────────
-    if let Err(e) = save_profile_cv_data(profile, tenant_data_dir, &optimized_cv_json, lang).await
-    {
-        app_log!(
-            error,
-            "Failed to save optimized CV files for profile {}: {}",
-            profile,
-            e
-        );
-        return Err(Json(StandardErrorResponse::new(
-            format!("Failed to save optimized CV: {}", e),
-            "SAVE_FAILED".to_string(),
-            vec!["Check disk space and permissions".to_string()],
-            conversation_id,
-        )));
-    }
-
-    app_log!(
-        info,
-        "Optimized CV saved to disk — profile: {}, lang: {}",
-        profile,
-        lang
-    );
+    // Serialise the optimized CvJson so the frontend can pass it to /save-optimized
+    let optimized_cv_json_str = serde_json::to_string(&optimized_cv_json).ok();
 
     let response = OptimizeResponse {
         optimized_typst,
+        optimized_cv_json: optimized_cv_json_str,
         job_title: optimization_response.job_title,
         company_name: optimization_response.company_name,
         optimizations: optimization_response.optimizations,
         keyword_analysis: optimization_response.keyword_analysis,
         before_score: optimization_response.before_score,
         after_score: optimization_response.after_score,
-        saved: true,
+        saved: false,
         status: optimization_response.status,
     };
 
@@ -179,11 +156,9 @@ pub async fn optimize_cv_handler(
 
     let (response, _) = run_optimization(
         &cv_data,
-        &profile,
         &lang,
         &request.data.job_url,
         request.data.job_description.as_deref(),
-        &tenant_data_dir,
         cv_service_url.inner(),
         conversation_id.clone(),
     )
@@ -191,7 +166,7 @@ pub async fn optimize_cv_handler(
 
     Ok(Json(DataResponse::success(
         format!(
-            "CV optimized for \"{}\" at {} and saved to profile",
+            "CV optimized for \"{}\" at {}",
             response.job_title, response.company_name
         ),
         response,
@@ -237,18 +212,28 @@ pub async fn optimize_and_generate_handler(
     // Optimization uses Cohere command-r7b (~$0.0003/call × 8.3 markup) — 1 credit
     check_and_deduct_credits(&auth.user().email, 1, conversation_id.clone()).await?;
 
-    // ── Step 1: Optimize + save ───────────────────────────────────────────────
-    let (optimize_resp, _) = run_optimization(
+    // ── Step 1: Optimize ─────────────────────────────────────────────────────
+    let (optimize_resp, optimized_cv_data) = run_optimization(
         &cv_data,
-        &profile,
         &lang,
         &request.data.job_url,
         request.data.job_description.as_deref(),
-        &tenant_data_dir,
         cv_service_url.inner(),
         conversation_id.clone(),
     )
     .await?;
+
+    // ── Step 1b: Persist optimized files so the PDF generator can read them ──
+    if let Err(e) = save_profile_cv_data(&profile, &tenant_data_dir, &optimized_cv_data, &lang).await {
+        app_log!(error, "Failed to save optimized CV for profile {}: {}", profile, e);
+        return Err(Json(StandardErrorResponse::new(
+            format!("Failed to save optimized CV: {}", e),
+            "SAVE_FAILED".to_string(),
+            vec!["Check disk space and permissions".to_string()],
+            conversation_id,
+        )));
+    }
+    app_log!(info, "Optimized CV saved for PDF generation — profile: {}, lang: {}", profile, lang);
 
     // ── Step 2: Generate PDF from freshly-saved profile ───────────────────────
     let template_manager = match TemplateEngine::new(config.templates_dir.clone()) {

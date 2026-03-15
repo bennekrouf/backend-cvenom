@@ -9,7 +9,7 @@ use crate::types::response::{OptimizeResponse, TranslateResponse};
 use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
     get_cv_data_handler, put_cv_data_handler,
-    optimize_and_generate_handler, optimize_cv_handler, translate_cv_handler,
+    optimize_and_generate_handler, optimize_cv_handler, save_optimized_handler, translate_cv_handler,
     upload_and_convert_cv_handler,
 };
 use crate::web::handlers::cv_data::CvFormData;
@@ -254,6 +254,18 @@ pub async fn optimize_and_generate(
     optimize_and_generate_handler(request, auth, config, db_config, cv_service_url).await
 }
 
+/// Save an optimized CV under a new profile name.
+/// Accepts `{ profile_name, cv_json, lang }` where `cv_json` is the value
+/// returned by `/optimize` in `data.optimized_cv_json`.
+#[post("/save-optimized", data = "<request>")]
+pub async fn save_optimized_cv(
+    request: Json<StandardRequest<SaveOptimizedRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    save_optimized_handler(request, auth, config).await
+}
+
 #[post("/translate", data = "<request>")]
 pub async fn translate_cv(
     request: Json<StandardRequest<TranslateCvRequest>>,
@@ -396,6 +408,7 @@ pub async fn start_web_server(
                 rename_profile_handler,
                 optimize_cv,
                 optimize_and_generate,
+                save_optimized_cv,
                 translate_cv,
                 payment_intent,
                 payment_confirm,

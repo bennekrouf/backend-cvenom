@@ -65,6 +65,8 @@ pub struct CvOptimizationResponse {
 #[derive(serde::Deserialize, Serialize)]
 pub struct OptimizeResponse {
     pub optimized_typst: String,
+    /// Serialised CvJson of the optimized profile — passed back to `/save-optimized`.
+    pub optimized_cv_json: Option<String>,
     pub job_title: String,
     pub company_name: String,
     pub optimizations: Option<Vec<String>>,
