@@ -14,7 +14,9 @@ pub struct CvJson {
     pub education: Vec<Education>,
     pub skills: Skills,
     pub languages: Languages,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub projects: Option<Vec<Project>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub certifications: Option<Vec<Certification>>,
     pub metadata: CvMetadata,
 }
@@ -22,13 +24,21 @@ pub struct CvJson {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersonalInfo {
     pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub phone: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub address: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub linkedin: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub website: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub links: Option<HashMap<String, String>>,
 }
 
@@ -37,11 +47,16 @@ pub struct Experience {
     pub company: String,
     pub title: String,
     pub start_date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>, // None means current
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub responsibilities: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub achievements: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub technologies: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
 }
 
@@ -49,29 +64,44 @@ pub struct Experience {
 pub struct Education {
     pub institution: String,
     pub degree: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub field: Option<String>,
     pub start_date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub gpa: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub honors: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Skills {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub technical: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub programming_languages: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub frameworks: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub tools: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub soft_skills: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub other: Option<HashMap<String, Vec<String>>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Languages {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub native: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub fluent: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub intermediate: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub basic: Option<Vec<String>>,
 }
 
@@ -79,9 +109,13 @@ pub struct Languages {
 pub struct Project {
     pub name: String,
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub technologies: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub end_date: Option<String>,
 }
 
@@ -90,16 +124,22 @@ pub struct Certification {
     pub name: String,
     pub issuer: String,
     pub date: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub credential_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CvMetadata {
     pub language: String, // "en", "fr", etc.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub last_updated: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
 }
 
