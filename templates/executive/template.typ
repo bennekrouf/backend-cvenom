@@ -6,7 +6,7 @@
 #let secondary = rgb("#4A4A6A")   // muted slate
 #let rule_color = rgb("#C9A84C")  // gold rules
 
-#let default_font      = "Carlito"
+#let default_font      = "Liberation Sans"
 #let default_math_font = "Times"
 
 // ── Language helpers ───────────────────────────────────────────────────────────

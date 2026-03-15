@@ -6,9 +6,9 @@
 #let secondary = rgb("#718096")   // muted gray
 #let sidebar_bg = rgb("#F7FAFC")  // very light gray sidebar
 
-#let default_font      = "Carlito"
+#let default_font      = "Liberation Sans"
 #let default_math_font = "Times"
-#let default_separator = text(font: "Carlito", fill: accent, " \u{007c} ")
+#let default_separator = text(font: "Liberation Sans", fill: accent, " \u{007c} ")
 
 // ── Language helpers ───────────────────────────────────────────────────────────
 #let get_lang() = { sys.inputs.at("lang", default: "en") }

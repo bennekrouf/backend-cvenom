@@ -6,7 +6,7 @@
 #let secondary = rgb("#6B7280")   // neutral gray
 #let light_bg  = rgb("#EFF6FF")   // very light blue tint
 
-#let default_font      = "Carlito"
+#let default_font      = "Liberation Sans"
 #let default_math_font = "Times"
 
 // ── Language helpers ───────────────────────────────────────────────────────────

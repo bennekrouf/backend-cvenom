@@ -2,12 +2,12 @@
 #let default_primary_color = rgb("#14A4E6")
 #let default_secondary_color = rgb("#757575")
 #let default_link_color = rgb("#14A4E6")
-#let default_font = "Carlito"
+#let default_font = "Liberation Sans"
 #let default_math_font = "Times"
 #let default_separator = text(
   // this is because in some fonts (notably computer modern), it shows the
   // vertical line as a horizontal one
-  font: "Carlito",
+  font: "Liberation Sans",
   " \u{007c} ",
 )
 
@@ -440,7 +440,7 @@
       fill: primary_color,
       // this is because in some fonts (notably computer modern), it shows the
       // vertical line as a horizontal one
-      text(font: "Carlito", " \u{007c} "),
+      text(font: "Liberation Sans", " \u{007c} "),
     )
   }
 

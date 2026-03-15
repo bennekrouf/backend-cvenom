@@ -6,7 +6,7 @@
 #let secondary = rgb("#546E7A")   // blue-gray
 #let rule_clr  = rgb("#90A4AE")   // soft separator
 
-#let default_font      = "Carlito"
+#let default_font      = "Liberation Sans"
 #let default_math_font = "Times"
 
 // ── Language helpers ───────────────────────────────────────────────────────────

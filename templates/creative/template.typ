@@ -8,7 +8,7 @@
 #let sidebar_bg = rgb("#1C1C1E")   // dark sidebar
 #let sidebar_fg = rgb("#F9FAFB")   // light text on sidebar
 
-#let default_font      = "Carlito"
+#let default_font      = "Liberation Sans"
 #let default_math_font = "Times"
 
 // ── Language helpers ───────────────────────────────────────────────────────────
