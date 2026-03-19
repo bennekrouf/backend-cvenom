@@ -17,6 +17,7 @@ const UPLOAD_CV_ENDPOINT: &str = "/upload-cv";
 const JOBS_MATCH_ENDPOINT: &str = "/jobs-match";
 const TRANSLATE_ENDPOINT: &str = "/translate";
 const OPTIMIZE_ENDPOINT: &str = "/optimize";
+const COVER_LETTER_ENDPOINT: &str = "/cover-letter";
 
 const DEFAULT_TIMEOUT_SECS: u64 = 400;
 
@@ -221,6 +222,55 @@ impl ServiceClient {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Optimization failed with status {}: {}", status, error_text)
+        }
+    }
+
+    /// 5. Cover Letter Generation - sends CvJson + job_description + lang, receives cover letter text
+    pub async fn generate_cover_letter(
+        &self,
+        cv_data: &CvJson,
+        job_description: &str,
+        lang: &str,
+    ) -> Result<String> {
+        #[derive(serde::Deserialize)]
+        struct CoverLetterServiceResponse {
+            cover_letter: String,
+            status: String,
+        }
+
+        let payload = serde_json::json!({
+            "cv_data": cv_data,
+            "job_description": job_description,
+            "lang": lang
+        });
+
+        let url = format!("{}{}", self.base_url, COVER_LETTER_ENDPOINT);
+        app_log!(trace, "Calling cover letter service: {}", url);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("Failed to call cover letter service")?;
+
+        let status = response.status();
+        if status.is_success() {
+            let resp: CoverLetterServiceResponse = response
+                .json()
+                .await
+                .context("Failed to parse cover letter response")?;
+            if resp.status.starts_with("error") {
+                anyhow::bail!("{}", resp.status);
+            }
+            Ok(resp.cover_letter)
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("Cover letter generation failed with status {}: {}", status, error_text)
         }
     }
 

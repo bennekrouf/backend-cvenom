@@ -6,8 +6,11 @@ use crate::auth::{AuthConfig, AuthenticatedUser, OptionalAuth};
 use crate::core::database::DatabaseConfig;
 use crate::linkedin_analysis::JobAnalysisRequest;
 use crate::types::response::{OptimizeResponse, TranslateResponse};
+use crate::web::handlers::cover_letter::CoverLetterRequest;
+use crate::web::handlers::cover_letter::CoverLetterResult;
 use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
+    cover_letter_handler,
     delete_account_handler,
     get_cv_data_handler, put_cv_data_handler,
     optimize_and_generate_handler, optimize_cv_handler, save_optimized_handler, translate_cv_handler,
@@ -281,6 +284,18 @@ pub async fn translate_cv(
     translate_cv_handler(request, auth, config, cv_service_url).await
 }
 
+/// POST /cover-letter — generate a cover letter from CV data + job description.
+/// Costs 20 credits (same as CV generation).
+#[post("/cover-letter", data = "<request>")]
+pub async fn generate_cover_letter(
+    request: Json<StandardRequest<CoverLetterRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    cv_service_url: &State<String>,
+) -> Result<Json<DataResponse<CoverLetterResult>>, Json<StandardErrorResponse>> {
+    cover_letter_handler(request, auth, config, cv_service_url).await
+}
+
 // ── Payment routes ────────────────────────────────────────────────────────────
 
 /// POST /payment/intent — create a Stripe PaymentIntent
@@ -470,6 +485,7 @@ pub async fn start_web_server(
                 optimize_and_generate,
                 save_optimized_cv,
                 translate_cv,
+                generate_cover_letter,
                 payment_intent,
                 payment_confirm,
                 payment_balance,
