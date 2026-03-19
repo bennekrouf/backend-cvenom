@@ -188,11 +188,11 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         };
 
         // Grant free-offer welcome credits to brand-new users (fire-and-forget)
-        // Free offer: 15 credits → 10 PDF generations + 5 optimizations (1 credit each)
+        // Free offer: 200 credits → 10 CV generations at 20 credits each
         if is_new_user {
             let email_clone = firebase_user.email.clone();
             tokio::spawn(async move {
-                const WELCOME_CREDITS: i64 = 15;
+                const WELCOME_CREDITS: i64 = 200;
                 if let (Ok(store_url), Ok(secret)) = (
                     std::env::var("API0_STORE_URL"),
                     std::env::var("API0_INTERNAL_SECRET"),
