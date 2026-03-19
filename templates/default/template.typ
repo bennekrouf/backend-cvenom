@@ -376,18 +376,13 @@
 /* the main info about the profile (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
   let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
-  if details.at("picture", default: "").len() > 0 and show_photo {
+  // Use sys.inputs directly — no need for a `picture` key in the TOML
+  let _pic = sys.inputs.at("picture", default: none)
+  if _pic != none and show_photo {
     grid(
       columns: (0.5fr, 1fr, 2.5fr),
       {
-        // Safe image handling - only load if input is provided and valid
-        if sys.inputs.at("picture", default: none) != none {
-          align(right + horizon, image(details.picture, width: 90%))
-        } else {
-          // Show placeholder when no image is provided
-          align(right + horizon, rect(width: 90%, height: 100pt, fill: gray.lighten(80%), 
-            align(center + horizon, text(size: 10pt, fill: gray, "No Image"))))
-        }
+        align(right + horizon, image(_pic, width: 90%))
       },
       h(1fr),
       show_details_text(icons: icons, separator: separator, color: color, details),

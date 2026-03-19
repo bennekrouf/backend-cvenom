@@ -247,14 +247,13 @@
       }
     }
 
-    // Picture
-    #if details.at("picture", default: "").len() > 0 and details.at("styling", default: (:)).at("show_photo", default: false) {
-      if sys.inputs.at("picture", default: none) != none {
-        align(center,
-          block(clip: true, radius: 50%,
-            image(details.picture, width: 80pt, height: 80pt, fit: "cover")))
-        v(0.5em)
-      }
+    // Picture — use sys.inputs directly; no need for a `picture` key in the TOML
+    #let _pic = sys.inputs.at("picture", default: none)
+    #if _pic != none and details.at("styling", default: (:)).at("show_photo", default: false) {
+      align(center,
+        block(clip: true, radius: 50%,
+          image(_pic, width: 80pt, height: 80pt, fit: "cover")))
+      v(0.5em)
     }
 
     // Skills

@@ -137,17 +137,35 @@ fn parse_toml_cv(content: &str) -> CvFormData {
     };
 
     // ── personal ──
-    let personal_raw = table.get("Personal")
-        .or_else(|| table.get("personal"))
-        .and_then(|v| v.as_table());
+    // Support both [Personal]/[personal] section (form-editor format) and flat
+    // top-level keys (original AI-generated format used by old profiles).
+    // We collect the relevant personal fields once, preferring the section.
+    let get_personal_str = |key: &str| -> String {
+        // Try [Personal] section first, then [personal], then top-level key.
+        let from_section = table.get("Personal")
+            .or_else(|| table.get("personal"))
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get(key))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !from_section.is_empty() {
+            return from_section.to_string();
+        }
+        table.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
 
+    let title_raw = get_personal_str("title");
     let personal = PersonalData {
-        name:    personal_raw.and_then(|t| t.get("name")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        title:   personal_raw.and_then(|t| t.get("title")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        email:   personal_raw.and_then(|t| t.get("email")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        phone:   personal_raw.and_then(|t| t.get("phonenumber")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        address: personal_raw.and_then(|t| t.get("address")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        summary: personal_raw.and_then(|t| t.get("summary")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        name:    get_personal_str("name"),
+        // Fall back to "job_title" (used by some older keyteo profiles)
+        title:   if title_raw.is_empty() { get_personal_str("job_title") } else { title_raw },
+        email:   get_personal_str("email"),
+        phone:   get_personal_str("phonenumber"),
+        address: get_personal_str("address"),
+        summary: get_personal_str("summary"),
     };
 
     // ── links ──
@@ -216,7 +234,8 @@ fn parse_toml_cv(content: &str) -> CvFormData {
 fn generate_toml(data: &CvFormData) -> String {
     let mut out = String::new();
 
-    out.push_str("[Personal]\n");
+    // Personal fields at the top level (flat format) so Typst templates can
+    // access them as `details.name`, `details.email`, etc. without a section wrapper.
     out.push_str(&format!("name = \"{}\"\n", escape_toml(&data.personal.name)));
     out.push_str(&format!("title = \"{}\"\n", escape_toml(&data.personal.title)));
     out.push_str(&format!("email = \"{}\"\n", escape_toml(&data.personal.email)));
