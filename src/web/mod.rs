@@ -8,10 +8,13 @@ use crate::linkedin_analysis::JobAnalysisRequest;
 use crate::types::response::{OptimizeResponse, TranslateResponse};
 use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
+    delete_account_handler,
     get_cv_data_handler, put_cv_data_handler,
     optimize_and_generate_handler, optimize_cv_handler, save_optimized_handler, translate_cv_handler,
     upload_and_convert_cv_handler,
 };
+use crate::core::database::{get_tenant_folder_path, TenantRepository};
+use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse};
 use anyhow::Result;
@@ -23,7 +26,7 @@ use rocket::form::Form;
 use rocket::http::Method;
 use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
-use rocket::{catchers, get, post, put, routes, Request, Response, State};
+use rocket::{catchers, delete, get, post, put, routes, Request, Response, State};
 use std::path::PathBuf;
 pub use types::*;
 mod cors_utils;
@@ -299,6 +302,16 @@ pub async fn payment_confirm(
     crate::web::handlers::payment_handlers::confirm_payment_handler(request, auth).await
 }
 
+/// DELETE /me — permanently delete caller's account and all associated data.
+#[delete("/me")]
+pub async fn delete_me(
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    delete_account_handler(auth, config, db_config).await
+}
+
 /// GET /payment/balance — return the authenticated user's current credit balance
 #[get("/payment/balance")]
 pub async fn payment_balance(
@@ -369,6 +382,51 @@ pub async fn start_web_server(
         return Err(e);
     }
 
+    // ── Data-retention background task ────────────────────────────────────────
+    // Runs once per day. Deletes email-based tenants inactive for DATA_RETENTION_DAYS
+    // (default 365). Domain tenants are never auto-deleted.
+    if let Ok(cleanup_pool) = db_config.pool().map(|p| p.clone()) {
+        let cleanup_data_dir = data_dir.clone();
+        let retention_days = std::env::var("DATA_RETENTION_DAYS")
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .unwrap_or(365);
+
+        tokio::spawn(async move {
+            // Wait 1 hour after startup before first run so it doesn't slow boot.
+            tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 3600));
+            loop {
+                interval.tick().await;
+                let repo = TenantRepository::new(&cleanup_pool);
+                match repo.find_stale_email_tenants(retention_days).await {
+                    Ok(stale) if !stale.is_empty() => {
+                        app_log!(info, "[retention] Found {} stale tenant(s) to delete (inactive > {} days)", stale.len(), retention_days);
+                        for tenant in &stale {
+                            if let Some(email) = &tenant.email {
+                                // Delete files
+                                let dir = get_tenant_folder_path(email, &cleanup_data_dir);
+                                if dir.exists() {
+                                    if let Err(e) = FsOps::remove_dir_all(&dir).await {
+                                        app_log!(error, "[retention] Failed to delete files for {}: {}", email, e);
+                                    }
+                                }
+                                // Hard-delete DB record
+                                if let Err(e) = repo.delete_by_email(email).await {
+                                    app_log!(error, "[retention] Failed to delete DB record for {}: {}", email, e);
+                                } else {
+                                    app_log!(info, "[retention] Deleted account: {}", email);
+                                }
+                            }
+                        }
+                    }
+                    Ok(_) => app_log!(info, "[retention] No stale accounts found."),
+                    Err(e) => app_log!(error, "[retention] Cleanup query failed: {}", e),
+                }
+            }
+        });
+    }
+
     app_log!(info, "Starting CVenom Multi-tenant API server");
     app_log!(info, "Database: {}", db_config.database_path.display());
     app_log!(
@@ -417,6 +475,7 @@ pub async fn start_web_server(
                 payment_balance,
                 get_cv_data,
                 put_cv_data,
+                delete_me,
             ],
         )
         .launch()

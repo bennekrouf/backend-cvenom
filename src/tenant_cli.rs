@@ -1,5 +1,6 @@
 // src/tenant_cli.rs
-use crate::database::{DatabaseConfig, TenantRepository, TenantService};
+use crate::database::{DatabaseConfig, TenantRepository, TenantService, get_tenant_folder_path};
+use crate::core::FsOps;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
@@ -34,6 +35,15 @@ pub enum TenantCommand {
     Import { csv_file: PathBuf },
     /// Initialize the database
     Init,
+    /// Delete accounts inactive for more than N days (default 365). Dry-run by default.
+    Cleanup {
+        #[arg(long, default_value = "365")]
+        days: i64,
+        #[arg(long, help = "Base data directory containing tenant folders")]
+        data_dir: PathBuf,
+        #[arg(long, help = "Actually delete — omit to do a dry run")]
+        execute: bool,
+    },
 }
 
 pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
@@ -243,7 +253,7 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
         }
 
         TenantCommand::Init => {
-            app_log!(info, 
+            app_log!(info,
                 "✅ Database initialized at: {}",
                 cli.database_path.display()
             );
@@ -253,9 +263,52 @@ pub async fn handle_tenant_command(cli: TenantCli) -> Result<()> {
             app_log!(info, "Usage:");
             app_log!(info, "  cargo run -- tenant add <email> <tenant-name>           # Add email-specific tenant");
             app_log!(info, "  cargo run -- tenant add-domain <domain> <tenant-name>   # Add domain tenant (e.g., mycompany.ch)");
-            app_log!(info, 
+            app_log!(info,
                 "  cargo run -- tenant check <email>                       # Check authorization"
             );
+        }
+
+        TenantCommand::Cleanup { days, data_dir, execute } => {
+            let stale = match tenant_repo.find_stale_email_tenants(days).await {
+                Ok(s) => s,
+                Err(e) => {
+                    app_log!(error, "Failed to query stale tenants: {}", e);
+                    return Err(e);
+                }
+            };
+
+            if stale.is_empty() {
+                app_log!(info, "✅ No accounts inactive for more than {} days.", days);
+                return Ok(());
+            }
+
+            let mode = if execute { "EXECUTE" } else { "DRY RUN" };
+            app_log!(info, "[{}] {} account(s) inactive for > {} days:", mode, stale.len(), days);
+            for tenant in &stale {
+                let email = tenant.email.as_deref().unwrap_or("?");
+                let last = tenant.last_seen_at
+                    .map(|t| t.format("%Y-%m-%d").to_string())
+                    .unwrap_or_else(|| tenant.created_at.format("%Y-%m-%d (created)").to_string());
+                app_log!(info, "  {} (last seen: {})", email, last);
+
+                if execute {
+                    let dir = get_tenant_folder_path(email, &data_dir);
+                    if dir.exists() {
+                        match FsOps::remove_dir_all(&dir).await {
+                            Ok(_) => app_log!(info, "    → files deleted"),
+                            Err(e) => app_log!(error, "    → file deletion failed: {}", e),
+                        }
+                    }
+                    match tenant_repo.delete_by_email(email).await {
+                        Ok(_) => app_log!(info, "    → DB record deleted"),
+                        Err(e) => app_log!(error, "    → DB deletion failed: {}", e),
+                    }
+                }
+            }
+
+            if !execute {
+                app_log!(info, "\nRe-run with --execute to actually delete these accounts.");
+            }
         }
     }
 

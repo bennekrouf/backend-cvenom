@@ -1,11 +1,12 @@
 // src/web/handlers/system_handlers.rs
 use crate::auth::{AuthenticatedUser, OptionalAuth};
-use crate::core::TemplateEngine;
+use crate::core::database::{DatabaseConfig, TenantRepository, get_tenant_folder_path};
+use crate::core::{FsOps, TemplateEngine};
 use crate::web::types::{
-    DataResponse, StandardErrorResponse, TemplateInfo, TextResponse, UserInfo,
+    ActionResponse, DataResponse, StandardErrorResponse, TemplateInfo, TextResponse, UserInfo,
 };
-use crate::web::ResponseType;
-// use graflog::app_log;
+use crate::web::{ResponseType, ServerConfig};
+use graflog::app_log;
 use rocket::serde::json::Json;
 use rocket::State;
 
@@ -80,6 +81,57 @@ pub async fn get_current_user_error_handler() -> Json<StandardErrorResponse> {
         ],
         None,
     ))
+}
+
+/// DELETE /me — permanently delete the caller's account.
+/// Removes all files from disk and hard-deletes the tenant DB record.
+pub async fn delete_account_handler(
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let email = auth.user().email.clone();
+    app_log!(info, "Account deletion requested for: {}", email);
+
+    // 1. Delete all files on disk
+    let tenant_data_dir = get_tenant_folder_path(&email, &config.data_dir);
+    if tenant_data_dir.exists() {
+        if let Err(e) = FsOps::remove_dir_all(&tenant_data_dir).await {
+            app_log!(error, "Failed to delete tenant directory for {}: {}", email, e);
+            // Proceed anyway — DB record must still be removed
+        }
+    }
+
+    // 2. Hard-delete tenant record from DB
+    let pool = match db_config.pool() {
+        Ok(p) => p,
+        Err(e) => {
+            app_log!(error, "DB unavailable during account deletion: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Database error during account deletion".to_string(),
+                "DB_ERROR".to_string(),
+                vec!["Contact support if this persists".to_string()],
+                None,
+            )));
+        }
+    };
+    let repo = TenantRepository::new(pool);
+    if let Err(e) = repo.delete_by_email(&email).await {
+        app_log!(error, "Failed to delete tenant DB record for {}: {}", email, e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to delete account record".to_string(),
+            "DB_DELETE_ERROR".to_string(),
+            vec!["Contact support if this persists".to_string()],
+            None,
+        )));
+    }
+
+    app_log!(info, "Account fully deleted for: {}", email);
+    Ok(Json(ActionResponse::success(
+        "Account and all associated data deleted".to_string(),
+        "account_deleted".to_string(),
+        None,
+    )))
 }
 
 pub async fn health_handler(auth: OptionalAuth) -> Json<TextResponse> {

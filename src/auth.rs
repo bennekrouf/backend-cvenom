@@ -1,4 +1,4 @@
-use crate::core::database::{DatabaseConfig, Tenant, TenantService};
+use crate::core::database::{DatabaseConfig, Tenant, TenantRepository, TenantService};
 // src/auth.rs
 use crate::web::ServerConfig;
 use anyhow::Result;
@@ -221,6 +221,16 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                         ),
                     }
                 }
+            });
+        }
+
+        // Fire-and-forget: update last_seen_at so the retention cleanup knows this user is active.
+        if let Ok(pool) = db_config.pool() {
+            let touch_pool = pool.clone();
+            let touch_email = firebase_user.email.clone();
+            tokio::spawn(async move {
+                let repo = TenantRepository::new(&touch_pool);
+                let _ = repo.touch_last_seen(&touch_email).await;
             });
         }
 

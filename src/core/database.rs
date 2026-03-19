@@ -80,6 +80,11 @@ impl Database {
             .execute(&self.pool)
             .await?;
 
+        // Idempotent: add last_seen_at if not present (ignored if column already exists)
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
+            .execute(&self.pool)
+            .await;
+
         app_log!(info, "Database migrations completed");
         Ok(())
     }
@@ -127,6 +132,7 @@ pub struct Tenant {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub is_active: bool,
+    pub last_seen_at: Option<DateTime<Utc>>,
 }
 
 impl Tenant {
@@ -241,6 +247,11 @@ impl DatabaseConfig {
             .execute(pool)
             .await?;
 
+        // Idempotent: add last_seen_at if not present (ignored if column already exists)
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
+            .execute(pool)
+            .await;
+
         app_log!(info, "Database migrations completed successfully");
         Ok(())
     }
@@ -264,8 +275,8 @@ impl<'a> TenantRepository<'a> {
 
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active
-            FROM tenants 
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at
+            FROM tenants
             WHERE is_active = TRUE AND (
                 email = ? OR domain = ?
             )
@@ -308,6 +319,7 @@ impl<'a> TenantRepository<'a> {
             created_at: now,
             updated_at: now,
             is_active: true,
+            last_seen_at: None,
         };
 
         app_log!(
@@ -346,6 +358,7 @@ impl<'a> TenantRepository<'a> {
             created_at: now,
             updated_at: now,
             is_active: true,
+            last_seen_at: None,
         };
 
         app_log!(
@@ -361,8 +374,8 @@ impl<'a> TenantRepository<'a> {
     pub async fn list_active(&self) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active
-            FROM tenants 
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at
+            FROM tenants
             WHERE is_active = TRUE
             ORDER BY tenant_name ASC, email ASC, domain ASC
             "#,
@@ -370,6 +383,36 @@ impl<'a> TenantRepository<'a> {
         .fetch_all(self.pool)
         .await?;
 
+        Ok(tenants)
+    }
+
+    /// Update last_seen_at to NOW() for a given email tenant (fire-and-forget safe).
+    pub async fn touch_last_seen(&self, email: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET last_seen_at = ? WHERE email = ?")
+            .bind(Utc::now())
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Return email-based tenants whose last activity (last_seen_at, or created_at if NULL)
+    /// is older than `days` days. Domain tenants are never returned — they are managed by admins.
+    pub async fn find_stale_email_tenants(&self, days: i64) -> Result<Vec<Tenant>> {
+        let cutoff = Utc::now() - chrono::Duration::days(days);
+        let tenants = sqlx::query_as::<_, Tenant>(
+            r#"
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at
+            FROM tenants
+            WHERE is_active = TRUE
+              AND email IS NOT NULL
+              AND domain IS NULL
+              AND COALESCE(last_seen_at, created_at) < ?
+            "#,
+        )
+        .bind(cutoff)
+        .fetch_all(self.pool)
+        .await?;
         Ok(tenants)
     }
 
@@ -393,6 +436,20 @@ impl<'a> TenantRepository<'a> {
         }
 
         Ok(updated)
+    }
+
+    /// Hard-delete a tenant by email (used for account deletion / right to erasure).
+    pub async fn delete_by_email(&self, email: &str) -> Result<bool> {
+        let result = sqlx::query("DELETE FROM tenants WHERE email = ?")
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+
+        let deleted = result.rows_affected() > 0;
+        if deleted {
+            app_log!(info, "Hard-deleted tenant record for email: {}", email);
+        }
+        Ok(deleted)
     }
 
     pub async fn deactivate_by_domain(&self, domain: &str) -> Result<bool> {
