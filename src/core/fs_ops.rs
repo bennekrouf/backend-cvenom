@@ -162,26 +162,14 @@ impl FsOps {
             anyhow::bail!("Image file too small or corrupted");
         }
 
-        let file_name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_lowercase();
+        // Validate by magic bytes only — the destination is always "profile.png"
+        // regardless of the original upload filename, so extension-based checks
+        // would incorrectly reject valid JPEG uploads.
+        const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        const JPEG_SIGNATURE: &[u8] = &[0xFF, 0xD8, 0xFF];
 
-        if file_name.ends_with(".png") {
-            const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-            if !header.starts_with(PNG_SIGNATURE) {
-                if header.starts_with(&[0xFF, 0xD8, 0xFF]) {
-                    anyhow::bail!("File is JPEG but has .png extension");
-                }
-                anyhow::bail!("Invalid PNG file - corrupted or wrong format");
-            }
-        } else if file_name.ends_with(".jpg") || file_name.ends_with(".jpeg") {
-            if !header.starts_with(&[0xFF, 0xD8, 0xFF]) {
-                anyhow::bail!("Invalid JPEG file - corrupted or wrong format");
-            }
-        } else {
-            anyhow::bail!("Unsupported image format - use PNG or JPEG only");
+        if !header.starts_with(PNG_SIGNATURE) && !header.starts_with(JPEG_SIGNATURE) {
+            anyhow::bail!("Invalid image file — only JPEG and PNG formats are supported");
         }
 
         Ok(())

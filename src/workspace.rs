@@ -70,28 +70,14 @@ impl<'a> WorkspaceManager<'a> {
             return Err("Image file too small or corrupted".to_string());
         }
 
-        let file_name = image_path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("")
-            .to_lowercase();
+        // Validate by magic bytes only — the stored file is always "profile.png"
+        // regardless of the original upload extension, so checking the filename
+        // extension would incorrectly reject valid JPEG uploads.
+        const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+        const JPEG_SIGNATURE: &[u8] = &[0xFF, 0xD8, 0xFF];
 
-        if file_name.ends_with(".png") {
-            // Check PNG signature
-            const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-            if !header.starts_with(PNG_SIGNATURE) {
-                if header.starts_with(&[0xFF, 0xD8, 0xFF]) {
-                    return Err("File is JPEG but has .png extension".to_string());
-                }
-                return Err("Invalid PNG file - corrupted or wrong format".to_string());
-            }
-        } else if file_name.ends_with(".jpg") || file_name.ends_with(".jpeg") {
-            // Check JPEG signature
-            if !header.starts_with(&[0xFF, 0xD8, 0xFF]) {
-                return Err("Invalid JPEG file - corrupted or wrong format".to_string());
-            }
-        } else {
-            return Err("Unsupported image format - use PNG or JPEG only".to_string());
+        if !header.starts_with(PNG_SIGNATURE) && !header.starts_with(JPEG_SIGNATURE) {
+            return Err("Invalid image file — only JPEG and PNG formats are supported".to_string());
         }
 
         Ok(())
