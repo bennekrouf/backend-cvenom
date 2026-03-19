@@ -116,9 +116,16 @@ impl<'a> WorkspaceManager<'a> {
             // Validate the image before copying
             match self.validate_image_sync(&profile_image_png) {
                 Ok(_) => {
-                    let profile_dest = PathBuf::from("profile.png");
+                    // The stored file is always named "profile.png" on disk but may
+                    // contain JPEG bytes (uploaded as .jpg then saved under .png name).
+                    // Typst decodes by extension, so copy with the real extension so
+                    // that image("profile.jpg") / image("profile.png") uses the right codec.
+                    let header = fs::read(&profile_image_png).unwrap_or_default();
+                    const JPEG_SIG: &[u8] = &[0xFF, 0xD8, 0xFF];
+                    let dest_name = if header.starts_with(JPEG_SIG) { "profile.jpg" } else { "profile.png" };
+                    let profile_dest = PathBuf::from(dest_name);
                     fs::copy(&profile_image_png, &profile_dest)?;
-                    app_log!(info, "✅ Copied valid profile image");
+                    app_log!(info, "✅ Copied valid profile image as {}", dest_name);
                 }
                 Err(error_msg) => {
                     app_log!(info, "❌ Skipping corrupted image: {}", error_msg);
@@ -223,32 +230,22 @@ impl<'a> WorkspaceManager<'a> {
             cmd.arg("--input").arg("company_logo.png=company_logo.png");
         }
 
-        // ONLY add picture input if file exists AND is valid
-        if PathBuf::from("profile.png").exists() {
-            app_log!(
-                info,
-                "DEBUG: profile.png exists in workspace, checking validity..."
-            );
-            if let Ok(header) = fs::read("profile.png") {
-                let is_valid = if header.len() >= 8 {
-                    header.starts_with(&[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) || // PNG
-                header.starts_with(&[0xFF, 0xD8, 0xFF]) // JPEG
-                } else {
-                    false
-                };
-
-                if is_valid {
-                    cmd.arg("--input").arg("picture=profile.png");
-                    app_log!(info, "✅ Added valid picture input to Typst command");
-                } else {
-                    app_log!(info, "❌ Skipping invalid picture file");
-                }
-            }
+        // Add picture input only if a valid image was copied to the workspace.
+        // copy_profile_files() writes "profile.jpg" for JPEG content and
+        // "profile.png" for PNG content so Typst uses the correct decoder.
+        let workspace_pic = if PathBuf::from("profile.jpg").exists() {
+            Some("profile.jpg")
+        } else if PathBuf::from("profile.png").exists() {
+            Some("profile.png")
         } else {
-            app_log!(
-                info,
-                "ℹ️  No profile.png in workspace - generating without photo"
-            );
+            None
+        };
+
+        if let Some(pic_file) = workspace_pic {
+            app_log!(info, "✅ Adding picture input to Typst command: {}", pic_file);
+            cmd.arg("--input").arg(format!("picture={}", pic_file));
+        } else {
+            app_log!(info, "ℹ️  No profile image in workspace - generating without photo");
         }
 
         let output = cmd.output().context("Failed to execute typst command")?;
