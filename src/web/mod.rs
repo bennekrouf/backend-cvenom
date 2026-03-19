@@ -199,27 +199,29 @@ pub async fn save_tenant_file_content(
 
 // ── CV form-data routes ───────────────────────────────────────────────────────
 
-/// GET /profiles/:name/cv-data
-/// Returns a unified CvFormData JSON parsed from cv_params.toml + experiences.typ.
-#[get("/profiles/<name>/cv-data")]
+/// GET /profiles/:name/cv-data?lang=en
+/// Returns a unified CvFormData JSON parsed from cv_params.toml + experiences_{lang}.typ.
+#[get("/profiles/<name>/cv-data?<lang>")]
 pub async fn get_cv_data(
     name: String,
+    lang: Option<String>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
 ) -> Result<Json<CvFormData>, Json<StandardErrorResponse>> {
-    get_cv_data_handler(name, auth, config).await
+    get_cv_data_handler(name, lang, auth, config).await
 }
 
-/// PUT /profiles/:name/cv-data
-/// Accepts CvFormData JSON, regenerates cv_params.toml and experiences_en.typ.
-#[put("/profiles/<name>/cv-data", data = "<request>")]
+/// PUT /profiles/:name/cv-data?lang=en
+/// Accepts CvFormData JSON, regenerates cv_params.toml and experiences_{lang}.typ.
+#[put("/profiles/<name>/cv-data?<lang>", data = "<request>")]
 pub async fn put_cv_data(
     name: String,
+    lang: Option<String>,
     request: Json<CvFormData>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
 ) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
-    put_cv_data_handler(name, request, auth, config).await
+    put_cv_data_handler(name, lang, request, auth, config).await
 }
 
 #[get("/files/tree")]

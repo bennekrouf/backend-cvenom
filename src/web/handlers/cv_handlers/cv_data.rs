@@ -457,10 +457,12 @@ fn escape_typ(s: &str) -> String {
 
 pub async fn get_cv_data_handler(
     profile_name: String,
+    lang: Option<String>,
     auth: AuthenticatedUser,
     config: &State<crate::web::ServerConfig>,
 ) -> Result<Json<CvFormData>, Json<StandardErrorResponse>> {
     let email = auth.email();
+    let lang = lang.as_deref().unwrap_or("en");
 
     let profile_dir = match resolve_profile_dir(&profile_name, email, &config.data_dir) {
         Ok(p) => p,
@@ -476,23 +478,25 @@ pub async fn get_cv_data_handler(
     let toml_content = tokio::fs::read_to_string(&toml_path).await.unwrap_or_default();
     let mut cv_data = parse_toml_cv(&toml_content);
 
-    // Read experiences_en.typ (optional)
-    let exp_path = profile_dir.join("experiences_en.typ");
+    // Read experiences_{lang}.typ (optional)
+    let exp_path = profile_dir.join(format!("experiences_{}.typ", lang));
     if let Ok(exp_content) = tokio::fs::read_to_string(&exp_path).await {
         cv_data.work_experience = parse_experiences_typ(&exp_content);
     }
 
-    app_log!(info, user = %email, profile = %profile_name, "Loaded cv-data");
+    app_log!(info, user = %email, profile = %profile_name, lang = %lang, "Loaded cv-data");
     Ok(Json(cv_data))
 }
 
 pub async fn put_cv_data_handler(
     profile_name: String,
+    lang: Option<String>,
     request: Json<CvFormData>,
     auth: AuthenticatedUser,
     config: &State<crate::web::ServerConfig>,
 ) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
     let email = auth.email();
+    let lang = lang.as_deref().unwrap_or("en");
     let data = request.into_inner();
 
     let profile_dir = match resolve_profile_dir(&profile_name, email, &config.data_dir) {
@@ -523,22 +527,23 @@ pub async fn put_cv_data_handler(
         )));
     }
 
-    // Generate experiences.typ and write to all language variants found
+    // Generate experiences.typ and write only to the selected language variant
     let exp_typ = generate_experiences_typ(&data.work_experience);
-
-    let variants = ["experiences_en.typ", "experiences_fr.typ"];
-    for variant in &variants {
-        let path = profile_dir.join(variant);
-        // Write en always; write fr only if it already exists
-        if *variant == "experiences_en.typ" || path.exists() {
-            let _ = tokio::fs::write(&path, &exp_typ).await;
-        }
+    let exp_filename = format!("experiences_{}.typ", lang);
+    let exp_path = profile_dir.join(&exp_filename);
+    if let Err(e) = tokio::fs::write(&exp_path, &exp_typ).await {
+        app_log!(error, "Failed to write {}: {}", exp_filename, e);
+        return Err(Json(StandardErrorResponse::new(
+            format!("Failed to save experiences file: {}", e),
+            "WRITE_ERROR".to_string(), vec![], None,
+        )));
     }
 
     app_log!(
         info,
         user = %email,
         profile = %profile_name,
+        lang = %lang,
         "Saved cv-data ({} experiences, {} edu entries)",
         data.work_experience.len(),
         data.education.len(),
