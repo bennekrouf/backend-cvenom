@@ -47,6 +47,33 @@ impl<'r> Responder<'r, 'static> for PdfResponse {
     }
 }
 
+pub struct DocxResponse {
+    pub data: Vec<u8>,
+    pub filename: String,
+}
+
+impl DocxResponse {
+    pub fn new(data: Vec<u8>, filename: String) -> Self {
+        Self { data, filename }
+    }
+}
+
+impl<'r> Responder<'r, 'static> for DocxResponse {
+    fn respond_to(self, _: &'r Request<'_>) -> response::Result<'static> {
+        Response::build()
+            .header(ContentType::new(
+                "application",
+                "vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ))
+            .raw_header(
+                "Content-Disposition",
+                format!("attachment; filename=\"{}\"", self.filename),
+            )
+            .sized_body(self.data.len(), std::io::Cursor::new(self.data))
+            .ok()
+    }
+}
+
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct ErrorResponse {

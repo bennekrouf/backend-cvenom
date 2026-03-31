@@ -11,11 +11,13 @@ use crate::web::handlers::cover_letter::CoverLetterResult;
 use crate::web::handlers::translate::TranslateCvRequest;
 use crate::web::handlers::{
     cover_letter_handler,
+    cover_letter_export_handler,
     delete_account_handler,
     get_cv_data_handler, put_cv_data_handler,
     optimize_and_generate_handler, optimize_cv_handler, save_optimized_handler, translate_cv_handler,
     upload_and_convert_cv_handler,
 };
+use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
@@ -296,6 +298,16 @@ pub async fn generate_cover_letter(
     cover_letter_handler(request, auth, config, cv_service_url).await
 }
 
+/// POST /cover-letter/export — export a cover letter text as .docx (no credit cost)
+#[post("/cover-letter/export", data = "<request>")]
+pub async fn export_cover_letter(
+    request: Json<CoverLetterExportRequest>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<DocxResponse, Json<StandardErrorResponse>> {
+    cover_letter_export_handler(request, auth, config).await
+}
+
 // ── Payment routes ────────────────────────────────────────────────────────────
 
 /// POST /payment/intent — create a Stripe PaymentIntent
@@ -486,6 +498,7 @@ pub async fn start_web_server(
                 save_optimized_cv,
                 translate_cv,
                 generate_cover_letter,
+                export_cover_letter,
                 payment_intent,
                 payment_confirm,
                 payment_balance,

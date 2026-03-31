@@ -2,6 +2,7 @@
 //! CV handlers module - refactored into separate files for better maintainability
 
 pub mod cover_letter;
+pub mod cover_letter_export;
 pub mod cv_data;
 pub mod generate;
 pub mod helpers;
@@ -12,6 +13,7 @@ pub mod upload_convert;
 
 // Re-export all handler functions
 pub use cover_letter::{cover_letter_handler, CoverLetterRequest};
+pub use cover_letter_export::{cover_letter_export_handler, CoverLetterExportRequest};
 pub use cv_data::{get_cv_data_handler, put_cv_data_handler, CvFormData};
 pub use generate::generate_cv_handler;
 pub use optimize::{optimize_and_generate_handler, optimize_cv_handler, OptimizeCvRequest};
