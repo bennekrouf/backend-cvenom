@@ -24,7 +24,7 @@ pub async fn upload_and_convert_cv_handler(
     let tenant = auth.tenant();
 
     // CV import calls Claude Sonnet — 4 credits ($1.00 at $0.25/credit)
-    check_and_deduct_credits(&user.email, 4, None).await?;
+    check_and_deduct_credits(&user.email, 4, None, "cv_import").await?;
 
     let upload_span = app_span!("cv_upload_conversion",
         user_email = %user.email,

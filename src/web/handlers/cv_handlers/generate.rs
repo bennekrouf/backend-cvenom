@@ -28,7 +28,7 @@ pub async fn generate_cv_handler(
     let conversation_id = request.conversation_id();
 
     // PDF generation — 20 credits per generate
-    check_and_deduct_credits(&user.email, 20, conversation_id.clone()).await?;
+    check_and_deduct_credits(&user.email, 20, conversation_id.clone(), "cv_generation").await?;
 
     let generate_span = app_span!("cv_generation",
         user_email = %user.email,

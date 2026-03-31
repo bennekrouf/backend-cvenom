@@ -52,7 +52,7 @@ pub async fn cover_letter_handler(
     let data = &request.data;
 
     // Cover letter uses LLM — 20 credits (same as CV generation)
-    check_and_deduct_credits(&user.email, 20, conversation_id.clone()).await?;
+    check_and_deduct_credits(&user.email, 20, conversation_id.clone(), "cover_letter").await?;
 
     app_log!(
         info,

@@ -200,12 +200,17 @@ fn api0_internal_secret() -> Result<String, String> {
 ///
 /// Calls: POST {API0_STORE_URL}/api/user/credits
 /// Body:  { "email": "<user email>", "amount": <credits> }
-async fn api0_topup_credits(user_email: &str, credits_to_add: i64) -> Result<i64, String> {
+async fn api0_topup_credits(user_email: &str, credits_to_add: i64, action_type: &str, description: Option<&str>) -> Result<i64, String> {
     let store_url = api0_store_url()?;
     let internal_secret = api0_internal_secret()?;
     let client = reqwest::Client::new();
 
-    let body = serde_json::json!({ "email": user_email, "amount": credits_to_add });
+    let body = serde_json::json!({
+        "email": user_email,
+        "amount": credits_to_add,
+        "action_type": action_type,
+        "description": description,
+    });
 
     let res = client
         .post(format!("{store_url}/api/user/credits"))
@@ -261,6 +266,7 @@ pub async fn check_and_deduct_credits(
     user_email: &str,
     cost: i64,
     conversation_id: Option<String>,
+    action_type: &str,
 ) -> Result<(), Json<StandardErrorResponse>> {
     let balance = api0_get_balance(user_email).await.map_err(|e| {
         Json(StandardErrorResponse::new(
@@ -280,7 +286,7 @@ pub async fn check_and_deduct_credits(
         )));
     }
 
-    api0_topup_credits(user_email, -cost).await.map_err(|e| {
+    api0_topup_credits(user_email, -cost, action_type, None).await.map_err(|e| {
         Json(StandardErrorResponse::new(
             format!("Failed to deduct credits: {}", e),
             "CREDIT_DEDUCT_FAILED".to_string(),
@@ -446,7 +452,7 @@ pub async fn confirm_payment_handler(
     );
 
     // 3. Top up this user's credit balance in api0
-    match api0_topup_credits(user_email, credits_to_add).await {
+    match api0_topup_credits(user_email, credits_to_add, "topup", None).await {
         Ok(new_balance) => {
             app_log!(
                 info,
@@ -497,6 +503,23 @@ pub struct GetBalanceResponse {
     pub balance: i64,
 }
 
+pub async fn api0_get_transactions(user_email: &str) -> Result<Vec<serde_json::Value>, String> {
+    let store_url = std::env::var("API0_STORE_URL")
+        .map_err(|_| "API0_STORE_URL not set".to_string())?;
+    let client = reqwest::Client::new();
+    let response = client
+        .get(format!(
+            "{}/api/user/credit-transactions/{}",
+            store_url,
+            utf8_percent_encode(user_email, NON_ALPHANUMERIC)
+        ))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+    Ok(json["transactions"].as_array().cloned().unwrap_or_default())
+}
+
 /// GET /payment/balance
 ///
 /// Returns the authenticated user's current credit balance.
@@ -513,6 +536,31 @@ pub async fn get_balance_handler(
                 format!("Failed to retrieve credit balance: {}", e),
                 "BALANCE_ERROR".to_string(),
                 vec!["Contact support if this persists".to_string()],
+                None,
+            )))
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct TransactionsResponse {
+    pub success: bool,
+    pub transactions: Vec<serde_json::Value>,
+}
+
+pub async fn get_transactions_handler(
+    auth: AuthenticatedUser,
+) -> Result<Json<TransactionsResponse>, Json<StandardErrorResponse>> {
+    let user_email = &auth.user().email;
+    match api0_get_transactions(user_email).await {
+        Ok(transactions) => Ok(Json(TransactionsResponse { success: true, transactions })),
+        Err(e) => {
+            app_log!(error, "Failed to get transactions for {}: {}", user_email, e);
+            Err(Json(StandardErrorResponse::new(
+                format!("Failed to retrieve transactions: {}", e),
+                "TRANSACTIONS_FETCH_FAILED".to_string(),
+                vec![],
                 None,
             )))
         }

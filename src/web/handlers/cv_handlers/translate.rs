@@ -29,7 +29,7 @@ pub async fn translate_cv_handler(
     let conversation_id = request.conversation_id();
 
     // Translation — 5 credits (¼ of a CV generation)
-    check_and_deduct_credits(&user.email, 5, conversation_id.clone()).await?;
+    check_and_deduct_credits(&user.email, 5, conversation_id.clone(), "translate").await?;
 
     app_log!(
         info,

@@ -204,7 +204,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                     std::env::var("API0_INTERNAL_SECRET"),
                 ) {
                     let client = reqwest::Client::new();
-                    let body = serde_json::json!({ "email": email_clone, "amount": WELCOME_CREDITS });
+                    let body = serde_json::json!({ "email": email_clone, "amount": WELCOME_CREDITS, "action_type": "welcome" });
                     match client
                         .post(format!("{}/api/user/credits", store_url))
                         .header("Content-Type", "application/json")

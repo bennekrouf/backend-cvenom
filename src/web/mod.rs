@@ -21,7 +21,7 @@ use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
-use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse};
+use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse, get_transactions_handler};
 use anyhow::Result;
 use graflog::app_log;
 
@@ -347,6 +347,14 @@ pub async fn payment_balance(
     crate::web::handlers::payment_handlers::get_balance_handler(auth).await
 }
 
+/// GET /payment/transactions — authenticated user's credit transaction history
+#[get("/payment/transactions")]
+pub async fn payment_transactions(
+    auth: AuthenticatedUser,
+) -> Result<Json<TransactionsResponse>, Json<StandardErrorResponse>> {
+    get_transactions_handler(auth).await
+}
+
 // Error catchers
 #[rocket::catch(400)]
 pub fn bad_request() -> Json<StandardErrorResponse> {
@@ -502,6 +510,7 @@ pub async fn start_web_server(
                 payment_intent,
                 payment_confirm,
                 payment_balance,
+                payment_transactions,
                 get_cv_data,
                 put_cv_data,
                 delete_me,

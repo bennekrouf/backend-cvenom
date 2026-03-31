@@ -152,7 +152,7 @@ pub async fn optimize_cv_handler(
     };
 
     // Optimization — 5 credits (¼ of a CV generation)
-    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone()).await?;
+    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone(), "optimize").await?;
 
     let (response, _) = run_optimization(
         &cv_data,
@@ -210,7 +210,7 @@ pub async fn optimize_and_generate_handler(
     };
 
     // Optimization — 5 credits (¼ of a CV generation)
-    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone()).await?;
+    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone(), "optimize").await?;
 
     // ── Step 1: Optimize ─────────────────────────────────────────────────────
     let (optimize_resp, optimized_cv_data) = run_optimization(
