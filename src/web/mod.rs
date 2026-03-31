@@ -390,7 +390,7 @@ pub async fn start_web_server(
         return Err(e);
     }
 
-    let mut auth_config = AuthConfig::new("semantic-27923".to_string());
+    let auth_config = AuthConfig::new("semantic-27923".to_string());
 
     if let Err(e) = auth_config.update_firebase_keys().await {
         app_log!(error, "Failed to fetch Firebase keys: {}", e);

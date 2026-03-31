@@ -9,6 +9,8 @@ use rocket::request::{FromRequest, Outcome};
 use rocket::{Request, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct FirebaseUser {
@@ -46,31 +48,35 @@ impl From<Claims> for FirebaseUser {
 
 pub struct AuthConfig {
     pub project_id: String,
-    pub firebase_keys: HashMap<String, String>, // kid -> public key
+    /// kid → PEM public key. Wrapped in Arc<RwLock> so we can refresh
+    /// in-place after Google rotates keys (typically every ~6 hours).
+    pub firebase_keys: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl AuthConfig {
     pub fn new(project_id: String) -> Self {
         Self {
             project_id,
-            firebase_keys: HashMap::new(),
+            firebase_keys: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
-    /// Fetch Firebase public keys for JWT verification
-    pub async fn update_firebase_keys(&mut self) -> Result<()> {
+    /// Fetch Firebase public keys and update the cache.
+    /// Takes &self so it can be called on a shared reference (e.g. from Rocket State).
+    pub async fn update_firebase_keys(&self) -> Result<()> {
         let url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 
-        // Force IPv4 because Google aggressively blocks OVH IPv6 address ranges (returns 403 HTML)
+        // Force IPv4 — Google blocks OVH IPv6 ranges with 403
         let client = reqwest::Client::builder()
             .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED))
             .build()?;
-            
+
         let response = client.get(url).send().await?;
         let keys: HashMap<String, String> = response.json().await?;
 
-        self.firebase_keys = keys;
-        app_log!(info, "Updated Firebase public keys via IPv4");
+        let mut cache = self.firebase_keys.write().await;
+        *cache = keys;
+        app_log!(info, "Updated Firebase public keys via IPv4 ({} keys)", cache.len());
 
         Ok(())
     }
@@ -278,11 +284,32 @@ async fn verify_firebase_token(token: &str, auth_config: &AuthConfig) -> Result<
         .kid
         .ok_or_else(|| anyhow::anyhow!("Missing kid in token header"))?;
 
-    // Get the public key for this kid
-    let public_key = auth_config
-        .firebase_keys
-        .get(&kid)
-        .ok_or_else(|| anyhow::anyhow!("Unknown key ID: {}", kid))?;
+    // Try the cached keys first
+    let public_key_opt = {
+        let keys = auth_config.firebase_keys.read().await;
+        keys.get(&kid).cloned()
+    };
+
+    // If kid not found, Google may have rotated keys — refresh and retry once
+    let public_key = match public_key_opt {
+        Some(k) => k,
+        None => {
+            app_log!(
+                info,
+                "Firebase key ID '{}' not in cache — refreshing public keys",
+                kid
+            );
+            auth_config
+                .update_firebase_keys()
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to refresh Firebase keys: {}", e))?;
+
+            let keys = auth_config.firebase_keys.read().await;
+            keys.get(&kid)
+                .cloned()
+                .ok_or_else(|| anyhow::anyhow!("Unknown key ID '{}' even after refresh", kid))?
+        }
+    };
 
     // Verify the token
     let mut validation = Validation::new(Algorithm::RS256);
