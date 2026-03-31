@@ -151,8 +151,8 @@ pub async fn optimize_cv_handler(
         })?,
     };
 
-    // Optimization uses Cohere command-r7b (~$0.0003/call × 8.3 markup) — 1 credit
-    check_and_deduct_credits(&auth.user().email, 1, conversation_id.clone()).await?;
+    // Optimization — 5 credits (¼ of a CV generation)
+    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone()).await?;
 
     let (response, _) = run_optimization(
         &cv_data,
@@ -209,8 +209,8 @@ pub async fn optimize_and_generate_handler(
         })?,
     };
 
-    // Optimization uses Cohere command-r7b (~$0.0003/call × 8.3 markup) — 1 credit
-    check_and_deduct_credits(&auth.user().email, 1, conversation_id.clone()).await?;
+    // Optimization — 5 credits (¼ of a CV generation)
+    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone()).await?;
 
     // ── Step 1: Optimize ─────────────────────────────────────────────────────
     let (optimize_resp, optimized_cv_data) = run_optimization(
