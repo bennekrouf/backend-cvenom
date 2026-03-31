@@ -516,7 +516,21 @@ pub async fn api0_get_transactions(user_email: &str) -> Result<Vec<serde_json::V
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+
+    let status = response.status();
+    let body = response.text().await.map_err(|e| e.to_string())?;
+
+    if !status.is_success() {
+        app_log!(error, "api0 credit-transactions returned {}: {}", status, body);
+        // If the endpoint doesn't exist yet (404) return empty list gracefully
+        if status.as_u16() == 404 {
+            return Ok(vec![]);
+        }
+        return Err(format!("Store returned {}: {}", status, body));
+    }
+
+    let json: serde_json::Value = serde_json::from_str(&body)
+        .map_err(|e| format!("JSON parse error: {} — body: {}", e, &body[..body.len().min(200)]))?;
     Ok(json["transactions"].as_array().cloned().unwrap_or_default())
 }
 
