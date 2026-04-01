@@ -520,10 +520,12 @@ pub async fn api0_get_transactions(user_email: &str) -> Result<Vec<serde_json::V
     let status = response.status();
     let body = response.text().await.map_err(|e| e.to_string())?;
 
+    app_log!(info, "api0 credit-transactions status={} body={}", status, &body[..body.len().min(300)]);
+
     if !status.is_success() {
-        app_log!(error, "api0 credit-transactions returned {}: {}", status, body);
         // If the endpoint doesn't exist yet (404) return empty list gracefully
         if status.as_u16() == 404 {
+            app_log!(warn, "api0 store has no /credit-transactions endpoint — store binary needs update");
             return Ok(vec![]);
         }
         return Err(format!("Store returned {}: {}", status, body));
