@@ -68,30 +68,35 @@ impl ServiceClient {
         app_log!(trace, "Response status: {}", status);
 
         if status.is_success() {
-            // DEBUG: Get raw response text first
             let response_text = response
                 .text()
                 .await
                 .context("Failed to read response text")?;
 
-            app_log!(info, "Raw CV service response: {}", response_text);
+            app_log!(info, "Raw CV service response (first 500 chars): {}", &response_text[..response_text.len().min(500)]);
 
-            // Try to parse as the expected structure
-            let conversion_response: CvConversionResponse = serde_json::from_str(&response_text)
-                .with_context(|| {
-                    format!(
-                        "Failed to parse response as CvConversionResponse. Raw response: {}",
-                        response_text
-                    )
-                })?;
+            // Parse as a generic JSON value first so we can check "status"
+            // before attempting to deserialize the full cv_data structure.
+            // This avoids failures when cv-import returns an error response
+            // whose cv_data shape doesn't exactly match CvJson.
+            let raw: serde_json::Value = serde_json::from_str(&response_text)
+                .with_context(|| format!("CV service returned non-JSON response: {}", response_text))?;
 
-            if conversion_response.status == "success" {
-                Ok(conversion_response.cv_data)
+            let svc_status = raw.get("status").and_then(|v| v.as_str()).unwrap_or("error");
+
+            if svc_status == "success" {
+                // Only deserialize cv_data on success
+                let cv_data: CvJson = serde_json::from_value(
+                    raw.get("cv_data").cloned().unwrap_or(serde_json::Value::Null)
+                ).with_context(|| format!("Failed to deserialize cv_data from response: {}", response_text))?;
+                Ok(cv_data)
             } else {
-                let detail = conversion_response
-                    .message
-                    .unwrap_or_else(|| conversion_response.status.clone());
-                anyhow::bail!("CV conversion failed: {}", detail)
+                let detail = raw.get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("CV conversion failed")
+                    .to_string();
+                app_log!(error, "CV service returned error: {}", detail);
+                anyhow::bail!("{}", detail)
             }
         } else {
             let error_text = response
@@ -99,8 +104,8 @@ impl ServiceClient {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
 
-            app_log!(error, "CV service error response: {}", error_text);
-            anyhow::bail!("Service returned error status {}: {}", status, error_text)
+            app_log!(error, "CV service HTTP error {}: {}", status, error_text);
+            anyhow::bail!("CV service error (HTTP {}): {}", status, error_text)
         }
     }
 

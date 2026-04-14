@@ -161,8 +161,20 @@ pub async fn upload_and_convert_cv_handler(
             let err_str = e.to_string();
             app_log!(error, "CV conversion failed: {}", err_str);
 
-            // Detect LLM-specific errors (model not found, API key, quota, etc.)
-            let (message, suggestions) = if err_str.contains("not_found_error")
+            // Detect specific error types for targeted messages
+            let (message, suggestions) = if err_str.contains("Connection refused")
+                || err_str.contains("connection refused")
+                || err_str.contains("os error 111")
+                || err_str.contains("HTTP request failed")
+            {
+                (
+                    "CV import service is unavailable".to_string(),
+                    vec![
+                        "The cv-import service is not running — contact the administrator".to_string(),
+                        "Try again in a few minutes".to_string(),
+                    ],
+                )
+            } else if err_str.contains("not_found_error")
                 || err_str.contains("LLMError")
                 || err_str.contains("Claude API Error")
                 || err_str.contains("model:")
@@ -183,22 +195,26 @@ pub async fn upload_and_convert_cv_handler(
                         "Contact the administrator to renew the API key".to_string(),
                     ],
                 )
-            } else if err_str.contains("No readable text") || err_str.contains("empty text") || err_str.contains("No text extracted") {
+            } else if err_str.contains("No readable text")
+                || err_str.contains("empty text")
+                || err_str.contains("No text extracted")
+                || err_str.contains("non-standard encoding")
+            {
                 (
-                    "Could not extract text from the PDF — it may use unsupported font encoding".to_string(),
+                    "Could not extract text from this PDF".to_string(),
                     vec![
-                        "Try converting the PDF to DOCX first (e.g. with LibreOffice or Word)".to_string(),
                         "If this is a cvenom-generated PDF, your profile already exists — no import needed".to_string(),
+                        "Try converting the PDF to DOCX first (LibreOffice or Word)".to_string(),
                         "Upload a PDF with selectable/copyable text".to_string(),
                     ],
                 )
             } else {
+                // Pass through the actual error message from cv-import rather than hiding it
                 (
-                    "CV conversion failed".to_string(),
+                    format!("CV conversion failed: {}", err_str),
                     vec![
-                        "Ensure CV has readable text (not a scanned image)".to_string(),
-                        "Try a different file format (DOCX works best)".to_string(),
-                        "Check file is not corrupted".to_string(),
+                        "Ensure the CV has selectable text (not a scanned image)".to_string(),
+                        "Try DOCX format — it works more reliably than PDF".to_string(),
                     ],
                 )
             };
