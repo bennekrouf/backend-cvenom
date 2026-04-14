@@ -182,6 +182,15 @@
 // ── Header ─────────────────────────────────────────────────────────────────────
 #let show_header(details) = {
   v(0.5em)
+  // Photo centered above name
+  let _pic = sys.inputs.at("picture", default: none)
+  let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+  if _pic != none and show_photo {
+    align(center,
+      block(clip: true, radius: 50%,
+        image(_pic, width: 85pt, height: 85pt, fit: "cover")))
+    v(0.4em)
+  }
   align(center)[
     #text(size: 26pt, weight: "bold", fill: primary,
       details.at("name", default: ""))

@@ -263,13 +263,23 @@
           }
         }
       ],
-      // Availability badge on right of header
-      if details.at("availability", default: "") != "" {
-        block(inset: (x: 10pt, y: 6pt), radius: 4pt, fill: rgb("#16A34A"))[
-          #text(size: 9pt, weight: "bold", fill: white,
-            "✓  " + details.availability)
-        ]
-      }
+      // Photo and/or availability badge on right of header
+      [
+        #let _pic = sys.inputs.at("picture", default: none)
+        #let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+        #if _pic != none and show_photo {
+          align(center,
+            block(clip: true, radius: 50%,
+              image(_pic, width: 70pt, height: 70pt, fit: "cover")))
+          v(0.4em)
+        }
+        #if details.at("availability", default: "") != "" {
+          block(inset: (x: 10pt, y: 6pt), radius: 4pt, fill: rgb("#16A34A"))[
+            #text(size: 9pt, weight: "bold", fill: white,
+              "✓  " + details.availability)
+          ]
+        }
+      ]
     )
   ]
 }

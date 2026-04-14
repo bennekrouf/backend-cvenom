@@ -257,6 +257,13 @@
     ],
     [
       #set align(right)
+      #let _pic = sys.inputs.at("picture", default: none)
+      #let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+      #if _pic != none and show_photo {
+        block(clip: true, radius: 50%,
+          image(_pic, width: 70pt, height: 70pt, fit: "cover"))
+        v(0.3em)
+      }
       #if details.at("email", default: "") != "" {
         text(size: 9.5pt, fill: accent,
           link("mailto:" + details.email, details.email))
