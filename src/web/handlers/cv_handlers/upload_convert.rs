@@ -183,12 +183,21 @@ pub async fn upload_and_convert_cv_handler(
                         "Contact the administrator to renew the API key".to_string(),
                     ],
                 )
+            } else if err_str.contains("No readable text") || err_str.contains("empty text") || err_str.contains("No text extracted") {
+                (
+                    "Could not extract text from the PDF — it may use unsupported font encoding".to_string(),
+                    vec![
+                        "Try converting the PDF to DOCX first (e.g. with LibreOffice or Word)".to_string(),
+                        "If this is a cvenom-generated PDF, your profile already exists — no import needed".to_string(),
+                        "Upload a PDF with selectable/copyable text".to_string(),
+                    ],
+                )
             } else {
                 (
                     "CV conversion failed".to_string(),
                     vec![
-                        "Ensure CV has readable text".to_string(),
-                        "Try a different file format".to_string(),
+                        "Ensure CV has readable text (not a scanned image)".to_string(),
+                        "Try a different file format (DOCX works best)".to_string(),
                         "Check file is not corrupted".to_string(),
                     ],
                 )
