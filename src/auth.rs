@@ -1,4 +1,5 @@
 use crate::core::database::{DatabaseConfig, Tenant, TenantRepository, TenantService};
+use crate::web::handlers::referral_handlers::credit_referral;
 // src/auth.rs
 use crate::web::ServerConfig;
 use anyhow::Result;
@@ -228,6 +229,28 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                     }
                 }
             });
+
+            // Referral: if a referral code was sent, credit both parties (fire-and-forget)
+            let ref_code_opt = req
+                .headers()
+                .get_one("X-Referral-Code")
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty());
+
+            if let Some(ref_code) = ref_code_opt {
+                if let Ok(pool) = db_config.pool().map(|p| p.clone()) {
+                    let referred_email = firebase_user.email.clone();
+                    tokio::spawn(async move {
+                        if let (Ok(store_url), Ok(secret)) = (
+                            std::env::var("API0_STORE_URL"),
+                            std::env::var("API0_INTERNAL_SECRET"),
+                        ) {
+                            credit_referral(referred_email, ref_code, pool, store_url, secret)
+                                .await;
+                        }
+                    });
+                }
+            }
         }
 
         // Fire-and-forget: update last_seen_at so the retention cleanup knows this user is active.

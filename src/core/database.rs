@@ -85,6 +85,28 @@ impl Database {
             .execute(&self.pool)
             .await;
 
+        // Referrals table
+        sqlx::query(
+            r#"
+            CREATE TABLE IF NOT EXISTS referrals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                referrer_email TEXT NOT NULL,
+                referred_email TEXT NOT NULL UNIQUE,
+                status TEXT NOT NULL DEFAULT 'pending',
+                credited_at TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_email);",
+        )
+        .execute(&self.pool)
+        .await?;
+
         app_log!(info, "Database migrations completed");
         Ok(())
     }
@@ -251,6 +273,28 @@ impl DatabaseConfig {
         let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
             .execute(pool)
             .await;
+
+        // Referrals table
+        sqlx::query(
+            r#"
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referrer_email TEXT NOT NULL,
+            referred_email TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            credited_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#,
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_email);",
+        )
+        .execute(pool)
+        .await?;
 
         app_log!(info, "Database migrations completed successfully");
         Ok(())

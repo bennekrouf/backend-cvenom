@@ -22,6 +22,7 @@ use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse, get_transactions_handler};
+use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
 use anyhow::Result;
 use graflog::app_log;
 
@@ -81,7 +82,7 @@ impl Fairing for Cors {
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
         response.set_header(Header::new(
             "Access-Control-Allow-Headers",
-            "authorization, content-type, accept, origin, x-requested-with",
+            "authorization, content-type, accept, origin, x-requested-with, x-referral-code",
         ));
         response.set_header(Header::new(
             "Access-Control-Allow-Methods",
@@ -355,6 +356,15 @@ pub async fn payment_transactions(
     get_transactions_handler(auth).await
 }
 
+/// GET /referral/my-link — return the authenticated user's referral link and stats
+#[get("/referral/my-link")]
+pub async fn get_my_referral_link(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<ReferralLinkResponse>, Json<StandardErrorResponse>> {
+    get_referral_link_handler(auth, db_config).await
+}
+
 // Error catchers
 #[rocket::catch(400)]
 pub fn bad_request() -> Json<StandardErrorResponse> {
@@ -514,6 +524,7 @@ pub async fn start_web_server(
                 get_cv_data,
                 put_cv_data,
                 delete_me,
+                get_my_referral_link,
             ],
         )
         .launch()
