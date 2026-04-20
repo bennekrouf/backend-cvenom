@@ -585,3 +585,112 @@ pub async fn get_transactions_handler(
         }
     }
 }
+
+// ── POST /admin/credits ───────────────────────────────────────────────────────
+//
+// Admin-only endpoint to manually add or remove credits for any user.
+//
+// Auth:  X-Admin-Secret header must match the ADMIN_SECRET env var.
+// Body:  { "email": "user@example.com", "amount": 100, "description": "optional note" }
+//        amount can be negative to deduct credits.
+//
+// Returns: { success, email, amount, new_balance, description }
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminCreditRequest {
+    pub email: String,
+    pub amount: i64,
+    pub description: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminCreditResponse {
+    pub success: bool,
+    pub email: String,
+    pub amount: i64,
+    pub new_balance: i64,
+    pub description: Option<String>,
+}
+
+pub async fn admin_add_credits_handler(
+    request: Json<AdminCreditRequest>,
+    admin_secret_header: Option<String>,
+) -> Result<Json<AdminCreditResponse>, Json<StandardErrorResponse>> {
+    // ── Authenticate ──────────────────────────────────────────────────────────
+    let expected = match std::env::var("ADMIN_SECRET") {
+        Ok(s) if !s.is_empty() && s != "FILL_ME" => s,
+        _ => {
+            return Err(Json(StandardErrorResponse::new(
+                "ADMIN_SECRET is not configured on this server".to_string(),
+                "ADMIN_NOT_CONFIGURED".to_string(),
+                vec!["Set the ADMIN_SECRET environment variable".to_string()],
+                None,
+            )));
+        }
+    };
+
+    let provided = admin_secret_header.unwrap_or_default();
+    if provided != expected {
+        app_log!(warn, "Admin credits endpoint: invalid or missing X-Admin-Secret");
+        return Err(Json(StandardErrorResponse::new(
+            "Unauthorized".to_string(),
+            "UNAUTHORIZED".to_string(),
+            vec!["Provide a valid X-Admin-Secret header".to_string()],
+            None,
+        )));
+    }
+
+    // ── Validate ──────────────────────────────────────────────────────────────
+    let email = request.email.trim().to_lowercase();
+    if email.is_empty() {
+        return Err(Json(StandardErrorResponse::new(
+            "email is required".to_string(),
+            "INVALID_INPUT".to_string(),
+            vec![],
+            None,
+        )));
+    }
+    if request.amount == 0 {
+        return Err(Json(StandardErrorResponse::new(
+            "amount must be non-zero".to_string(),
+            "INVALID_INPUT".to_string(),
+            vec![],
+            None,
+        )));
+    }
+
+    // ── Forward to api0 store ─────────────────────────────────────────────────
+    let action_type = if request.amount > 0 { "admin_topup" } else { "admin_deduct" };
+    let desc = request.description.as_deref();
+
+    match api0_topup_credits(&email, request.amount, action_type, desc).await {
+        Ok(new_balance) => {
+            app_log!(
+                info,
+                email = %email,
+                amount = request.amount,
+                new_balance = new_balance,
+                action = %action_type,
+                "Admin credit adjustment applied"
+            );
+            Ok(Json(AdminCreditResponse {
+                success: true,
+                email,
+                amount: request.amount,
+                new_balance,
+                description: request.description.clone(),
+            }))
+        }
+        Err(e) => {
+            app_log!(error, email = %email, error = %e, "Admin credit adjustment failed");
+            Err(Json(StandardErrorResponse::new(
+                format!("Credit update failed: {}", e),
+                "CREDIT_UPDATE_FAILED".to_string(),
+                vec![],
+                None,
+            )))
+        }
+    }
+}

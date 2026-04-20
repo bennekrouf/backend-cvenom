@@ -22,7 +22,7 @@ use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
-use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse, get_transactions_handler};
+use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse, get_transactions_handler, AdminCreditRequest, admin_add_credits_handler};
 use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
 use anyhow::Result;
 use graflog::app_log;
@@ -370,6 +370,30 @@ pub async fn payment_transactions(
     get_transactions_handler(auth).await
 }
 
+/// Request guard that reads the raw value of the X-Admin-Secret header.
+/// Returns None (forward) if the header is absent — the handler treats that as Unauthorized.
+pub struct AdminSecretHeader(pub Option<String>);
+
+#[rocket::async_trait]
+impl<'r> rocket::request::FromRequest<'r> for AdminSecretHeader {
+    type Error = ();
+    async fn from_request(req: &'r rocket::Request<'_>) -> rocket::request::Outcome<Self, ()> {
+        let value = req.headers().get_one("X-Admin-Secret").map(|s| s.to_string());
+        rocket::request::Outcome::Success(AdminSecretHeader(value))
+    }
+}
+
+/// POST /admin/credits — manually add or remove credits for any user (admin only).
+/// Auth: X-Admin-Secret header must match the ADMIN_SECRET env var.
+/// Body: { "email": "...", "amount": 100, "description": "optional" }
+#[post("/admin/credits", data = "<request>")]
+pub async fn admin_credits(
+    request: Json<AdminCreditRequest>,
+    secret: AdminSecretHeader,
+) -> Result<Json<crate::web::handlers::payment_handlers::AdminCreditResponse>, Json<StandardErrorResponse>> {
+    admin_add_credits_handler(request, secret.0).await
+}
+
 /// GET /referral/my-link — return the authenticated user's referral link and stats
 #[get("/referral/my-link")]
 pub async fn get_my_referral_link(
@@ -540,6 +564,7 @@ pub async fn start_web_server(
                 put_cv_data,
                 delete_me,
                 get_my_referral_link,
+                admin_credits,
             ],
         )
         .launch()
