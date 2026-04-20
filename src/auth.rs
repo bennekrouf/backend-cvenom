@@ -194,41 +194,44 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             }
         };
 
-        // Grant free-offer welcome credits to brand-new users (fire-and-forget)
-        // Free offer: 100 credits → 5 CV generations at 20 credits each
+        // Grant free-offer welcome credits to brand-new users — SYNCHRONOUS.
+        // Must complete before the first request returns so the user never
+        // sees a 0-credit balance. Only fires once per account.
+        // The auth middleware already makes 2 HTTP calls to Google; one more
+        // local call to 127.0.0.1:5007 is negligible.
         if is_new_user {
-            let email_clone = firebase_user.email.clone();
-            tokio::spawn(async move {
-                const WELCOME_CREDITS: i64 = 100;
-                if let (Ok(store_url), Ok(secret)) = (
-                    std::env::var("API0_STORE_URL"),
-                    std::env::var("API0_INTERNAL_SECRET"),
-                ) {
-                    let client = reqwest::Client::new();
-                    let body = serde_json::json!({ "email": email_clone, "amount": WELCOME_CREDITS, "action_type": "welcome" });
-                    match client
-                        .post(format!("{}/api/user/credits", store_url))
-                        .header("Content-Type", "application/json")
-                        .header("X-Internal-Secret", secret)
-                        .json(&body)
-                        .send()
-                        .await
-                    {
-                        Ok(_) => app_log!(
-                            info,
-                            "Granted {} welcome credits to new user: {}",
-                            WELCOME_CREDITS,
-                            email_clone
-                        ),
-                        Err(e) => app_log!(
-                            error,
-                            "Failed to grant welcome credits to {}: {}",
-                            email_clone,
-                            e
-                        ),
-                    }
+            const WELCOME_CREDITS: i64 = 100;
+            if let (Ok(store_url), Ok(secret)) = (
+                std::env::var("API0_STORE_URL"),
+                std::env::var("API0_INTERNAL_SECRET"),
+            ) {
+                let client = reqwest::Client::new();
+                let body = serde_json::json!({
+                    "email": firebase_user.email,
+                    "amount": WELCOME_CREDITS,
+                    "action_type": "welcome"
+                });
+                match client
+                    .post(format!("{}/api/user/credits", store_url))
+                    .header("X-Internal-Secret", &secret)
+                    .json(&body)
+                    .send()
+                    .await
+                {
+                    Ok(_) => app_log!(
+                        info,
+                        "Granted {} welcome credits to new user: {}",
+                        WELCOME_CREDITS,
+                        firebase_user.email
+                    ),
+                    Err(e) => app_log!(
+                        error,
+                        "Failed to grant welcome credits to {}: {}",
+                        firebase_user.email,
+                        e
+                    ),
                 }
-            });
+            }
 
             // Referral: if a referral code was sent, credit both parties (fire-and-forget)
             let ref_code_opt = req
