@@ -590,11 +590,14 @@ pub async fn get_transactions_handler(
 //
 // Admin-only endpoint to manually add or remove credits for any user.
 //
-// Auth:  X-Admin-Secret header must match the ADMIN_SECRET env var.
+// Auth:  Requires a valid Firebase JWT (AuthenticatedUser guard). The caller's
+//        email must match ADMIN_EMAIL ("mohamed.bennekrouf@gmail.com").
 // Body:  { "email": "user@example.com", "amount": 100, "description": "optional note" }
 //        amount can be negative to deduct credits.
 //
 // Returns: { success, email, amount, new_balance, description }
+
+const ADMIN_EMAIL: &str = "mohamed.bennekrouf@gmail.com";
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
@@ -616,28 +619,15 @@ pub struct AdminCreditResponse {
 
 pub async fn admin_add_credits_handler(
     request: Json<AdminCreditRequest>,
-    admin_secret_header: Option<String>,
+    caller_email: &str,
 ) -> Result<Json<AdminCreditResponse>, Json<StandardErrorResponse>> {
     // ── Authenticate ──────────────────────────────────────────────────────────
-    let expected = match std::env::var("ADMIN_SECRET") {
-        Ok(s) if !s.is_empty() && s != "FILL_ME" => s,
-        _ => {
-            return Err(Json(StandardErrorResponse::new(
-                "ADMIN_SECRET is not configured on this server".to_string(),
-                "ADMIN_NOT_CONFIGURED".to_string(),
-                vec!["Set the ADMIN_SECRET environment variable".to_string()],
-                None,
-            )));
-        }
-    };
-
-    let provided = admin_secret_header.unwrap_or_default();
-    if provided != expected {
-        app_log!(warn, "Admin credits endpoint: invalid or missing X-Admin-Secret");
+    if caller_email.to_lowercase() != ADMIN_EMAIL {
+        app_log!(warn, caller = %caller_email, "Admin credits endpoint: unauthorized caller");
         return Err(Json(StandardErrorResponse::new(
             "Unauthorized".to_string(),
             "UNAUTHORIZED".to_string(),
-            vec!["Provide a valid X-Admin-Secret header".to_string()],
+            vec![],
             None,
         )));
     }

@@ -370,28 +370,15 @@ pub async fn payment_transactions(
     get_transactions_handler(auth).await
 }
 
-/// Request guard that reads the raw value of the X-Admin-Secret header.
-/// Returns None (forward) if the header is absent — the handler treats that as Unauthorized.
-pub struct AdminSecretHeader(pub Option<String>);
-
-#[rocket::async_trait]
-impl<'r> rocket::request::FromRequest<'r> for AdminSecretHeader {
-    type Error = ();
-    async fn from_request(req: &'r rocket::Request<'_>) -> rocket::request::Outcome<Self, ()> {
-        let value = req.headers().get_one("X-Admin-Secret").map(|s| s.to_string());
-        rocket::request::Outcome::Success(AdminSecretHeader(value))
-    }
-}
-
 /// POST /admin/credits — manually add or remove credits for any user (admin only).
-/// Auth: X-Admin-Secret header must match the ADMIN_SECRET env var.
+/// Auth: valid Firebase JWT whose email is "mohamed.bennekrouf@gmail.com".
 /// Body: { "email": "...", "amount": 100, "description": "optional" }
 #[post("/admin/credits", data = "<request>")]
 pub async fn admin_credits(
     request: Json<AdminCreditRequest>,
-    secret: AdminSecretHeader,
+    auth: AuthenticatedUser,
 ) -> Result<Json<crate::web::handlers::payment_handlers::AdminCreditResponse>, Json<StandardErrorResponse>> {
-    admin_add_credits_handler(request, secret.0).await
+    admin_add_credits_handler(request, auth.email()).await
 }
 
 /// GET /referral/my-link — return the authenticated user's referral link and stats
