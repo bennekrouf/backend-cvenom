@@ -22,6 +22,7 @@ use rocket::serde::json::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::auth::AuthenticatedUser;
+use crate::core::database::{DatabaseConfig, TenantRepository};
 use crate::web::types::StandardErrorResponse;
 
 // ── Request / Response types ──────────────────────────────────────────────────
@@ -588,7 +589,12 @@ pub async fn get_transactions_handler(
 
 // ── POST /admin/credits ───────────────────────────────────────────────────────
 //
-// Admin-only endpoint to manually add or remove credits for any user.
+// Admin-only endpoint to add or remove credits for a **cvenom tenant**.
+//
+// The target email must already exist in cvenom's tenant table (SQLite).
+// This intentionally prevents accidentally topping up an api0-only user
+// who has never used cvenom. Use the api0 store's /api/admin/credits
+// endpoint for generic api0 credit adjustments.
 //
 // Auth:  Requires a valid Firebase JWT (AuthenticatedUser guard). The caller's
 //        email must match ADMIN_EMAIL ("mohamed.bennekrouf@gmail.com").
@@ -620,6 +626,7 @@ pub struct AdminCreditResponse {
 pub async fn admin_add_credits_handler(
     request: Json<AdminCreditRequest>,
     caller_email: &str,
+    db_config: &DatabaseConfig,
 ) -> Result<Json<AdminCreditResponse>, Json<StandardErrorResponse>> {
     // ── Authenticate ──────────────────────────────────────────────────────────
     if caller_email.to_lowercase() != ADMIN_EMAIL {
@@ -632,7 +639,7 @@ pub async fn admin_add_credits_handler(
         )));
     }
 
-    // ── Validate ──────────────────────────────────────────────────────────────
+    // ── Validate input ────────────────────────────────────────────────────────
     let email = request.email.trim().to_lowercase();
     if email.is_empty() {
         return Err(Json(StandardErrorResponse::new(
@@ -649,6 +656,42 @@ pub async fn admin_add_credits_handler(
             vec![],
             None,
         )));
+    }
+
+    // ── Verify this is a known cvenom tenant ──────────────────────────────────
+    // Credits live in api0's database; this check ensures we only adjust
+    // credits for users who actually have a cvenom account — not arbitrary
+    // api0 users. Use api0's own /api/admin/credits for the latter.
+    let pool = db_config.pool().map_err(|e| {
+        app_log!(error, error = %e, "Admin credits: DB connection failed");
+        Json(StandardErrorResponse::new(
+            "Database error".to_string(),
+            "DATABASE_ERROR".to_string(),
+            vec![],
+            None,
+        ))
+    })?;
+    let repo = TenantRepository::new(pool);
+    match repo.find_by_email_or_domain(&email).await {
+        Ok(Some(_)) => {} // tenant exists — proceed
+        Ok(None) => {
+            app_log!(warn, email = %email, "Admin credits: email is not a cvenom tenant");
+            return Err(Json(StandardErrorResponse::new(
+                format!("'{}' is not a cvenom tenant", email),
+                "TENANT_NOT_FOUND".to_string(),
+                vec!["Only cvenom users can be topped up here. Use api0's /api/admin/credits for other users.".to_string()],
+                None,
+            )));
+        }
+        Err(e) => {
+            app_log!(error, email = %email, error = %e, "Admin credits: tenant lookup failed");
+            return Err(Json(StandardErrorResponse::new(
+                "Database error during tenant lookup".to_string(),
+                "DATABASE_ERROR".to_string(),
+                vec![],
+                None,
+            )));
+        }
     }
 
     // ── Forward to api0 store ─────────────────────────────────────────────────

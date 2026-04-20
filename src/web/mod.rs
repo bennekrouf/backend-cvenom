@@ -370,15 +370,17 @@ pub async fn payment_transactions(
     get_transactions_handler(auth).await
 }
 
-/// POST /admin/credits — manually add or remove credits for any user (admin only).
+/// POST /admin/credits — manually add or remove credits for a cvenom tenant (admin only).
 /// Auth: valid Firebase JWT whose email is "mohamed.bennekrouf@gmail.com".
+/// The target email must belong to an existing cvenom tenant; rejects otherwise.
 /// Body: { "email": "...", "amount": 100, "description": "optional" }
 #[post("/admin/credits", data = "<request>")]
 pub async fn admin_credits(
     request: Json<AdminCreditRequest>,
     auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
 ) -> Result<Json<crate::web::handlers::payment_handlers::AdminCreditResponse>, Json<StandardErrorResponse>> {
-    admin_add_credits_handler(request, auth.email()).await
+    admin_add_credits_handler(request, auth.email(), db_config).await
 }
 
 /// GET /referral/my-link — return the authenticated user's referral link and stats
