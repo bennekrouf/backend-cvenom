@@ -339,6 +339,63 @@ impl ServiceClient {
         }
     }
 
+    /// Upload raw CV text — writes it to a temp .txt file and sends as multipart.
+    /// The cv-import service should handle plain-text the same way it handles extracted PDF/DOCX text.
+    pub async fn import_text_cv(&self, cv_text: &str, profile_name: &str) -> Result<CvJson> {
+        let url = format!("{}{}", self.base_url, UPLOAD_CV_ENDPOINT);
+
+        let file_name = format!("{}.txt", profile_name);
+        let form = Form::new().part(
+            "cv_file",
+            Part::bytes(cv_text.as_bytes().to_vec())
+                .file_name(file_name)
+                .mime_str("text/plain")
+                .context("Failed to create multipart")?,
+        );
+
+        app_log!(info, "Calling CV conversion service (text import): {}", url);
+
+        let response = self
+            .client
+            .post(&url)
+            .multipart(form)
+            .send()
+            .await
+            .context("HTTP request failed")?;
+
+        let status = response.status();
+        if status.is_success() {
+            let response_text = response
+                .text()
+                .await
+                .context("Failed to read response text")?;
+
+            let raw: serde_json::Value = serde_json::from_str(&response_text)
+                .with_context(|| format!("CV service returned non-JSON response: {}", response_text))?;
+
+            let svc_status = raw.get("status").and_then(|v| v.as_str()).unwrap_or("error");
+
+            if svc_status == "success" {
+                let cv_data: CvJson = serde_json::from_value(
+                    raw.get("cv_data").cloned().unwrap_or(serde_json::Value::Null)
+                ).with_context(|| format!("Failed to deserialize cv_data: {}", response_text))?;
+                Ok(cv_data)
+            } else {
+                let detail = raw.get("message")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("CV conversion failed")
+                    .to_string();
+                anyhow::bail!("{}", detail)
+            }
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!("CV service error (HTTP {}): {}", status, error_text)
+        }
+    }
+
     /// Get content type for file
     fn get_content_type(&self, file_name: &str) -> Result<&'static str> {
         let lower_name = file_name.to_lowercase();

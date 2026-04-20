@@ -19,7 +19,7 @@ pub use generate::generate_cv_handler;
 pub use optimize::{optimize_and_generate_handler, optimize_cv_handler, OptimizeCvRequest};
 pub use save_optimized::{save_optimized_handler, SaveOptimizedRequest};
 pub use translate::translate_cv_handler;
-pub use upload_convert::upload_and_convert_cv_handler;
+pub use upload_convert::{upload_and_convert_cv_handler, import_text_cv_handler, ImportTextRequest};
 
 // Re-export helper functions for use in other modules
 pub use helpers::{create_profile_from_cv_data, load_profile_cv_data, normalize_template};

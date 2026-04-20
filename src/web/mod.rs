@@ -15,8 +15,9 @@ use crate::web::handlers::{
     delete_account_handler,
     get_cv_data_handler, put_cv_data_handler,
     optimize_and_generate_handler, optimize_cv_handler, save_optimized_handler, translate_cv_handler,
-    upload_and_convert_cv_handler,
+    upload_and_convert_cv_handler, import_text_cv_handler,
 };
+use crate::web::handlers::cv_handlers::ImportTextRequest;
 use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
@@ -164,6 +165,19 @@ pub async fn upload_and_convert_cv(
     cv_service_url: &State<String>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     upload_and_convert_cv_handler(upload, auth, config, cv_service_url).await
+}
+
+/// POST /cv/import-text
+/// Accept raw CV text (extracted by an LLM / Claude from a user-attached file) and create a profile.
+/// Request body: { "cv_text": "...", "profile_name": "optional-name" }
+#[post("/cv/import-text", data = "<request>")]
+pub async fn import_cv_from_text(
+    request: Json<StandardRequest<ImportTextRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    cv_service_url: &State<String>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    import_text_cv_handler(request, auth, config, cv_service_url).await
 }
 
 #[get("/templates")]
@@ -503,6 +517,7 @@ pub async fn start_web_server(
                 delete_profile,
                 upload_picture,
                 upload_and_convert_cv,
+                import_cv_from_text,
                 get_templates,
                 get_current_user,
                 health,

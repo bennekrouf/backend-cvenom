@@ -5,14 +5,21 @@ use crate::auth::AuthenticatedUser;
 use crate::core::database::get_tenant_folder_path;
 use crate::core::{FsOps, ServiceClient};
 use crate::utils::normalize_profile_name;
-use crate::web::types::{ActionResponse, CvUploadForm, StandardErrorResponse};
+use crate::web::types::{ActionResponse, CvUploadForm, StandardErrorResponse, StandardRequest};
 use graflog::{app_log, app_span};
 use rocket::form::Form;
-use rocket::serde::json::Json;
+use rocket::serde::{json::Json, Deserialize};
 use rocket::State;
 
 use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use super::helpers::create_profile_from_cv_data;
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ImportTextRequest {
+    pub cv_text: String,
+    pub profile_name: Option<String>,
+}
 
 pub async fn upload_and_convert_cv_handler(
     mut upload: Form<CvUploadForm<'_>>,
@@ -276,6 +283,155 @@ pub async fn upload_and_convert_cv_handler(
                     "Try again in a few moments".to_string(),
                     "Contact support if the problem persists".to_string(),
                 ],
+                None,
+            )))
+        }
+    }
+}
+
+/// POST /cv/import-text
+/// Accept raw CV text (e.g. extracted by Claude from an attached PDF) and create a profile.
+/// This is the MCP-friendly path: Claude reads the user's CV, extracts text, calls this endpoint.
+pub async fn import_text_cv_handler(
+    request: Json<StandardRequest<ImportTextRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<crate::web::types::ServerConfig>,
+    cv_service_url: &State<String>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let user = auth.user();
+    let tenant = auth.tenant();
+
+    let cv_text = request.data.cv_text.trim().to_string();
+    if cv_text.is_empty() {
+        return Err(Json(StandardErrorResponse::new(
+            "cv_text must not be empty".to_string(),
+            "INVALID_INPUT".to_string(),
+            vec![
+                "Provide the full text content of your CV".to_string(),
+                "Paste the text extracted from your CV document".to_string(),
+            ],
+            None,
+        )));
+    }
+
+    if cv_text.len() > 200_000 {
+        return Err(Json(StandardErrorResponse::new(
+            "cv_text exceeds maximum length of 200,000 characters".to_string(),
+            "INPUT_TOO_LARGE".to_string(),
+            vec!["Trim your CV text and try again".to_string()],
+            None,
+        )));
+    }
+
+    // CV import calls an LLM — 4 credits
+    check_and_deduct_credits(&user.email, 4, None, "cv_import_text").await?;
+
+    app_log!(
+        info,
+        "User {} (tenant: {}) importing CV from text ({} chars)",
+        user.email,
+        tenant.tenant_name,
+        cv_text.len()
+    );
+
+    // Derive profile name from request or fallback
+    let raw_profile_name = request
+        .data
+        .profile_name
+        .clone()
+        .unwrap_or_else(|| "imported-cv".to_string());
+    let normalized_profile = normalize_profile_name(&raw_profile_name);
+
+    let tenant_data_dir = get_tenant_folder_path(&user.email, &config.data_dir);
+
+    if let Err(e) = FsOps::ensure_dir_exists(&tenant_data_dir).await {
+        app_log!(error, "Failed to create tenant directory: {}", e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to access tenant data directory".to_string(),
+            "TENANT_DIR_ERROR".to_string(),
+            vec!["Contact system administrator".to_string()],
+            None,
+        )));
+    }
+
+    let service_client = match ServiceClient::new(cv_service_url.inner().clone(), 400) {
+        Ok(c) => c,
+        Err(e) => {
+            app_log!(error, "Failed to initialize service client: {}", e);
+            return Err(Json(StandardErrorResponse::new(
+                "Service configuration error".to_string(),
+                "SERVICE_CONFIG_ERROR".to_string(),
+                vec!["Contact system administrator".to_string()],
+                None,
+            )));
+        }
+    };
+
+    let cv_data = match service_client.import_text_cv(&cv_text, &normalized_profile).await {
+        Ok(data) => data,
+        Err(e) => {
+            let err_str = e.to_string();
+            app_log!(error, "CV text import conversion failed: {}", err_str);
+
+            let (message, suggestions) = if err_str.contains("Connection refused")
+                || err_str.contains("os error 111")
+            {
+                (
+                    "CV import service is unavailable".to_string(),
+                    vec!["Contact the administrator".to_string()],
+                )
+            } else {
+                (
+                    format!("CV conversion failed: {}", err_str),
+                    vec![
+                        "Make sure the text contains your full CV content".to_string(),
+                        "Try including name, experience, skills sections".to_string(),
+                    ],
+                )
+            };
+
+            return Err(Json(StandardErrorResponse::new(
+                message,
+                "CONVERSION_ERROR".to_string(),
+                suggestions,
+                None,
+            )));
+        }
+    };
+
+    let profile_dir = tenant_data_dir.join(&normalized_profile);
+
+    match create_profile_from_cv_data(&profile_dir, &cv_data, &normalized_profile).await {
+        Ok(_) => {
+            app_log!(
+                info,
+                "CV text imported, profile created: {} by {} (tenant: {})",
+                normalized_profile,
+                user.email,
+                tenant.tenant_name
+            );
+
+            let next_actions = vec![
+                format!("Upload profile picture for {}", normalized_profile),
+                format!("Generate CV PDF for {}", normalized_profile),
+                format!("Translate {} to another language", normalized_profile),
+            ];
+
+            Ok(Json(
+                ActionResponse::success(
+                    format!("Profile '{}' created from imported CV text", normalized_profile),
+                    "created".to_string(),
+                    None,
+                )
+                .with_next_actions(next_actions),
+            ))
+        }
+        Err(e) => {
+            app_log!(error, "Failed to create profile from CV text: {}", e);
+            Err(Json(StandardErrorResponse::new(
+                "Failed to create profile from CV text".to_string(),
+                "PROFILE_CREATE_ERROR".to_string(),
+                vec!["Try again or contact support".to_string()],
                 None,
             )))
         }
