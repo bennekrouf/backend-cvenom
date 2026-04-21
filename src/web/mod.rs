@@ -447,7 +447,9 @@ pub async fn start_web_server(
         return Err(e);
     }
 
-    let auth_config = AuthConfig::new("semantic-27923".to_string());
+    let google_project_id = std::env::var("CVENOM_GOOGLE_PROJECT_ID")
+        .expect("CVENOM_GOOGLE_PROJECT_ID env var is required");
+    let auth_config = AuthConfig::new(google_project_id);
 
     if let Err(e) = auth_config.update_firebase_keys().await {
         app_log!(error, "Failed to fetch Firebase keys: {}", e);

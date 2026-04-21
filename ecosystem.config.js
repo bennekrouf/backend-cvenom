@@ -23,6 +23,11 @@ module.exports = {
       JOB_MATCHING_API_URL: 'http://127.0.0.1:5555',
       SERVICE_TIMEOUT: '30000',
 
+      // === GOOGLE / FIREBASE AUTH ===
+      // Firebase project used to validate end-user Google ID tokens.
+      // Update this to your project's Firebase project ID.
+      CVENOM_GOOGLE_PROJECT_ID: 'your-firebase-project-id',
+
       // === OPTIONAL VARIABLES (used by start.sh) ===
       DEFAULT_DOMAIN: 'keyteo.ch',
       DEFAULT_TENANT: 'keyteo'
