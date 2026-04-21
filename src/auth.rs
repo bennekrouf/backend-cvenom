@@ -3,6 +3,7 @@ use crate::web::handlers::referral_handlers::credit_referral;
 // src/auth.rs
 use crate::web::ServerConfig;
 use anyhow::Result;
+use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use graflog::app_log;
 use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation};
 use rocket::http::Status;
@@ -49,21 +50,30 @@ impl From<Claims> for FirebaseUser {
 
 pub struct AuthConfig {
     pub project_id: String,
-    /// kid → PEM public key. Wrapped in Arc<RwLock> so we can refresh
-    /// in-place after Google rotates keys (typically every ~6 hours).
+    /// kid → PEM public key. Refreshed when Google rotates Firebase keys (~6 h).
     pub firebase_keys: Arc<RwLock<HashMap<String, String>>>,
+    /// Google OIDC JWK set — used for service-account tokens issued by api0 gateway.
+    pub oidc_jwks: Arc<RwLock<Option<jsonwebtoken::jwk::JwkSet>>>,
+    /// Expected `aud` claim in OIDC tokens (e.g. "https://api.cvenom.com").
+    /// Read from CVENOM_OIDC_AUDIENCE env var; None → OIDC path disabled.
+    pub oidc_audience: Option<String>,
 }
 
 impl AuthConfig {
     pub fn new(project_id: String) -> Self {
+        let oidc_audience = std::env::var("CVENOM_OIDC_AUDIENCE").ok();
+        if let Some(ref aud) = oidc_audience {
+            app_log!(info, "OIDC downstream auth enabled — audience: {}", aud);
+        }
         Self {
             project_id,
             firebase_keys: Arc::new(RwLock::new(HashMap::new())),
+            oidc_jwks: Arc::new(RwLock::new(None)),
+            oidc_audience,
         }
     }
 
     /// Fetch Firebase public keys and update the cache.
-    /// Takes &self so it can be called on a shared reference (e.g. from Rocket State).
     pub async fn update_firebase_keys(&self) -> Result<()> {
         let url = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 
@@ -81,6 +91,94 @@ impl AuthConfig {
 
         Ok(())
     }
+
+    /// Fetch Google's OIDC JWK set and update the cache.
+    /// Used to validate service-account identity tokens minted by the api0 gateway.
+    pub async fn update_oidc_jwks(&self) -> Result<()> {
+        use jsonwebtoken::jwk::JwkSet;
+
+        let client = reqwest::Client::builder()
+            .local_address(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED))
+            .build()?;
+
+        let jwks: JwkSet = client
+            .get("https://www.googleapis.com/oauth2/v3/certs")
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        let count = jwks.keys.len();
+        let mut cache = self.oidc_jwks.write().await;
+        *cache = Some(jwks);
+        app_log!(info, "Updated Google OIDC JWKs ({} keys)", count);
+
+        Ok(())
+    }
+}
+
+/// Decode the JWT payload (without signature verification) to read the `iss` claim.
+/// Returns `None` if the token is malformed.
+fn peek_token_issuer(token: &str) -> Option<String> {
+    let parts: Vec<&str> = token.splitn(4, '.').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    // JWT payload is base64url-encoded without padding
+    let payload = URL_SAFE_NO_PAD.decode(parts[1]).ok()?;
+    let claims: serde_json::Value = serde_json::from_slice(&payload).ok()?;
+    claims["iss"].as_str().map(|s| s.to_string())
+}
+
+/// Validate a Google OIDC identity token issued by the api0 gateway's service account.
+/// Returns the service account email on success.
+async fn verify_google_oidc_token(token: &str, auth_config: &AuthConfig) -> Result<String> {
+    let audience = auth_config
+        .oidc_audience
+        .as_deref()
+        .ok_or_else(|| anyhow::anyhow!("OIDC audience not configured (set CVENOM_OIDC_AUDIENCE)"))?;
+
+    let header = jsonwebtoken::decode_header(token)?;
+    let kid = header
+        .kid
+        .ok_or_else(|| anyhow::anyhow!("Missing kid in OIDC token header"))?;
+
+    // Try cached JWKs first, refresh on cache miss
+    let jwk_opt = {
+        let cache = auth_config.oidc_jwks.read().await;
+        cache.as_ref().and_then(|jwks| jwks.find(&kid)).cloned()
+    };
+
+    let jwk = match jwk_opt {
+        Some(jwk) => jwk,
+        None => {
+            app_log!(info, "OIDC key ID '{}' not in cache — refreshing JWKs", kid);
+            auth_config.update_oidc_jwks().await?;
+            let cache = auth_config.oidc_jwks.read().await;
+            cache
+                .as_ref()
+                .and_then(|jwks| jwks.find(&kid))
+                .cloned()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Unknown OIDC key ID '{}' even after refresh", kid)
+                })?
+        }
+    };
+
+    let decoding_key = DecodingKey::from_jwk(&jwk)?;
+    let mut validation = Validation::new(Algorithm::RS256);
+    validation.set_audience(&[audience]);
+    validation.set_issuer(&["accounts.google.com", "https://accounts.google.com"]);
+
+    let token_data =
+        decode::<serde_json::Value>(token, &decoding_key, &validation)?;
+
+    let sa_email = token_data.claims["email"]
+        .as_str()
+        .ok_or_else(|| anyhow::anyhow!("Missing email claim in OIDC token"))?
+        .to_string();
+
+    Ok(sa_email)
 }
 
 /// Authenticated user with tenant information
@@ -144,7 +242,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             Outcome::Forward(f) => return Outcome::Forward(f),
         };
 
-        // Extract Authorization header
+        // Extract Bearer token
         let token = match req.headers().get_one("Authorization") {
             Some(header) if header.starts_with("Bearer ") => &header[7..],
             Some(_) => {
@@ -157,16 +255,67 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             }
         };
 
-        // Verify the Firebase ID token
-        let firebase_user = match verify_firebase_token(token, auth_config).await {
-            Ok(user) => user,
-            Err(e) => {
-                app_log!(error, "Token verification failed: {}", e);
-                return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
+        // ── Route by token issuer ─────────────────────────────────────────────
+        // Peek at the unverified `iss` claim to decide which validation path to use:
+        //   • "accounts.google.com" → Google OIDC token (api0 gateway service account)
+        //   • anything else (or unknown) → Firebase ID token
+        let issuer = peek_token_issuer(token).unwrap_or_default();
+
+        let firebase_user = if issuer.contains("accounts.google.com") {
+            // ── OIDC path (api0 gateway) ──────────────────────────────────────
+            match verify_google_oidc_token(token, auth_config).await {
+                Ok(sa_email) => {
+                    // The gateway always injects X-User-Email with the end-user's address.
+                    let user_email = match req.headers().get_one("X-User-Email") {
+                        Some(e) if !e.trim().is_empty() => e.trim().to_string(),
+                        _ => {
+                            app_log!(
+                                warn,
+                                "OIDC token accepted but X-User-Email header is missing — rejecting"
+                            );
+                            return Outcome::Error((
+                                Status::Unauthorized,
+                                AuthError::InvalidToken,
+                            ));
+                        }
+                    };
+                    app_log!(
+                        info,
+                        "Gateway OIDC auth — SA: {}, acting as user: {}",
+                        sa_email,
+                        user_email
+                    );
+                    FirebaseUser {
+                        uid: user_email.clone(),
+                        email: user_email,
+                        name: None,
+                        picture: None,
+                        email_verified: true,
+                    }
+                }
+                Err(e) => {
+                    app_log!(error, "OIDC token verification failed: {}", e);
+                    return Outcome::Error((
+                        Status::Unauthorized,
+                        AuthError::TokenVerificationFailed,
+                    ));
+                }
+            }
+        } else {
+            // ── Firebase path (browser / mobile) ─────────────────────────────
+            match verify_firebase_token(token, auth_config).await {
+                Ok(user) => user,
+                Err(e) => {
+                    app_log!(error, "Token verification failed: {}", e);
+                    return Outcome::Error((
+                        Status::Unauthorized,
+                        AuthError::TokenVerificationFailed,
+                    ));
+                }
             }
         };
 
-        // Check tenant access
+        // ── Tenant lookup / creation ──────────────────────────────────────────
         let pool = match db_config.pool() {
             Ok(pool) => pool,
             Err(e) => {
@@ -177,7 +326,6 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
 
         let tenant_service = TenantService::new(pool);
 
-        // Try to get existing tenant, or create new one
         let (tenant, is_new_user) = match tenant_service
             .get_or_create_tenant(&firebase_user.email)
             .await
@@ -195,10 +343,6 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         };
 
         // Grant free-offer welcome credits to brand-new users — SYNCHRONOUS.
-        // Must complete before the first request returns so the user never
-        // sees a 0-credit balance. Only fires once per account.
-        // The auth middleware already makes 2 HTTP calls to Google; one more
-        // local call to 127.0.0.1:5007 is negligible.
         if is_new_user {
             const WELCOME_CREDITS: i64 = 100;
             if let (Ok(store_url), Ok(secret)) = (

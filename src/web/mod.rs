@@ -456,6 +456,14 @@ pub async fn start_web_server(
         return Err(e);
     }
 
+    // Pre-warm the OIDC JWK cache when CVENOM_OIDC_AUDIENCE is configured.
+    // Non-fatal: keys will be fetched on the first OIDC request if this fails.
+    if auth_config.oidc_audience.is_some() {
+        if let Err(e) = auth_config.update_oidc_jwks().await {
+            app_log!(warn, "Failed to pre-fetch OIDC JWKs (will retry on first request): {}", e);
+        }
+    }
+
     // ── Data-retention background task ────────────────────────────────────────
     // Runs once per day. Deletes email-based tenants inactive for DATA_RETENTION_DAYS
     // (default 365). Domain tenants are never auto-deleted.

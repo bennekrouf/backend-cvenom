@@ -24,9 +24,14 @@ module.exports = {
       SERVICE_TIMEOUT: '30000',
 
       // === GOOGLE / FIREBASE AUTH ===
-      // Firebase project used to validate end-user Google ID tokens.
+      // Firebase project used to validate end-user Google ID tokens (browser/mobile path).
       // Update this to your project's Firebase project ID.
       CVENOM_GOOGLE_PROJECT_ID: 'your-firebase-project-id',
+
+      // OIDC audience for api0 gateway service-account tokens (MCP downstream auth).
+      // Set to the public base URL of this backend so Google can validate the `aud` claim.
+      // Leave unset to disable the OIDC path (browser Firebase auth still works).
+      CVENOM_OIDC_AUDIENCE: 'https://api.cvenom.com',
 
       // === OPTIONAL VARIABLES (used by start.sh) ===
       DEFAULT_DOMAIN: 'keyteo.ch',
