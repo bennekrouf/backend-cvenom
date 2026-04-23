@@ -8,12 +8,13 @@ use crate::image_validator::ImageValidator;
 use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::types::WithConversationId;
 use crate::web::types::{
-    GenerateRequest, PdfResponse, ServerConfig, StandardErrorResponse, StandardRequest,
+    GeneratePdfResponse, GenerateRequest, ServerConfig, StandardErrorResponse, StandardRequest,
 };
 use crate::{CvConfig, CvGenerator};
 use graflog::{app_log, app_span};
 use rocket::serde::json::Json;
 use rocket::State;
+use std::env;
 
 use super::helpers::normalize_template;
 
@@ -22,7 +23,7 @@ pub async fn generate_cv_handler(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     _db_config: &State<DatabaseConfig>,
-) -> Result<PdfResponse, Json<StandardErrorResponse>> {
+) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
@@ -167,16 +168,34 @@ pub async fn generate_cv_handler(
     match CvGenerator::new(cv_config) {
         Ok(generator) => {
             app_log!(info, "CV generator created successfully");
-            match generator.generate_pdf_data().await {
-                Ok((pdf_data, filename)) => {
+            match generator.generate().await {
+                Ok(output_path) => {
+                    let filename = output_path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("cv.pdf")
+                        .to_string();
+
                     app_log!(
                         info,
-                        "CV generation completed successfully, profile: {}, pdf_size: {}, filename: {}",
+                        "CV generation completed successfully, profile: {}, filename: {}",
                         normalized_profile,
-                        pdf_data.len(),
                         filename
                     );
-                    Ok(PdfResponse::with_filename(pdf_data, filename))
+
+                    let base_url = env::var("PUBLIC_BASE_URL")
+                        .unwrap_or_else(|_| "https://api.cvenom.com".to_string());
+                    let pdf_url = format!("{}/outputs/{}", base_url, filename);
+
+                    Ok(Json(GeneratePdfResponse {
+                        response_type: ResponseType::File,
+                        success: true,
+                        message: "CV generated successfully".to_string(),
+                        download_url: pdf_url,
+                        filename,
+                        profile: normalized_profile,
+                        conversation_id,
+                    }))
                 }
                 Err(e) => {
                     app_log!(

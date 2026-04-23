@@ -129,12 +129,26 @@ pub struct DeleteProfileResponse {
     pub tenant: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct GenerateRequest {
     pub profile: String,
     pub lang: Option<String>,
     pub template: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct GeneratePdfResponse {
+    #[serde(rename = "type")]
+    pub response_type: ResponseType,
+    pub success: bool,
+    pub message: String,
+    pub download_url: String,
+    pub filename: String,
+    pub profile: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conversation_id: Option<String>,
 }
 
 #[derive(Deserialize)]

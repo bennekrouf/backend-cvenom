@@ -10,13 +10,14 @@ use crate::types::response::OptimizeResponse;
 use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::types::WithConversationId;
 use crate::web::types::{
-    DataResponse, PdfResponse, ServerConfig, StandardErrorResponse, StandardRequest,
+    DataResponse, GeneratePdfResponse, ServerConfig, StandardErrorResponse, StandardRequest,
 };
 use crate::{CvConfig, CvGenerator};
 use graflog::app_log;
 use rocket::serde::json::Json;
 use rocket::serde::Deserialize;
 use rocket::State;
+use std::env;
 
 use super::helpers::{load_profile_cv_data, normalize_template, save_profile_cv_data};
 
@@ -182,7 +183,7 @@ pub async fn optimize_and_generate_handler(
     config: &State<ServerConfig>,
     _db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
-) -> Result<PdfResponse, Json<StandardErrorResponse>> {
+) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     let conversation_id = request.conversation_id();
     let lang = normalize_language(request.data.lang.as_deref());
     let profile = normalize_profile_name(&request.data.profile);
@@ -287,8 +288,8 @@ pub async fn optimize_and_generate_handler(
         }
     };
 
-    match generator.generate_pdf_data().await {
-        Ok((pdf_data, _filename)) => {
+    match generator.generate().await {
+        Ok(output_path) => {
             // Build a descriptive ATS filename
             let safe_company = optimize_resp
                 .company_name
@@ -299,13 +300,31 @@ pub async fn optimize_and_generate_handler(
                 .collect::<String>();
             let ats_filename = format!("{}_ats_{}_{}.pdf", profile, safe_company, lang);
 
+            // Rename the output file to the ATS filename in the output directory
+            let final_path = config.output_dir.join(&ats_filename);
+            if let Err(e) = std::fs::rename(&output_path, &final_path) {
+                app_log!(warn, "Failed to rename optimized PDF to {}: {}", ats_filename, e);
+            }
+
             app_log!(
                 info,
-                "ATS-optimized PDF generated: {} ({} bytes)",
-                ats_filename,
-                pdf_data.len()
+                "ATS-optimized PDF generated and saved as: {}",
+                ats_filename
             );
-            Ok(PdfResponse::with_filename(pdf_data, ats_filename))
+
+            let base_url = env::var("PUBLIC_BASE_URL")
+                .unwrap_or_else(|_| "https://api.cvenom.com".to_string());
+            let pdf_url = format!("{}/outputs/{}", base_url, ats_filename);
+
+            Ok(Json(GeneratePdfResponse {
+                response_type: ResponseType::File,
+                success: true,
+                message: "CV optimized and generated successfully".to_string(),
+                download_url: pdf_url,
+                filename: ats_filename,
+                profile,
+                conversation_id,
+            }))
         }
         Err(e) => Err(Json(StandardErrorResponse::new(
             format!("PDF generation failed: {}", e),

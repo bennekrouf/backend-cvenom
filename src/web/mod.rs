@@ -34,6 +34,7 @@ use rocket::http::Method;
 use rocket::http::{Header, Status};
 use rocket::serde::json::Json;
 use rocket::{catchers, delete, get, post, put, routes, Request, Response, State};
+use rocket::fs::NamedFile;
 use std::path::PathBuf;
 pub use types::*;
 mod cors_utils;
@@ -97,6 +98,11 @@ impl Fairing for Cors {
     }
 }
 
+#[get("/outputs/<file..>")]
+pub async fn get_output_file(file: PathBuf, config: &State<ServerConfig>) -> Option<NamedFile> {
+    NamedFile::open(config.output_dir.join(file)).await.ok()
+}
+
 #[post("/analyze-job-fit", data = "<request>")]
 pub async fn analyze_job_fit(
     request: Json<StandardRequest<JobAnalysisRequest>>,
@@ -124,7 +130,7 @@ pub async fn generate_cv(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
-) -> Result<PdfResponse, Json<StandardErrorResponse>> {
+) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     handlers::generate_cv_handler(request, auth, config, db_config).await
 }
 
@@ -275,7 +281,7 @@ pub async fn optimize_and_generate(
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
-) -> Result<PdfResponse, Json<StandardErrorResponse>> {
+) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     optimize_and_generate_handler(request, auth, config, db_config, cv_service_url).await
 }
 
@@ -564,6 +570,7 @@ pub async fn start_web_server(
                 delete_me,
                 get_my_referral_link,
                 admin_credits,
+                get_output_file,
             ],
         )
         .launch()
