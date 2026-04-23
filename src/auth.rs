@@ -302,16 +302,59 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                 }
             }
         } else {
-            // ── Firebase path (browser / mobile) ─────────────────────────────
-            match verify_firebase_token(token, auth_config).await {
-                Ok(user) => user,
+            // ── Firebase / Static Token path ─────────────────────────────
+            let user = match verify_firebase_token(token, auth_config).await {
+                Ok(u) => u,
                 Err(e) => {
-                    app_log!(error, "Token verification failed: {}", e);
-                    return Outcome::Error((
-                        Status::Unauthorized,
-                        AuthError::TokenVerificationFailed,
-                    ));
+                    // If token verification fails, we still allow the request IF it's a 
+                    // trusted internal call from the gateway with a valid secret.
+                    // This supports "Static Bearer" tokens that aren't Firebase JWTs.
+                    if let (Some(secret), Some(forwarded_email)) = (
+                        req.headers().get_one("X-Internal-Secret"),
+                        req.headers().get_one("X-User-Email")
+                    ) {
+                        let internal_secret = std::env::var("API0_INTERNAL_SECRET").unwrap_or_default();
+                        if !internal_secret.is_empty() && secret == internal_secret {
+                            app_log!(info, "Trusted internal request with unknown token — acting as user: {}", forwarded_email);
+                            FirebaseUser {
+                                uid: forwarded_email.to_string(),
+                                email: forwarded_email.to_string(),
+                                name: None,
+                                picture: None,
+                                email_verified: true,
+                            }
+                        } else {
+                            app_log!(error, "Token verification failed and internal secret is invalid: {}", e);
+                            return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
+                        }
+                    } else {
+                        app_log!(error, "Token verification failed: {}", e);
+                        return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
+                    }
                 }
+            };
+
+            // Even if the token was valid (e.g. Admin's Firebase token), the gateway 
+            // may be asking us to act as a different user (the MCP-connected user).
+            if let (Some(secret), Some(forwarded_email)) = (
+                req.headers().get_one("X-Internal-Secret"),
+                req.headers().get_one("X-User-Email")
+            ) {
+                let internal_secret = std::env::var("API0_INTERNAL_SECRET").unwrap_or_default();
+                if !internal_secret.is_empty() && secret == internal_secret && user.email != forwarded_email {
+                    app_log!(info, "Identity override — Token: {}, X-User-Email: {}", user.email, forwarded_email);
+                    FirebaseUser {
+                        uid: forwarded_email.to_string(),
+                        email: forwarded_email.to_string(),
+                        name: user.name,
+                        picture: user.picture,
+                        email_verified: true,
+                    }
+                } else {
+                    user
+                }
+            } else {
+                user
             }
         };
 

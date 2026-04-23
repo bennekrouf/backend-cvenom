@@ -280,11 +280,11 @@ pub async fn check_and_deduct_credits(
 
     if balance < cost {
         return Err(Json(StandardErrorResponse::new(
-            format!("Insufficient credits: you have {} but this operation costs {}", balance, cost),
+            format!("Insufficient Cvenom credits: your account has {} but this operation costs {}", balance, cost),
             "INSUFFICIENT_CREDITS".to_string(),
             vec![
-                "Top up your credits at https://studio.cvenom.com/credits".to_string(),
-                "New accounts start with 100 free credits".to_string(),
+                "Top up your Cvenom credits at https://studio.cvenom.com/credits".to_string(),
+                "Each CV generation costs 20 credits.".to_string(),
             ],
             conversation_id,
         )));

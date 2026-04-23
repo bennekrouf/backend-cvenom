@@ -291,7 +291,7 @@ pub async fn upload_and_convert_cv_handler(
 
 /// POST /cv/import-text
 /// Accept raw CV text (e.g. extracted by Claude from an attached PDF) and create a profile.
-/// This is the MCP-friendly path: Claude reads the user's CV, extracts text, calls this endpoint.
+/// This is the MCP-friendly path: used by api0.ai gateway to import CV text extracted by LLMs/Claude.
 pub async fn import_text_cv_handler(
     request: Json<StandardRequest<ImportTextRequest>>,
     auth: AuthenticatedUser,

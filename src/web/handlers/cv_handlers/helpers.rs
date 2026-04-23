@@ -65,13 +65,24 @@ pub async fn load_profile_cv_data(
 ) -> anyhow::Result<CvJson> {
     let profile_dir = tenant_data_dir.join(profile_name);
     let toml_path = profile_dir.join("cv_params.toml");
-    let typst_path = profile_dir.join("experiences_en.typ"); // Default to English
+    
+    // Support both language-specific and legacy filenames
+    let typst_path_en = profile_dir.join("experiences_en.typ");
+    let typst_path_legacy = profile_dir.join("experiences.typ");
+    
+    let active_typst_path = if typst_path_en.exists() {
+        Some(typst_path_en)
+    } else if typst_path_legacy.exists() {
+        Some(typst_path_legacy)
+    } else {
+        None
+    };
 
-    if !toml_path.exists() || !typst_path.exists() {
-        anyhow::bail!("CV files not found for profile: {}", profile_name);
+    if !toml_path.exists() || active_typst_path.is_none() {
+        anyhow::bail!("CV files not found for profile: {} (checked experiences_en.typ and experiences.typ)", profile_name);
     }
 
-    CvConverter::from_files(&toml_path, &typst_path)
+    CvConverter::from_files(&toml_path, &active_typst_path.unwrap())
         .with_context(|| format!("Failed to load CV data for profile: {}", profile_name))
 }
 

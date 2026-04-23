@@ -44,7 +44,6 @@ pub async fn translate_cv_handler(
     let tenant_data_dir = get_tenant_folder_path(&user.email, &config.data_dir);
     let profile_dir = tenant_data_dir.join(&request.data.profile_name);
     let toml_path = profile_dir.join("cv_params.toml");
-    let typst_path = profile_dir.join("experiences.typ");
 
     // Verify profile exists
     if !profile_dir.exists() {
@@ -57,13 +56,24 @@ pub async fn translate_cv_handler(
     }
 
     // Load CV data from profile files
-    let cv_data = match CvConverter::from_files(&toml_path, &typst_path) {
+    // Try both language-specific and legacy filenames
+    let typst_path_en = profile_dir.join("experiences_en.typ");
+    let typst_path_legacy = profile_dir.join("experiences.typ");
+    
+    let active_typst_path = if typst_path_en.exists() {
+        typst_path_en
+    } else {
+        typst_path_legacy
+    };
+
+    let cv_data = match CvConverter::from_files(&toml_path, &active_typst_path) {
         Ok(data) => data,
         Err(e) => {
             app_log!(
                 error,
-                "Failed to load CV data from profile {}: {}",
+                "Failed to load CV data from profile {} (path: {:?}): {}",
                 request.data.profile_name,
+                active_typst_path,
                 e
             );
             return Err(Json(StandardErrorResponse::new(
@@ -110,6 +120,16 @@ pub async fn translate_cv_handler(
                         )));
                     }
                 };
+
+            // AUTO-SAVE: Write the translated content to experiences_{lang}.typ
+            let target_filename = format!("experiences_{}.typ", request.data.target_lang);
+            let target_path = profile_dir.join(&target_filename);
+            if let Err(e) = tokio::fs::write(&target_path, &translated_typst).await {
+                app_log!(error, "Failed to auto-save translated CV to {}: {}", target_filename, e);
+                // We don't fail the whole request, but log it
+            } else {
+                app_log!(info, "Auto-saved translated CV to {}", target_filename);
+            }
 
             app_log!(
                 info,
