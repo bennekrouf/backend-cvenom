@@ -8,7 +8,7 @@ use crate::image_validator::ImageValidator;
 use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::types::WithConversationId;
 use crate::web::types::{
-    GeneratePdfResponse, GenerateRequest, ServerConfig, StandardErrorResponse, StandardRequest,
+    GeneratePdfResponse, GenerateRequest, ResponseType, ServerConfig, StandardErrorResponse, StandardRequest,
 };
 use crate::{CvConfig, CvGenerator};
 use graflog::{app_log, app_span};
