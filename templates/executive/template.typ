@@ -32,6 +32,15 @@
       "key_achievements":         "Réalisations clés",
       "board_memberships":        "Mandats & Conseils",
       "summary":                  "Résumé exécutif",
+    ),
+    "de": (
+      "technical_skills":         "Kernkompetenzen",
+      "certifications_education": "Bildung & Zertifizierungen",
+      "languages":                "Sprachen",
+      "work_experience":          "Berufserfahrung",
+      "key_achievements":         "Wichtigste Erfolge",
+      "board_memberships":        "Mandate & Beiräte",
+      "summary":                  "Executive Summary",
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)

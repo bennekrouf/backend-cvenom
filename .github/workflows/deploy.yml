@@ -5,10 +5,43 @@ on:
     branches: [master]
 
 jobs:
+  test:
+    name: Unit & integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-
+
+      - name: Install Typst
+        run: |
+          curl -sSL https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz \
+            | tar -xJ --strip-components=1 -C /usr/local/bin typst-x86_64-unknown-linux-musl/typst
+          typst --version
+
+      - name: Run tests
+        run: cargo test --all
+        env:
+          TYPST_BIN: typst
+
   deploy:
     name: Build & restart cvenom-backend
     runs-on: ubuntu-latest
     timeout-minutes: 30        # Rust builds can take a while
+    needs: test                # deploy is blocked until tests pass
 
     steps:
       - name: SSH into VPS and run backend deploy script

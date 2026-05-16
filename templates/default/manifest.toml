@@ -3,5 +3,5 @@ description = "Standard CV layout"
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = []
-languages = ["en", "fr"]
+languages = ["en", "fr", "de"]
 version = "1.0.0"

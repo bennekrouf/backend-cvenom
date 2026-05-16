@@ -46,7 +46,7 @@
       "work_experience": "Expérience professionnelle",
       "key_insights": "Points clés",
       "competences": "Compétences techniques",
-      "formation": "Formations & Certifications", 
+      "formation": "Formations & Certifications",
       "langues": "Langues",
       "experience_professionnelle": "Expérience professionnelle",
       "diplomas": "Diplômes",
@@ -54,6 +54,23 @@
       "points_cles": "Points clés",
       "skills_file": "Fiche de compétences",
       "confidential_document": "Document confidentiel, reproduction interdite",
+      "website": "www.mycompany.ch"
+    ),
+    "de": (
+      "technical_skills": "Technische Kompetenzen",
+      "certifications_education": "Bildung & Zertifizierungen",
+      "languages": "Sprachen",
+      "work_experience": "Berufserfahrung",
+      "key_insights": "Kernkompetenzen",
+      "competences": "Technische Kompetenzen",
+      "formation": "Bildung & Zertifizierungen",
+      "langues": "Sprachen",
+      "experience_professionnelle": "Berufserfahrung",
+      "diplomas": "Abschlüsse",
+      "certifications": "Zertifizierungen",
+      "points_cles": "Kernkompetenzen",
+      "skills_file": "Kompetenzprofil",
+      "confidential_document": "Vertrauliches Dokument, Vervielfältigung verboten",
       "website": "www.mycompany.ch"
     )
   )
@@ -67,7 +84,7 @@
   }
   (
     "github": (
-      "displayname": "GitHub", 
+      "displayname": "GitHub",
       "logo": get_icon("github", font_type: "brands")
     ),
     "linkedin": (
@@ -521,7 +538,7 @@ set text(font: ("Arial", "Helvetica"), ligatures: false)
 
     #if context_info != none [
       #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
-        if get_lang() == "fr" { "Contexte" } else { "Context" })
+        if get_lang() == "fr" { "Contexte" } else if get_lang() == "de" { "Kontext" } else { "Context" })
       #v(0.2em)
       
       // Handle context as array of bullet points or single text
@@ -539,7 +556,7 @@ set text(font: ("Arial", "Helvetica"), ligatures: false)
 
     #if responsibilities != none [
       #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
-        if get_lang() == "fr" { "Responsabilités" } else { "Responsibilities" })
+        if get_lang() == "fr" { "Responsabilités" } else if get_lang() == "de" { "Verantwortlichkeiten" } else { "Responsibilities" })
       #v(0.2em)
       
       // Handle responsibilities as dictionary with subsections

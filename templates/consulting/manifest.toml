@@ -3,5 +3,5 @@ description = "Structured mission-based layout for consultants, analysts and fre
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = ["key_competencies", "sector_expertise", "availability", "mission_format"]
-languages = ["en", "fr"]
+languages = ["en", "fr", "de"]
 version = "1.0.0"

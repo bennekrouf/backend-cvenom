@@ -1,0 +1,7 @@
+name = "enterprise2"
+description = "Two-column enterprise layout with purple sidebar — inspired by CGI corporate CV format"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["key_competencies", "sector_expertise", "sidebar_layout", "mission_format"]
+languages = ["en", "fr", "de"]
+version = "1.0.0"

@@ -36,6 +36,16 @@
       "summary":                  "À propos",
       "software":                 "Logiciels",
       "disciplines":              "Disciplines",
+    ),
+    "de": (
+      "technical_skills":         "Werkzeuge & Fähigkeiten",
+      "certifications_education": "Bildung",
+      "languages":                "Sprachen",
+      "work_experience":          "Erfahrung",
+      "projects":                 "Projekte & Portfolio",
+      "summary":                  "Über mich",
+      "software":                 "Software",
+      "disciplines":              "Disziplinen",
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)

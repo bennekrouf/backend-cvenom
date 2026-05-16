@@ -3,5 +3,5 @@ description = "CV with Keyteo branding featuring structured context and detailed
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = ["header_logo", "branded_footer", "structured_experience"]
-languages = ["en", "fr"]
+languages = ["en", "fr", "de"]
 version = "1.0.0"

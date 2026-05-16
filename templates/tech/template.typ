@@ -31,6 +31,14 @@
       "work_experience":          "Expérience professionnelle",
       "projects":                 "Projets",
       "summary":                  "Profil",
+    ),
+    "de": (
+      "technical_skills":         "Technische Fähigkeiten",
+      "certifications_education": "Bildung & Zertifizierungen",
+      "languages":                "Sprachen",
+      "work_experience":          "Erfahrung",
+      "projects":                 "Projekte",
+      "summary":                  "Über mich",
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)

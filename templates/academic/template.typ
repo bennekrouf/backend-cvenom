@@ -38,6 +38,18 @@
       "teaching":                 "Enseignement",
       "awards":                   "Prix & Distinctions",
       "summary":                  "Profil de recherche",
+    ),
+    "de": (
+      "technical_skills":         "Methoden & Werkzeuge",
+      "certifications_education": "Bildung",
+      "languages":                "Sprachen",
+      "work_experience":          "Forschungs- & Lehrpraxis",
+      "publications":             "Publikationen",
+      "grants":                   "Förderungen & Stipendien",
+      "research_interests":       "Forschungsinteressen",
+      "teaching":                 "Lehrerfahrung",
+      "awards":                   "Auszeichnungen & Preise",
+      "summary":                  "Forschungsprofil",
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)

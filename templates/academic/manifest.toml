@@ -3,5 +3,5 @@ description = "Publication-rich layout for researchers, PhDs, professors and sci
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = ["publications", "grants", "research_interests", "teaching_experience"]
-languages = ["en", "fr"]
+languages = ["en", "fr", "de"]
 version = "1.0.0"

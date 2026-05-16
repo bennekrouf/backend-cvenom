@@ -44,7 +44,7 @@
       "work_experience": "Expérience professionnelle",
       "key_insights": "Points clés",
       "competences": "Compétences techniques",
-      "formation": "Formations & Certifications", 
+      "formation": "Formations & Certifications",
       "langues": "Langues",
       "experience_professionnelle": "Expérience professionnelle",
       "diplomas": "Diplômes",
@@ -52,6 +52,23 @@
       "points_cles": "Points clés",
       "skills_file": "Fiche de compétences",
       "confidential_document": "Document confidentiel, reproduction interdite",
+      "website": "www.mycompany.ch"
+    ),
+    "de": (
+      "technical_skills": "Technische Kompetenzen",
+      "certifications_education": "Bildung & Zertifizierungen",
+      "languages": "Sprachen",
+      "work_experience": "Berufserfahrung",
+      "key_insights": "Kernkompetenzen",
+      "competences": "Technische Kompetenzen",
+      "formation": "Bildung & Zertifizierungen",
+      "langues": "Sprachen",
+      "experience_professionnelle": "Berufserfahrung",
+      "diplomas": "Abschlüsse",
+      "certifications": "Zertifizierungen",
+      "points_cles": "Kernkompetenzen",
+      "skills_file": "Kompetenzprofil",
+      "confidential_document": "Vertrauliches Dokument, Vervielfältigung verboten",
       "website": "www.mycompany.ch"
     )
   )
@@ -65,7 +82,7 @@
   }
   (
     "github": (
-      "displayname": "GitHub", 
+      "displayname": "GitHub",
       "logo": get_icon("github", font_type: "brands")
     ),
     "linkedin": (

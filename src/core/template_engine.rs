@@ -480,6 +480,135 @@ show_contact = true\n",
     }
 }
 
+// ===== Tests =====
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn templates_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates")
+    }
+
+    // ── Discovery ────────────────────────────────────────────────────────────
+
+    #[test]
+    fn all_expected_templates_are_discovered() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let expected = [
+            "default", "consulting", "academic", "creative",
+            "tech", "executive", "keyteo", "keyteo_full", "enterprise2",
+        ];
+        for name in expected {
+            assert!(engine.get_template(name).is_some(), "template '{name}' not found");
+        }
+    }
+
+    #[test]
+    fn template_count_matches_directories() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let dir_count = std::fs::read_dir(templates_dir())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .count();
+        assert_eq!(engine.list_templates().len(), dir_count);
+    }
+
+    // ── enterprise2 manifest ─────────────────────────────────────────────────
+
+    #[test]
+    fn enterprise2_manifest_parses_correctly() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let t = engine.get_template("enterprise2").unwrap();
+        assert_eq!(t.manifest.name, "enterprise2");
+        assert_eq!(t.manifest.main_file.as_deref(), Some("main.typ"));
+        let deps = t.manifest.dependencies.as_ref().unwrap();
+        assert!(deps.contains(&"template.typ".to_string()));
+        let langs = t.manifest.languages.as_ref().unwrap();
+        assert!(langs.contains(&"en".to_string()));
+        assert!(langs.contains(&"fr".to_string()));
+        assert!(langs.contains(&"de".to_string()));
+    }
+
+    #[test]
+    fn enterprise2_all_declared_files_exist_on_disk() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let t = engine.get_template("enterprise2").unwrap();
+        let main = t.path.join(t.manifest.main_file.as_deref().unwrap_or("main.typ"));
+        assert!(main.exists(), "enterprise2/main.typ is missing");
+        for dep in t.manifest.dependencies.as_deref().unwrap_or(&[]) {
+            assert!(t.path.join(dep).exists(), "enterprise2 dependency '{dep}' missing");
+        }
+    }
+
+    // ── All templates: files on disk ─────────────────────────────────────────
+
+    #[test]
+    fn all_templates_declared_files_exist() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let mut failures = Vec::new();
+        for t in &engine.templates {
+            let main = t.path.join(t.manifest.main_file.as_deref().unwrap_or("main.typ"));
+            if !main.exists() {
+                failures.push(format!("{}: main file missing ({})", t.id, main.display()));
+            }
+            for dep in t.manifest.dependencies.as_deref().unwrap_or(&[]) {
+                let dep_path = t.path.join(dep);
+                if !dep_path.exists() {
+                    failures.push(format!("{}: dependency '{dep}' missing", t.id));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "Template file checks failed:\n{}", failures.join("\n"));
+    }
+
+    // ── Error handling ───────────────────────────────────────────────────────
+
+    #[test]
+    fn unknown_template_not_found() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        assert!(engine.get_template("nonexistent_xyz").is_none());
+        assert!(!engine.template_exists("nonexistent_xyz"));
+    }
+
+    #[tokio::test]
+    async fn prepare_workspace_errors_cleanly_on_unknown_template() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let result = engine
+            .prepare_template_workspace("nonexistent_xyz", dir.path())
+            .await;
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("nonexistent_xyz"));
+    }
+
+    // ── Variable substitution ────────────────────────────────────────────────
+
+    #[test]
+    fn process_variables_replaces_mustache_syntax() {
+        let mut vars = HashMap::new();
+        vars.insert("name".to_string(), "Alice".to_string());
+        let result = TemplateEngine::process_variables("Hello {{name}}!", &vars);
+        assert_eq!(result, "Hello Alice!");
+    }
+
+    #[test]
+    fn process_variables_replaces_shell_syntax() {
+        let mut vars = HashMap::new();
+        vars.insert("name".to_string(), "Bob".to_string());
+        let result = TemplateEngine::process_variables("Hello ${name}!", &vars);
+        assert_eq!(result, "Hello Bob!");
+    }
+
+    #[test]
+    fn process_variables_unknown_key_left_unchanged() {
+        let vars = HashMap::new();
+        let input = "Hello {{unknown}}!";
+        assert_eq!(TemplateEngine::process_variables(input, &vars), input);
+    }
+}
+
 // ===== Legacy Compatibility =====
 
 /// Legacy TemplateProcessor for backward compatibility

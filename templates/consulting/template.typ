@@ -38,6 +38,18 @@
       "summary":                  "Profil",
       "diplomas":                 "Diplômes",
       "certifications":           "Certifications",
+    ),
+    "de": (
+      "technical_skills":         "Technische Kompetenzen",
+      "certifications_education": "Bildung & Zertifizierungen",
+      "languages":                "Sprachen",
+      "work_experience":          "Projekterfahrung",
+      "key_competencies":         "Kernkompetenzen",
+      "sectors":                  "Branchenexpertise",
+      "availability":             "Verfügbarkeit",
+      "summary":                  "Profil",
+      "diplomas":                 "Abschlüsse",
+      "certifications":           "Zertifizierungen",
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)

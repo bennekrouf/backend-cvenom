@@ -3,5 +3,5 @@ description = "Elegant single-column layout for directors, VPs and C-suite profi
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = ["key_achievements", "metrics_focus", "classic_style"]
-languages = ["en", "fr"]
+languages = ["en", "fr", "de"]
 version = "1.0.0"

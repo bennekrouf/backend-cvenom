@@ -296,6 +296,37 @@ impl DatabaseConfig {
         .execute(pool)
         .await?;
 
+        // Business developers table
+        sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS business_developers (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL DEFAULT '',
+            referral_code   TEXT NOT NULL UNIQUE,
+            commission_rate REAL NOT NULL DEFAULT 0.30,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#)
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_bd_email ON business_developers(email);",
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_bd_code ON business_developers(referral_code);",
+        )
+        .execute(pool)
+        .await?;
+
+        // Idempotent: attach referral code to tenant on customer sign-up
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN referred_by_code TEXT")
+            .execute(pool)
+            .await;
+
         app_log!(info, "Database migrations completed successfully");
         Ok(())
     }

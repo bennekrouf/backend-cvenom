@@ -24,6 +24,11 @@ use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse, get_transactions_handler, AdminCreditRequest, admin_add_credits_handler};
 use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
+use crate::web::handlers::bd_handlers::{
+    register_bd_handler, get_bd_me_handler, get_bd_customers_handler, attach_ref_handler,
+    admin_list_bd_handler, admin_bd_customers_handler, admin_delete_bd_handler,
+    RegisterBdRequest, AttachRefRequest, BdResponse, CustomersResponse, AdminBdListResponse,
+};
 use anyhow::Result;
 use graflog::app_log;
 
@@ -389,6 +394,79 @@ pub async fn admin_credits(
     admin_add_credits_handler(request, auth.email(), db_config).await
 }
 
+// ── Business Developer routes ─────────────────────────────────────────────────
+
+/// POST /bd/register — register as a BD (idempotent)
+#[post("/bd/register", data = "<body>")]
+pub async fn bd_register(
+    body: Json<RegisterBdRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<BdResponse>, Json<StandardErrorResponse>> {
+    register_bd_handler(body, auth, db_config).await
+}
+
+/// GET /bd/me — return BD profile + customer count + estimated revenue
+#[get("/bd/me")]
+pub async fn bd_me(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<BdResponse>, Json<StandardErrorResponse>> {
+    get_bd_me_handler(auth, db_config).await
+}
+
+/// GET /bd/customers — list customers referred by this BD
+#[get("/bd/customers")]
+pub async fn bd_customers(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<CustomersResponse>, Json<StandardErrorResponse>> {
+    get_bd_customers_handler(auth, db_config).await
+}
+
+/// POST /bd/attach-ref — link the current tenant to a BD referral code
+#[post("/bd/attach-ref", data = "<body>")]
+pub async fn bd_attach_ref(
+    body: Json<AttachRefRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    attach_ref_handler(body, auth, db_config).await
+}
+
+// ── Admin BD routes ───────────────────────────────────────────────────────────
+
+/// GET /admin/bd — list all business developers with stats (admin only)
+#[get("/admin/bd")]
+pub async fn admin_list_bds(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<AdminBdListResponse>, Json<StandardErrorResponse>> {
+    admin_list_bd_handler(auth, db_config).await
+}
+
+/// GET /admin/bd/<code>/customers — customers of one BD (admin only)
+#[get("/admin/bd/<code>/customers")]
+pub async fn admin_bd_customers(
+    code: String,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<CustomersResponse>, Json<StandardErrorResponse>> {
+    admin_bd_customers_handler(code, auth, db_config).await
+}
+
+/// DELETE /admin/bd/<email> — remove a BD (admin only)
+#[delete("/admin/bd/<email>")]
+pub async fn admin_delete_bd(
+    email: String,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    admin_delete_bd_handler(email, auth, db_config).await
+}
+
+// ── Referral routes ───────────────────────────────────────────────────────────
+
 /// GET /referral/my-link — return the authenticated user's referral link and stats
 #[get("/referral/my-link")]
 pub async fn get_my_referral_link(
@@ -569,6 +647,13 @@ pub async fn start_web_server(
                 put_cv_data,
                 delete_me,
                 get_my_referral_link,
+                bd_register,
+                bd_me,
+                bd_customers,
+                bd_attach_ref,
+                admin_list_bds,
+                admin_bd_customers,
+                admin_delete_bd,
                 admin_credits,
                 get_output_file,
             ],
