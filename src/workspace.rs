@@ -97,10 +97,14 @@ impl<'a> WorkspaceManager<'a> {
 
         fs::copy(&config_source, &config_dest).context("Failed to copy profile config")?;
 
-        // Copy experiences (existing code)
+        // Copy experiences — optional: some document types (e.g. portfolio) don't use it
         let exp_source = self.config.profile_experiences_path();
         let exp_dest = PathBuf::from("experiences.typ");
-        fs::copy(&exp_source, &exp_dest).context("Failed to copy profile experiences")?;
+        if exp_source.exists() {
+            fs::copy(&exp_source, &exp_dest).context("Failed to copy profile experiences")?;
+        } else {
+            app_log!(info, "No experiences file found at {} — skipping (not required for this document type)", exp_source.display());
+        }
 
         // Copy profile image with validation
         let profile_image_png = self.config.profile_image_path();

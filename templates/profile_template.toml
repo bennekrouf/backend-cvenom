@@ -44,3 +44,14 @@ native = [""]
 fluent = [""]
 intermediate = [""]
 basic = [""]
+
+# Projects — used for portfolio generation (POST /portfolio/generate)
+# Add one [[projects]] block per project.
+[[projects]]
+title = ""
+role = ""
+date = ""
+description = ""
+technologies = []
+highlights = []
+url = ""

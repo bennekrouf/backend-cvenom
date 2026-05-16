@@ -13,6 +13,24 @@ sectors = ["Finance", "Public Sector", "LegalTech"]
 tools = "Docker, Git, GitHub Actions, VS Code"
 areas_of_expertise = ["CI/CD implementation", "Hexagonal architecture", "Team leadership"]
 
+[[projects]]
+title = "cvenom"
+role = "Tech Lead"
+date = "2024 – Present"
+description = "AI-powered CV generator with Typst backend and multi-tenant architecture."
+technologies = ["Rust", "Typst", "Next.js", "SQLite"]
+highlights = ["Built multi-tenant PDF pipeline", "Integrated GPT-4 for CV optimisation"]
+url = "https://cvenom.com"
+
+[[projects]]
+title = "Open Source CLI"
+role = "Author"
+date = "2023"
+description = "Developer productivity tool written in Rust."
+technologies = ["Rust", "WASM"]
+highlights = ["1000+ GitHub stars"]
+url = ""
+
 [languages]
 native = ["French"]
 fluent = ["English"]
@@ -112,6 +130,33 @@ fn compile_template(template_name: &str) -> Result<(), String> {
     } else {
         Err(String::from_utf8_lossy(&out.stderr).to_string())
     }
+}
+
+#[test]
+fn portfolio_compiles_en() {
+    compile_template("portfolio").expect("portfolio (en) failed to compile");
+}
+
+#[test]
+fn portfolio_compiles_fr() {
+    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
+    let tpl_dir = templates_dir.join("portfolio");
+    let tmp = tempfile::tempdir().unwrap();
+    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.path().is_file() {
+            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
+        }
+    }
+    let font_cfg = templates_dir.join("font_config.typ");
+    if font_cfg.exists() { std::fs::copy(&font_cfg, tmp.path().join("font_config.typ")).unwrap(); }
+    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
+    // Portfolio doesn't use experiences.typ — no stub needed
+    let out = Command::new(typst_bin())
+        .args(["compile", "main.typ", "output.pdf", "--input", "lang=fr"])
+        .current_dir(tmp.path())
+        .output().expect("could not run typst");
+    assert!(out.status.success(), "portfolio (fr) failed:\n{}", String::from_utf8_lossy(&out.stderr));
 }
 
 #[test]

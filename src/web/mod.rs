@@ -16,7 +16,9 @@ use crate::web::handlers::{
     get_cv_data_handler, put_cv_data_handler,
     optimize_and_generate_handler, optimize_cv_handler, save_optimized_handler, translate_cv_handler,
     upload_and_convert_cv_handler, import_text_cv_handler,
+    generate_portfolio_handler,
 };
+use crate::web::handlers::cv_handlers::GeneratePortfolioRequest;
 use crate::web::handlers::cv_handlers::ImportTextRequest;
 use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
@@ -467,6 +469,18 @@ pub async fn admin_delete_bd(
 
 // ── Referral routes ───────────────────────────────────────────────────────────
 
+/// POST /portfolio/generate — AI generates [[projects]] then compiles portfolio PDF
+#[post("/portfolio/generate", data = "<request>")]
+pub async fn generate_portfolio(
+    request: Json<StandardRequest<GeneratePortfolioRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
+    cv_service_url: &State<String>,
+) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
+    generate_portfolio_handler(request, auth, config, db_config, cv_service_url).await
+}
+
 /// GET /referral/my-link — return the authenticated user's referral link and stats
 #[get("/referral/my-link")]
 pub async fn get_my_referral_link(
@@ -646,6 +660,7 @@ pub async fn start_web_server(
                 get_cv_data,
                 put_cv_data,
                 delete_me,
+                generate_portfolio,
                 get_my_referral_link,
                 bd_register,
                 bd_me,

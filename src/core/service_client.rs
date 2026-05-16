@@ -16,6 +16,7 @@ use crate::types::{
 const UPLOAD_CV_ENDPOINT: &str = "/upload-cv";
 const JOBS_MATCH_ENDPOINT: &str = "/jobs-match";
 const TRANSLATE_ENDPOINT: &str = "/translate";
+const PORTFOLIO_ENDPOINT: &str = "/portfolio";
 const OPTIMIZE_ENDPOINT: &str = "/optimize";
 const COVER_LETTER_ENDPOINT: &str = "/cover-letter";
 
@@ -276,6 +277,57 @@ impl ServiceClient {
                 .await
                 .unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Cover letter generation failed with status {}: {}", status, error_text)
+        }
+    }
+
+    /// 6. Portfolio content generation — sends CvJson + lang, returns [[projects]] TOML string
+    pub async fn generate_portfolio_content(
+        &self,
+        cv_data: &CvJson,
+        lang: &str,
+    ) -> Result<String> {
+        #[derive(serde::Deserialize)]
+        struct PortfolioServiceResponse {
+            projects_toml: String,
+            status: String,
+        }
+
+        let payload = serde_json::json!({
+            "cv_data": cv_data,
+            "lang": lang,
+        });
+
+        let url = format!("{}{}", self.base_url, PORTFOLIO_ENDPOINT);
+        app_log!(trace, "Calling portfolio generation service: {}", url);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&payload)
+            .send()
+            .await
+            .context("Failed to call portfolio service")?;
+
+        let status = response.status();
+        if status.is_success() {
+            let resp: PortfolioServiceResponse = response
+                .json()
+                .await
+                .context("Failed to parse portfolio response")?;
+            if resp.status.starts_with("error") {
+                anyhow::bail!("{}", resp.status);
+            }
+            Ok(resp.projects_toml)
+        } else {
+            let error_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            anyhow::bail!(
+                "Portfolio generation failed with status {}: {}",
+                status,
+                error_text
+            )
         }
     }
 
