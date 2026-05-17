@@ -445,6 +445,187 @@ pub async fn admin_delete_bd_handler(
 
 // ── Private helper ────────────────────────────────────────────────────────────
 
+// ── BD: own commission summary ────────────────────────────────────────────────
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct CommissionRow {
+    pub customer_email: String,
+    pub amount_dollars: f64,
+    pub commission_dollars: f64,
+    pub status: String,
+    pub created_at: String,
+    pub paid_at: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct BdCommissionsResponse {
+    pub success: bool,
+    pub pending_dollars: f64,
+    pub paid_dollars: f64,
+    pub commissions: Vec<CommissionRow>,
+}
+
+pub async fn get_bd_commissions_handler(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<BdCommissionsResponse>, Json<StandardErrorResponse>> {
+    let pool = db_config.pool().map_err(pool_err)?;
+    let email = auth.email();
+
+    let code: Option<String> =
+        sqlx::query_scalar("SELECT referral_code FROM business_developers WHERE email = ?")
+            .bind(email)
+            .fetch_optional(pool)
+            .await
+            .map_err(|e| pool_err(e))?;
+
+    let referral_code =
+        code.ok_or_else(|| make_error("Not registered as a business developer", "BD_NOT_FOUND"))?;
+
+    let rows: Vec<(String, f64, f64, String, String, Option<String>)> = sqlx::query_as(
+        "SELECT customer_email, amount_dollars, commission_dollars, status, created_at, paid_at \
+         FROM bd_commissions WHERE referral_code = ? ORDER BY created_at DESC",
+    )
+    .bind(&referral_code)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| pool_err(e))?;
+
+    let pending_dollars: f64 = rows.iter()
+        .filter(|r| r.3 == "pending")
+        .map(|r| r.2)
+        .sum();
+
+    let paid_dollars: f64 = rows.iter()
+        .filter(|r| r.3 == "paid")
+        .map(|r| r.2)
+        .sum();
+
+    let commissions = rows.into_iter().map(|(customer_email, amount_dollars, commission_dollars, status, created_at, paid_at)| {
+        CommissionRow { customer_email, amount_dollars, commission_dollars, status, created_at, paid_at }
+    }).collect();
+
+    Ok(Json(BdCommissionsResponse { success: true, pending_dollars, paid_dollars, commissions }))
+}
+
+// ── Admin: all pending commissions grouped by BD ──────────────────────────────
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminBdCommissionGroup {
+    pub referral_code: String,
+    pub bd_name: String,
+    pub bd_email: String,
+    pub pending_count: i64,
+    pub pending_dollars: f64,
+    pub paid_dollars: f64,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminCommissionsResponse {
+    pub success: bool,
+    pub total_pending_dollars: f64,
+    pub total_paid_dollars: f64,
+    pub groups: Vec<AdminBdCommissionGroup>,
+}
+
+pub async fn admin_list_commissions_handler(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<AdminCommissionsResponse>, Json<StandardErrorResponse>> {
+    admin_only(&auth)?;
+    let pool = db_config.pool().map_err(pool_err)?;
+
+    let groups: Vec<(String, String, String, i64, f64, f64)> = sqlx::query_as(
+        "SELECT b.referral_code, b.name, b.email,
+                COUNT(CASE WHEN c.status = 'pending' THEN 1 END),
+                COALESCE(SUM(CASE WHEN c.status = 'pending' THEN c.commission_dollars ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN c.status = 'paid'    THEN c.commission_dollars ELSE 0 END), 0)
+         FROM business_developers b
+         LEFT JOIN bd_commissions c ON c.referral_code = b.referral_code
+         GROUP BY b.referral_code
+         ORDER BY 5 DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| pool_err(e))?;
+
+    let total_pending: f64 = groups.iter().map(|g| g.4).sum();
+    let total_paid: f64 = groups.iter().map(|g| g.5).sum();
+
+    let result = groups.into_iter().map(|(referral_code, bd_name, bd_email, pending_count, pending_dollars, paid_dollars)| {
+        AdminBdCommissionGroup { referral_code, bd_name, bd_email, pending_count, pending_dollars, paid_dollars }
+    }).collect();
+
+    Ok(Json(AdminCommissionsResponse {
+        success: true,
+        total_pending_dollars: total_pending,
+        total_paid_dollars: total_paid,
+        groups: result,
+    }))
+}
+
+// ── Admin: mark all pending commissions for a BD as paid ─────────────────────
+
+#[derive(serde::Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct MarkPaidRequest {
+    pub referral_code: String,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct MarkPaidResponse {
+    pub success: bool,
+    pub rows_updated: u64,
+    pub total_paid_dollars: f64,
+}
+
+pub async fn admin_mark_paid_handler(
+    body: Json<MarkPaidRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<MarkPaidResponse>, Json<StandardErrorResponse>> {
+    admin_only(&auth)?;
+    let pool = db_config.pool().map_err(pool_err)?;
+
+    let total: f64 = sqlx::query_scalar(
+        "SELECT COALESCE(SUM(commission_dollars), 0) FROM bd_commissions \
+         WHERE referral_code = ? AND status = 'pending'",
+    )
+    .bind(&body.referral_code)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| pool_err(e))?;
+
+    let result = sqlx::query(
+        "UPDATE bd_commissions SET status = 'paid', paid_at = datetime('now') \
+         WHERE referral_code = ? AND status = 'pending'",
+    )
+    .bind(&body.referral_code)
+    .execute(pool)
+    .await
+    .map_err(|e| pool_err(e))?;
+
+    app_log!(
+        info,
+        admin = %auth.email(),
+        code = %body.referral_code,
+        rows = result.rows_affected(),
+        amount = total,
+        "Admin marked BD commissions as paid"
+    );
+
+    Ok(Json(MarkPaidResponse {
+        success: true,
+        rows_updated: result.rows_affected(),
+        total_paid_dollars: total,
+    }))
+}
+
 fn build_bd_info(
     email: String,
     name: String,

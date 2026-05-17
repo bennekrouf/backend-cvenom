@@ -395,6 +395,7 @@ pub async fn create_payment_intent_handler(
 pub async fn confirm_payment_handler(
     request: Json<ConfirmPaymentRequest>,
     auth: AuthenticatedUser,
+    db_config: &rocket::State<DatabaseConfig>,
 ) -> Result<Json<ConfirmPaymentResponse>, Json<StandardErrorResponse>> {
     let payment_intent_id = &request.payment_intent_id;
     let user_email = auth.email();
@@ -465,6 +466,52 @@ pub async fn confirm_payment_handler(
                 new_balance = new_balance,
                 "Credit balance topped up successfully"
             );
+
+            // 4. Commission ledger — fire-and-forget (never block the payment response)
+            if let Ok(pool) = db_config.pool() {
+                let repo = TenantRepository::new(pool);
+                if let Ok(Some(tenant)) = repo.find_by_email_or_domain(user_email).await {
+                    if let Some(code) = tenant.referred_by_code {
+                        // Look up the BD's commission rate
+                        let rate: f64 = sqlx::query_scalar(
+                            "SELECT commission_rate FROM business_developers \
+                             WHERE referral_code = ?",
+                        )
+                        .bind(&code)
+                        .fetch_optional(pool)
+                        .await
+                        .ok()
+                        .flatten()
+                        .unwrap_or(0.30);
+
+                        let commission = amount_dollars as f64 * rate;
+
+                        let _ = sqlx::query(
+                            "INSERT OR IGNORE INTO bd_commissions \
+                             (referral_code, customer_email, stripe_payment_intent, \
+                              amount_dollars, commission_dollars) \
+                             VALUES (?, ?, ?, ?, ?)",
+                        )
+                        .bind(&code)
+                        .bind(user_email)
+                        .bind(payment_intent_id)
+                        .bind(amount_dollars as f64)
+                        .bind(commission)
+                        .execute(pool)
+                        .await;
+
+                        app_log!(
+                            info,
+                            bd_code = %code,
+                            customer = %user_email,
+                            amount_dollars = amount_dollars,
+                            commission = commission,
+                            "BD commission recorded"
+                        );
+                    }
+                }
+            }
+
             Ok(Json(ConfirmPaymentResponse {
                 success: true,
                 message: format!(

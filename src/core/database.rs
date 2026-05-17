@@ -155,6 +155,7 @@ pub struct Tenant {
     pub updated_at: DateTime<Utc>,
     pub is_active: bool,
     pub last_seen_at: Option<DateTime<Utc>>,
+    pub referred_by_code: Option<String>,
 }
 
 impl Tenant {
@@ -327,6 +328,37 @@ impl DatabaseConfig {
             .execute(pool)
             .await;
 
+        // Commission ledger — one row per Stripe payment from a referred customer
+        sqlx::query(r#"
+        CREATE TABLE IF NOT EXISTS bd_commissions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            referral_code           TEXT NOT NULL,
+            customer_email          TEXT NOT NULL,
+            stripe_payment_intent   TEXT NOT NULL UNIQUE,
+            amount_dollars          REAL NOT NULL,
+            commission_dollars      REAL NOT NULL,
+            status                  TEXT NOT NULL DEFAULT 'pending',
+            paid_at                 TEXT,
+            created_at              TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#)
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_commissions_code \
+             ON bd_commissions(referral_code);",
+        )
+        .execute(pool)
+        .await?;
+
+        sqlx::query(
+            "CREATE INDEX IF NOT EXISTS idx_commissions_status \
+             ON bd_commissions(status);",
+        )
+        .execute(pool)
+        .await?;
+
         app_log!(info, "Database migrations completed successfully");
         Ok(())
     }
@@ -350,7 +382,7 @@ impl<'a> TenantRepository<'a> {
 
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code
             FROM tenants
             WHERE is_active = TRUE AND (
                 email = ? OR domain = ?
@@ -395,6 +427,7 @@ impl<'a> TenantRepository<'a> {
             updated_at: now,
             is_active: true,
             last_seen_at: None,
+            referred_by_code: None,
         };
 
         app_log!(
@@ -434,6 +467,7 @@ impl<'a> TenantRepository<'a> {
             updated_at: now,
             is_active: true,
             last_seen_at: None,
+            referred_by_code: None,
         };
 
         app_log!(
@@ -449,7 +483,7 @@ impl<'a> TenantRepository<'a> {
     pub async fn list_active(&self) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code
             FROM tenants
             WHERE is_active = TRUE
             ORDER BY tenant_name ASC, email ASC, domain ASC
@@ -477,7 +511,7 @@ impl<'a> TenantRepository<'a> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code
             FROM tenants
             WHERE is_active = TRUE
               AND email IS NOT NULL

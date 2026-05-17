@@ -33,8 +33,11 @@ use crate::web::handlers::payment_handlers::{
 use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
 use crate::web::handlers::bd_handlers::{
     register_bd_handler, get_bd_me_handler, get_bd_customers_handler, attach_ref_handler,
-    admin_list_bd_handler, admin_bd_customers_handler, admin_delete_bd_handler,
-    RegisterBdRequest, AttachRefRequest, BdResponse, CustomersResponse, AdminBdListResponse,
+    get_bd_commissions_handler, admin_list_bd_handler, admin_bd_customers_handler,
+    admin_delete_bd_handler, admin_list_commissions_handler, admin_mark_paid_handler,
+    RegisterBdRequest, AttachRefRequest, MarkPaidRequest,
+    BdResponse, CustomersResponse, AdminBdListResponse,
+    BdCommissionsResponse, AdminCommissionsResponse, MarkPaidResponse,
 };
 use anyhow::Result;
 use graflog::app_log;
@@ -353,13 +356,14 @@ pub async fn payment_intent(
     crate::web::handlers::payment_handlers::create_payment_intent_handler(request, auth).await
 }
 
-/// POST /payment/confirm — verify Stripe payment + top-up api0 credits
+/// POST /payment/confirm — verify Stripe payment + top-up api0 credits + record BD commission
 #[post("/payment/confirm", data = "<request>")]
 pub async fn payment_confirm(
     request: Json<ConfirmPaymentRequest>,
     auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
 ) -> Result<Json<crate::web::handlers::payment_handlers::ConfirmPaymentResponse>, Json<StandardErrorResponse>> {
-    crate::web::handlers::payment_handlers::confirm_payment_handler(request, auth).await
+    crate::web::handlers::payment_handlers::confirm_payment_handler(request, auth, db_config).await
 }
 
 /// DELETE /me — permanently delete caller's account and all associated data.
@@ -460,6 +464,34 @@ pub async fn admin_bd_customers(
     db_config: &State<DatabaseConfig>,
 ) -> Result<Json<CustomersResponse>, Json<StandardErrorResponse>> {
     admin_bd_customers_handler(code, auth, db_config).await
+}
+
+/// GET /bd/commissions — BD's own commission history (pending + paid)
+#[get("/bd/commissions")]
+pub async fn bd_commissions(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<BdCommissionsResponse>, Json<StandardErrorResponse>> {
+    get_bd_commissions_handler(auth, db_config).await
+}
+
+/// GET /admin/commissions — all BDs with their pending/paid commission totals (admin only)
+#[get("/admin/commissions")]
+pub async fn admin_commissions(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<AdminCommissionsResponse>, Json<StandardErrorResponse>> {
+    admin_list_commissions_handler(auth, db_config).await
+}
+
+/// POST /admin/commissions/pay — mark all pending commissions for a BD as paid (admin only)
+#[post("/admin/commissions/pay", data = "<body>")]
+pub async fn admin_commissions_pay(
+    body: Json<MarkPaidRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<MarkPaidResponse>, Json<StandardErrorResponse>> {
+    admin_mark_paid_handler(body, auth, db_config).await
 }
 
 /// DELETE /admin/bd/<email> — remove a BD (admin only)
@@ -689,6 +721,9 @@ pub async fn start_web_server(
                 bd_me,
                 bd_customers,
                 bd_attach_ref,
+                bd_commissions,
+                admin_commissions,
+                admin_commissions_pay,
                 admin_list_bds,
                 admin_bd_customers,
                 admin_delete_bd,
