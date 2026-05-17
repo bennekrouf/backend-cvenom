@@ -24,7 +24,12 @@ use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
-use crate::web::handlers::payment_handlers::{ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse, get_transactions_handler, AdminCreditRequest, admin_add_credits_handler};
+use crate::web::handlers::payment_handlers::{
+    ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse,
+    get_transactions_handler, AdminCreditRequest, admin_add_credits_handler,
+    AdminCreditUsersResponse, AdminUserTransactionsResponse,
+    admin_credit_users_handler, admin_user_transactions_handler,
+};
 use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
 use crate::web::handlers::bd_handlers::{
     register_bd_handler, get_bd_me_handler, get_bd_customers_handler, attach_ref_handler,
@@ -469,6 +474,24 @@ pub async fn admin_delete_bd(
 
 // ── Referral routes ───────────────────────────────────────────────────────────
 
+/// GET /admin/credits/users — all tenants with their api0 credit balances (admin only)
+#[get("/admin/credits/users")]
+pub async fn admin_credit_users(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<AdminCreditUsersResponse>, Json<StandardErrorResponse>> {
+    admin_credit_users_handler(auth, db_config).await
+}
+
+/// GET /admin/credits/transactions/<email> — transaction log for one user (admin only)
+#[get("/admin/credits/transactions/<email>")]
+pub async fn admin_credit_user_transactions(
+    email: String,
+    auth: AuthenticatedUser,
+) -> Result<Json<AdminUserTransactionsResponse>, Json<StandardErrorResponse>> {
+    admin_user_transactions_handler(email, auth).await
+}
+
 /// POST /portfolio/generate — AI generates [[projects]] then compiles portfolio PDF
 #[post("/portfolio/generate", data = "<request>")]
 pub async fn generate_portfolio(
@@ -670,6 +693,8 @@ pub async fn start_web_server(
                 admin_bd_customers,
                 admin_delete_bd,
                 admin_credits,
+                admin_credit_users,
+                admin_credit_user_transactions,
                 get_output_file,
             ],
         )

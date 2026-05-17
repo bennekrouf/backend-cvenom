@@ -727,3 +727,133 @@ pub async fn admin_add_credits_handler(
         }
     }
 }
+
+// ── GET /admin/credits/users — all tenants with their api0 balances ────────────
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminUserCredit {
+    pub email: String,
+    pub tenant_name: String,
+    pub balance: i64,
+    pub joined_at: String,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminCreditUsersResponse {
+    pub success: bool,
+    pub total_users: usize,
+    pub total_credits: i64,
+    pub users: Vec<AdminUserCredit>,
+}
+
+pub async fn admin_credit_users_handler(
+    auth: AuthenticatedUser,
+    db_config: &rocket::State<crate::core::database::DatabaseConfig>,
+) -> Result<Json<AdminCreditUsersResponse>, Json<StandardErrorResponse>> {
+    if auth.email().to_lowercase() != ADMIN_EMAIL {
+        return Err(Json(StandardErrorResponse::new(
+            "Admin access required".to_string(),
+            "FORBIDDEN".to_string(),
+            vec![],
+            None,
+        )));
+    }
+
+    let pool = db_config.pool().map_err(|e| {
+        Json(StandardErrorResponse::new(
+            format!("Database error: {}", e),
+            "DB_ERROR".to_string(),
+            vec![],
+            None,
+        ))
+    })?;
+
+    // Fetch all active email-based tenants
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT email, tenant_name, created_at FROM tenants \
+         WHERE is_active = TRUE AND email IS NOT NULL ORDER BY created_at DESC",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(|e| {
+        Json(StandardErrorResponse::new(
+            format!("Failed to list tenants: {}", e),
+            "DB_ERROR".to_string(),
+            vec![],
+            None,
+        ))
+    })?;
+
+    // Fan out to api0 Store in parallel (bounded to 10 concurrent requests)
+    let mut users: Vec<AdminUserCredit> = Vec::with_capacity(rows.len());
+    // Process in chunks to avoid overwhelming the api0 store
+    for chunk in rows.chunks(10) {
+        let futures: Vec<_> = chunk.iter().map(|(email, tenant_name, joined_at)| {
+            let email = email.clone();
+            let tenant_name = tenant_name.clone();
+            let joined_at = joined_at.clone();
+            async move {
+                let balance = api0_get_balance(&email).await.unwrap_or(0);
+                AdminUserCredit { email, tenant_name, balance, joined_at }
+            }
+        }).collect();
+        let results = futures::future::join_all(futures).await;
+        users.extend(results);
+    }
+
+    // Sort by balance descending
+    users.sort_by(|a, b| b.balance.cmp(&a.balance));
+
+    let total_credits: i64 = users.iter().map(|u| u.balance).sum();
+
+    Ok(Json(AdminCreditUsersResponse {
+        success: true,
+        total_users: users.len(),
+        total_credits,
+        users,
+    }))
+}
+
+// ── GET /admin/credits/transactions/<email> — one user's transaction log ───────
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AdminUserTransactionsResponse {
+    pub success: bool,
+    pub email: String,
+    pub balance: i64,
+    pub transactions: Vec<serde_json::Value>,
+}
+
+pub async fn admin_user_transactions_handler(
+    email: String,
+    auth: AuthenticatedUser,
+) -> Result<Json<AdminUserTransactionsResponse>, Json<StandardErrorResponse>> {
+    if auth.email().to_lowercase() != ADMIN_EMAIL {
+        return Err(Json(StandardErrorResponse::new(
+            "Admin access required".to_string(),
+            "FORBIDDEN".to_string(),
+            vec![],
+            None,
+        )));
+    }
+
+    let decoded = percent_encoding::percent_decode_str(&email)
+        .decode_utf8()
+        .map(|s| s.to_string())
+        .unwrap_or(email);
+
+    let (balance, transactions) = tokio::join!(
+        api0_get_balance(&decoded),
+        api0_get_transactions(&decoded),
+    );
+
+    Ok(Json(AdminUserTransactionsResponse {
+        success: true,
+        email: decoded,
+        balance: balance.unwrap_or(0),
+        transactions: transactions.unwrap_or_default(),
+    }))
+}
