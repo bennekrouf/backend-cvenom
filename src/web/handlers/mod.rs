@@ -1,6 +1,7 @@
 // src/web/handlers/mod.rs - Fixed to include upload_picture_handler
 
 pub mod bd_handlers;
+pub mod model_handlers;
 pub mod cv_handlers;
 pub mod linkedin_handlers;
 pub mod payment_handlers;
@@ -9,6 +10,10 @@ pub mod referral_handlers;
 pub mod system_handlers;
 
 pub use bd_handlers::*;
+pub use model_handlers::{
+    get_model_config_handler, update_model_config_handler,
+    ModelConfigResponse, UpdateModelConfigResponse, UpdateModelConfigRequest,
+};
 pub use cv_handlers::*;
 pub use linkedin_handlers::*;
 pub use payment_handlers::*;

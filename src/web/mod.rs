@@ -31,6 +31,10 @@ use crate::web::handlers::payment_handlers::{
     admin_credit_users_handler, admin_user_transactions_handler,
 };
 use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
+use crate::web::handlers::model_handlers::{
+    get_model_config_handler, update_model_config_handler,
+    ModelConfigResponse, UpdateModelConfigResponse, UpdateModelConfigRequest,
+};
 use crate::web::handlers::bd_handlers::{
     register_bd_handler, get_bd_me_handler, get_bd_customers_handler, attach_ref_handler,
     get_bd_commissions_handler, admin_list_bd_handler, admin_bd_customers_handler,
@@ -506,6 +510,23 @@ pub async fn admin_delete_bd(
 
 // ── Referral routes ───────────────────────────────────────────────────────────
 
+/// GET /admin/models — read cv-import model config (admin only)
+#[get("/admin/models")]
+pub async fn admin_get_models(
+    auth: AuthenticatedUser,
+) -> Result<Json<ModelConfigResponse>, Json<StandardErrorResponse>> {
+    get_model_config_handler(auth).await
+}
+
+/// POST /admin/models — update cv-import model config and restart (admin only)
+#[post("/admin/models", data = "<body>")]
+pub async fn admin_update_models(
+    body: Json<UpdateModelConfigRequest>,
+    auth: AuthenticatedUser,
+) -> Result<Json<UpdateModelConfigResponse>, Json<StandardErrorResponse>> {
+    update_model_config_handler(body, auth).await
+}
+
 /// GET /admin/credits/users — all tenants with their api0 credit balances (admin only)
 #[get("/admin/credits/users")]
 pub async fn admin_credit_users(
@@ -724,6 +745,8 @@ pub async fn start_web_server(
                 bd_commissions,
                 admin_commissions,
                 admin_commissions_pay,
+                admin_get_models,
+                admin_update_models,
                 admin_list_bds,
                 admin_bd_customers,
                 admin_delete_bd,

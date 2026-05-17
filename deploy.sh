@@ -72,6 +72,11 @@ step "3/3 — Restart cvenom-backend"
 # =============================================================================
 
 PM2=$(which pm2)
+
+# Ensure cv-import config path is available to the backend
+sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" \
+  $PM2 set cvenom-backend CV_IMPORT_CONFIG_PATH "$APP_DIR/cv-import/config.yaml" 2>/dev/null || true
+
 sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" $PM2 restart cvenom-backend
 sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" $PM2 save
 
