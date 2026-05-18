@@ -47,6 +47,7 @@ use anyhow::Result;
 use graflog::app_log;
 
 use rocket::config::{Config, LogLevel};
+use rocket::data::ByteUnit;
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::form::Form;
 use rocket::http::Method;
@@ -807,6 +808,10 @@ pub async fn start_web_server(
     let config = Config {
         port,
         log_level: LogLevel::Off,
+        limits: rocket::data::Limits::default()
+            .limit("file", ByteUnit::Megabyte(10))
+            .limit("data-form", ByteUnit::Megabyte(10))
+            .limit("form", ByteUnit::Megabyte(10)),
         ..Config::default()
     };
 
