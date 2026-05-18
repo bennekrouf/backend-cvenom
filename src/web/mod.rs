@@ -93,7 +93,9 @@ impl Fairing for Cors {
 
         let allowed_origins = [
             "https://studio.cvenom.com",
+            "https://app.api0.ai",
             "http://localhost:4001",
+            "http://localhost:3000",
             "http://127.0.0.1:4001",
         ];
 
