@@ -517,6 +517,23 @@ pub async fn confirm_payment_handler(
                             commission = commission,
                             "BD commission recorded"
                         );
+
+                        if let Ok(Some(bd_email)) = sqlx::query_scalar::<_, String>(
+                            "SELECT email FROM business_developers WHERE referral_code = ?",
+                        )
+                        .bind(&code)
+                        .fetch_optional(pool)
+                        .await
+                        {
+                            crate::email::send_email(
+                                &bd_email,
+                                crate::email::EmailKind::CommissionEarned {
+                                    customer_email: user_email.to_string(),
+                                    amount_dollars: amount_dollars as f64,
+                                    commission_dollars: commission,
+                                },
+                            );
+                        }
                     }
                 }
             }
@@ -773,6 +790,15 @@ pub async fn admin_add_credits_handler(
                 action = %action_type,
                 "Admin credit adjustment applied"
             );
+            crate::email::send_email(
+                &email,
+                crate::email::EmailKind::CreditAdjustment {
+                    amount: request.amount,
+                    reason: request.description.clone().unwrap_or_else(|| action_type.to_string()),
+                    new_balance,
+                },
+            );
+
             Ok(Json(AdminCreditResponse {
                 success: true,
                 email,

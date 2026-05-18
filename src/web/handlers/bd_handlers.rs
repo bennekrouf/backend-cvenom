@@ -133,6 +133,14 @@ pub async fn register_bd_handler(
         .map_err(|e| pool_err(e))?;
 
         app_log!(info, bd_email = %email, code = %code, "Business developer registered");
+        crate::email::send_email(
+            &email,
+            crate::email::EmailKind::BdWelcome {
+                name: display_name.clone(),
+                referral_code: code.clone(),
+                commission_rate: 0.30,
+            },
+        );
 
         let row: (String, String, f64, String) = sqlx::query_as(
             "SELECT referral_code, name, commission_rate, created_at \
@@ -618,6 +626,22 @@ pub async fn admin_mark_paid_handler(
         amount = total,
         "Admin marked BD commissions as paid"
     );
+
+    if let Ok(Some(bd_email)) = sqlx::query_scalar::<_, String>(
+        "SELECT email FROM business_developers WHERE referral_code = ?",
+    )
+    .bind(&body.referral_code)
+    .fetch_optional(pool)
+    .await
+    {
+        crate::email::send_email(
+            &bd_email,
+            crate::email::EmailKind::CommissionPaid {
+                total_paid: total,
+                rows: result.rows_affected(),
+            },
+        );
+    }
 
     Ok(Json(MarkPaidResponse {
         success: true,

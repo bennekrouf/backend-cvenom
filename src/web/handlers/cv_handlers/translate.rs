@@ -145,6 +145,15 @@ pub async fn translate_cv_handler(
                 status: "success".to_string(),
             };
 
+            crate::email::send_email(
+                &user.email,
+                crate::email::EmailKind::TranslationReady {
+                    profile: request.data.profile_name.clone(),
+                    source_lang: "original".into(),
+                    target_lang: request.data.target_lang.clone(),
+                },
+            );
+
             Ok(Json(DataResponse::success(
                 format!(
                     "Translation to {} completed successfully",

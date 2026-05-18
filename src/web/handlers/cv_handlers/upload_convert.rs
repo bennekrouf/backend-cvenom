@@ -262,6 +262,14 @@ pub async fn upload_and_convert_cv_handler(
                 format!("Generate CV PDF for {}", profile_name),
             ];
 
+            crate::email::send_email(
+                &user.email,
+                crate::email::EmailKind::CvImported {
+                    profile: profile_name.to_string(),
+                    lang: "auto".into(),
+                },
+            );
+
             let response = ActionResponse::success(
                 format!(
                     "CV successfully converted and profile '{}' created",
@@ -416,6 +424,14 @@ pub async fn import_text_cv_handler(
                 format!("Generate CV PDF for {}", normalized_profile),
                 format!("Translate {} to another language", normalized_profile),
             ];
+
+            crate::email::send_email(
+                &user.email,
+                crate::email::EmailKind::CvImported {
+                    profile: normalized_profile.clone(),
+                    lang: "auto".into(),
+                },
+            );
 
             Ok(Json(
                 ActionResponse::success(

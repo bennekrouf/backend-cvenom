@@ -165,6 +165,17 @@ pub async fn optimize_cv_handler(
     )
     .await?;
 
+    crate::email::send_email(
+        &auth.user().email,
+        crate::email::EmailKind::AtsResults {
+            profile: profile.clone(),
+            job_title: response.job_title.clone(),
+            company: response.company_name.clone(),
+            before_score: response.before_score.map(|s| s as u8),
+            after_score: response.after_score.map(|s| s as u8),
+        },
+    );
+
     Ok(Json(DataResponse::success(
         format!(
             "CV optimized for \"{}\" at {}",
