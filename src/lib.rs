@@ -7,6 +7,7 @@ pub use web::start_web_server;
 pub mod auth;
 pub mod config;
 pub mod core; // Unified core module
+pub mod email;
 pub mod environment;
 pub mod font_validator;
 pub mod generator;

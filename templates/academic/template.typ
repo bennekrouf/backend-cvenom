@@ -315,7 +315,7 @@
   show list: set text(size: 10pt)
   show "C++": box
 
-  set text(font: ("Arial", "Helvetica"), ligatures: false)
+  set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
   set par(justify: true)
   set page(
     margin: (top: 1cm, left: 1.8cm, bottom: 1.5cm, right: 1.8cm),

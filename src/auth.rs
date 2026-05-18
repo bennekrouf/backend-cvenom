@@ -405,12 +405,21 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                     .send()
                     .await
                 {
-                    Ok(_) => app_log!(
-                        info,
-                        "Granted {} welcome credits to new user: {}",
-                        WELCOME_CREDITS,
-                        firebase_user.email
-                    ),
+                    Ok(_) => {
+                        app_log!(
+                            info,
+                            "Granted {} welcome credits to new user: {}",
+                            WELCOME_CREDITS,
+                            firebase_user.email
+                        );
+                        crate::email::send_email(
+                            &firebase_user.email,
+                            crate::email::EmailKind::Welcome {
+                                name: firebase_user.email.split('@').next().unwrap_or("there").to_string(),
+                                credits: WELCOME_CREDITS,
+                            },
+                        );
+                    }
                     Err(e) => app_log!(
                         error,
                         "Failed to grant welcome credits to {}: {}",

@@ -166,11 +166,21 @@ pub async fn generate_portfolio_handler(
 
                 app_log!(info, "Portfolio generated: {}", filename);
 
+                let download_url = format!("{}/outputs/{}", base_url, filename);
+                crate::email::send_email(
+                    &auth.user().email,
+                    crate::email::EmailKind::PortfolioReady {
+                        profile: normalized_profile.clone(),
+                        filename: filename.clone(),
+                        download_url: download_url.clone(),
+                    },
+                );
+
                 Ok(Json(GeneratePdfResponse {
                     response_type: ResponseType::File,
                     success: true,
                     message: "Portfolio generated successfully".to_string(),
-                    download_url: format!("{}/outputs/{}", base_url, filename),
+                    download_url,
                     filename,
                     profile: normalized_profile,
                     conversation_id,

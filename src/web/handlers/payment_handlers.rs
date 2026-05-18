@@ -299,6 +299,15 @@ pub async fn check_and_deduct_credits(
         ))
     })?;
 
+    let new_balance = balance - cost;
+    const LOW_CREDIT_THRESHOLD: i64 = 10;
+    if new_balance <= LOW_CREDIT_THRESHOLD && new_balance + cost > LOW_CREDIT_THRESHOLD {
+        crate::email::send_email(
+            user_email,
+            crate::email::EmailKind::LowCredits { balance: new_balance },
+        );
+    }
+
     Ok(())
 }
 
@@ -511,6 +520,15 @@ pub async fn confirm_payment_handler(
                     }
                 }
             }
+
+            crate::email::send_email(
+                user_email,
+                crate::email::EmailKind::PaymentReceipt {
+                    amount_cents: amount_dollars * 100,
+                    credits_added: credits_to_add,
+                    new_balance,
+                },
+            );
 
             Ok(Json(ConfirmPaymentResponse {
                 success: true,

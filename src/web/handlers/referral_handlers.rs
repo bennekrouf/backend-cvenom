@@ -230,6 +230,21 @@ pub async fn credit_referral(
     .execute(&pool)
     .await;
 
+    crate::email::send_email(
+        &referrer_email,
+        crate::email::EmailKind::ReferralReward {
+            credits_earned: 50,
+            referral_type: "referrer".into(),
+        },
+    );
+    crate::email::send_email(
+        &referred_email,
+        crate::email::EmailKind::ReferralReward {
+            credits_earned: 25,
+            referral_type: "welcome bonus".into(),
+        },
+    );
+
     app_log!(
         info,
         referrer = %referrer_email,

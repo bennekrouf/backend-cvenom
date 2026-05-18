@@ -23,27 +23,3 @@
   }
 }
 
-// ── Technical Skills ──────────────────────────────────────────────────────────
-#if "skills" in details {
-  section(get_text("skills"))
-  show_skills(details.skills)
-  v(0.5em)
-}
-
-// ── Languages ─────────────────────────────────────────────────────────────────
-#if "languages" in details {
-  section(get_text("languages"))
-  let lvl = details.languages
-  let items = ()
-  if "native"       in lvl { for l in lvl.native       { items.push(l + " — Native") } }
-  if "fluent"       in lvl { for l in lvl.fluent       { items.push(l + " — Fluent") } }
-  if "intermediate" in lvl { for l in lvl.intermediate { items.push(l + " — Intermediate") } }
-  if "basic"        in lvl { for l in lvl.basic        { items.push(l + " — Basic") } }
-
-  grid(
-    columns: (1fr, 1fr, 1fr),
-    column-gutter: 1em,
-    row-gutter: 0.4em,
-    ..items.map(l => text(size: 9.5pt, l)),
-  )
-}

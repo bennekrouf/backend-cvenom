@@ -296,7 +296,7 @@
   show link: set text(fill: accent)
   show "C++": box
 
-  set text(font: ("Arial", "Helvetica", "Liberation Sans"), size: 10pt, ligatures: false)
+  set text(font: ("Arial", "Helvetica", "Liberation Sans", "DejaVu Sans"), size: 10pt, ligatures: false)
   set par(justify: true, leading: 0.65em)
   set page(
     paper: "a4",

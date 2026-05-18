@@ -187,6 +187,15 @@ pub async fn generate_cv_handler(
                         .unwrap_or_else(|_| "https://api.cvenom.com".to_string());
                     let pdf_url = format!("{}/outputs/{}", base_url, filename);
 
+                    crate::email::send_email(
+                        &user.email,
+                        crate::email::EmailKind::CvReady {
+                            profile: normalized_profile.clone(),
+                            filename: filename.clone(),
+                            download_url: pdf_url.clone(),
+                        },
+                    );
+
                     Ok(Json(GeneratePdfResponse {
                         response_type: ResponseType::File,
                         success: true,

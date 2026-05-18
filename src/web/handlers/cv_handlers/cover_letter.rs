@@ -140,6 +140,12 @@ pub async fn cover_letter_handler(
                 user.email,
                 tenant.tenant_name
             );
+            crate::email::send_email(
+                &user.email,
+                crate::email::EmailKind::CoverLetterReady {
+                    profile: data.profile.clone(),
+                },
+            );
             Ok(Json(DataResponse::success(
                 "Cover letter generated successfully".to_string(),
                 CoverLetterResult {

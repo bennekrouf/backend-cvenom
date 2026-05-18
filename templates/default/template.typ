@@ -485,7 +485,7 @@
   show "C++": box
 
   // custom set rules
-set text(font: ("Arial", "Helvetica"), ligatures: false)
+set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
   set par(justify: true)
 
   set page(
