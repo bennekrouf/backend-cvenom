@@ -21,7 +21,7 @@ use crate::web::handlers::{
 use crate::web::handlers::cv_handlers::GeneratePortfolioRequest;
 use crate::web::handlers::cv_handlers::ImportTextRequest;
 use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
-use crate::core::database::{get_tenant_folder_path, TenantRepository};
+use crate::core::database::{get_tenant_folder_path, TenantRepository, AppConfigRepository, SmtpConfigRow};
 use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{
@@ -467,6 +467,94 @@ pub async fn admin_announce_template(
     Ok(Json(serde_json::json!({ "success": true, "sent_to": count, "template_name": template_name })))
 }
 
+// ── SMTP config admin endpoints ───────────────────────────────────────────────
+
+#[derive(serde::Serialize)]
+pub struct SmtpConfigResponse {
+    pub success:    bool,
+    pub smtp_host:  Option<String>,
+    pub smtp_port:  Option<u16>,
+    pub smtp_user:  Option<String>,
+    pub email_from: Option<String>,
+    /// Always masked — never returned in plaintext
+    pub has_password: bool,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct SmtpConfigRequest {
+    pub smtp_host:     Option<String>,
+    pub smtp_port:     Option<u16>,
+    pub smtp_user:     Option<String>,
+    pub smtp_password: Option<String>,
+    pub email_from:    Option<String>,
+}
+
+/// GET /admin/smtp-config — return current SMTP config (password masked).
+#[get("/admin/smtp-config")]
+pub async fn admin_get_smtp_config(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<SmtpConfigResponse>, Json<StandardErrorResponse>> {
+    const ADMIN_EMAIL: &str = "mohamed.bennekrouf@gmail.com";
+    if auth.email().to_lowercase() != ADMIN_EMAIL {
+        return Err(Json(StandardErrorResponse::new("Unauthorized".into(), "UNAUTHORIZED".into(), vec![], None)));
+    }
+
+    let pool = db_config.pool().map_err(|e| Json(StandardErrorResponse::new(format!("{e}"), "INTERNAL_ERROR".into(), vec![], None)))?;
+    let repo = AppConfigRepository::new(pool);
+    let row = repo.get_smtp_config().await.map_err(|e| Json(StandardErrorResponse::new(format!("{e}"), "INTERNAL_ERROR".into(), vec![], None)))?;
+
+    Ok(Json(SmtpConfigResponse {
+        success:      true,
+        smtp_host:    row.smtp_host,
+        smtp_port:    row.smtp_port,
+        smtp_user:    row.smtp_user,
+        email_from:   row.email_from,
+        has_password: row.smtp_password.is_some(),
+    }))
+}
+
+/// PUT /admin/smtp-config — save new SMTP config and reload in-memory.
+#[put("/admin/smtp-config", data = "<body>")]
+pub async fn admin_put_smtp_config(
+    body: Json<SmtpConfigRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    const ADMIN_EMAIL: &str = "mohamed.bennekrouf@gmail.com";
+    if auth.email().to_lowercase() != ADMIN_EMAIL {
+        return Err(Json(StandardErrorResponse::new("Unauthorized".into(), "UNAUTHORIZED".into(), vec![], None)));
+    }
+
+    let pool = db_config.pool().map_err(|e| Json(StandardErrorResponse::new(format!("{e}"), "INTERNAL_ERROR".into(), vec![], None)))?;
+    let repo = AppConfigRepository::new(pool);
+
+    let row = SmtpConfigRow {
+        smtp_host:     body.smtp_host.clone(),
+        smtp_port:     body.smtp_port,
+        smtp_user:     body.smtp_user.clone(),
+        smtp_password: body.smtp_password.clone(),
+        email_from:    body.email_from.clone(),
+    };
+    repo.set_smtp_config(&row).await.map_err(|e| Json(StandardErrorResponse::new(format!("{e}"), "INTERNAL_ERROR".into(), vec![], None)))?;
+
+    // Reload in-memory config from the full DB row so we merge with existing values.
+    let updated = repo.get_smtp_config().await.map_err(|e| Json(StandardErrorResponse::new(format!("{e}"), "INTERNAL_ERROR".into(), vec![], None)))?;
+    if let (Some(host), Some(user), Some(password)) = (&updated.smtp_host, &updated.smtp_user, &updated.smtp_password) {
+        crate::email::reload_smtp_config(crate::email::SmtpConfig {
+            host:      host.clone(),
+            port:      updated.smtp_port.unwrap_or(587),
+            user:      user.clone(),
+            password:  password.clone(),
+            from_addr: updated.email_from.clone().unwrap_or_else(|| user.clone()),
+        });
+        app_log!(info, "[admin] SMTP config updated and reloaded (host: {})", host);
+    }
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
 // ── Business Developer routes ─────────────────────────────────────────────────
 
 /// POST /bd/register — register as a BD (idempotent)
@@ -679,6 +767,30 @@ pub async fn start_web_server(
         return Err(e);
     }
 
+    // Load SMTP config from DB (overrides env vars if present).
+    if let Ok(pool) = db_config.pool() {
+        let repo = AppConfigRepository::new(pool);
+        match repo.get_smtp_config().await {
+            Ok(row) => {
+                if let (Some(host), Some(user), Some(password)) =
+                    (&row.smtp_host, &row.smtp_user, &row.smtp_password)
+                {
+                    crate::email::init_smtp_config(crate::email::SmtpConfig {
+                        host:      host.clone(),
+                        port:      row.smtp_port.unwrap_or(587),
+                        user:      user.clone(),
+                        password:  password.clone(),
+                        from_addr: row.email_from.clone().unwrap_or_else(|| user.clone()),
+                    });
+                    app_log!(info, "SMTP config loaded from DB (host: {})", host);
+                } else {
+                    app_log!(info, "SMTP config not in DB — using env vars");
+                }
+            }
+            Err(e) => app_log!(warn, "Failed to load SMTP config from DB: {}", e),
+        }
+    }
+
     let google_project_id = std::env::var("CVENOM_GOOGLE_PROJECT_ID")
         .expect("CVENOM_GOOGLE_PROJECT_ID env var is required");
     let auth_config = AuthConfig::new(google_project_id);
@@ -864,6 +976,8 @@ pub async fn start_web_server(
                 admin_credit_users,
                 admin_credit_user_transactions,
                 admin_announce_template,
+                admin_get_smtp_config,
+                admin_put_smtp_config,
                 get_output_file,
             ],
         )

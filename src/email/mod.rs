@@ -4,6 +4,7 @@ mod sender;
 mod templates;
 
 pub use templates::EmailKind;
+pub use sender::{SmtpConfig, init_smtp_config, reload_smtp_config, current_smtp_config};
 
 /// Fire-and-forget: spawn email delivery on a background task.
 pub fn send_email(to: &str, kind: EmailKind) {
