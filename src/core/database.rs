@@ -96,18 +96,6 @@ impl Database {
             .execute(&self.pool)
             .await;
 
-        // App config key-value store (SMTP settings, future config)
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS app_config (
-                key   TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            );
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
         // Referrals table
         sqlx::query(
             r#"
@@ -308,18 +296,6 @@ impl DatabaseConfig {
         let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN winback_sent_at TEXT")
             .execute(pool)
             .await;
-
-        // App config key-value store
-        sqlx::query(
-            r#"
-        CREATE TABLE IF NOT EXISTS app_config (
-            key   TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        );
-        "#,
-        )
-        .execute(pool)
-        .await?;
 
         // Referrals table
         sqlx::query(
@@ -896,72 +872,3 @@ pub fn get_tenant_folder_path(
     tenant_data_path.join(tenant).join(user_folder)
 }
 
-// ===== App Config Repository =====
-
-pub struct AppConfigRepository<'a> {
-    pool: &'a SqlitePool,
-}
-
-impl<'a> AppConfigRepository<'a> {
-    pub fn new(pool: &'a SqlitePool) -> Self {
-        Self { pool }
-    }
-
-    pub async fn get(&self, key: &str) -> Result<Option<String>> {
-        let row = sqlx::query_as::<_, (String,)>(
-            "SELECT value FROM app_config WHERE key = ?",
-        )
-        .bind(key)
-        .fetch_optional(self.pool)
-        .await?;
-        Ok(row.map(|(v,)| v))
-    }
-
-    pub async fn set(&self, key: &str, value: &str) -> Result<()> {
-        sqlx::query(
-            "INSERT INTO app_config (key, value) VALUES (?, ?)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        )
-        .bind(key)
-        .bind(value)
-        .execute(self.pool)
-        .await?;
-        Ok(())
-    }
-
-    /// Load all SMTP-related keys at once. Returns None for any missing key.
-    pub async fn get_smtp_config(&self) -> Result<SmtpConfigRow> {
-        let keys = ["smtp_host", "smtp_port", "smtp_user", "smtp_password", "email_from"];
-        let mut map = std::collections::HashMap::new();
-        for key in &keys {
-            if let Some(v) = self.get(key).await? {
-                map.insert(*key, v);
-            }
-        }
-        Ok(SmtpConfigRow {
-            smtp_host: map.remove("smtp_host"),
-            smtp_port: map.remove("smtp_port").and_then(|v| v.parse().ok()),
-            smtp_user: map.remove("smtp_user"),
-            smtp_password: map.remove("smtp_password"),
-            email_from: map.remove("email_from"),
-        })
-    }
-
-    pub async fn set_smtp_config(&self, cfg: &SmtpConfigRow) -> Result<()> {
-        if let Some(v) = &cfg.smtp_host     { self.set("smtp_host", v).await?; }
-        if let Some(v) = cfg.smtp_port      { self.set("smtp_port", &v.to_string()).await?; }
-        if let Some(v) = &cfg.smtp_user     { self.set("smtp_user", v).await?; }
-        if let Some(v) = &cfg.smtp_password { self.set("smtp_password", v).await?; }
-        if let Some(v) = &cfg.email_from    { self.set("email_from", v).await?; }
-        Ok(())
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct SmtpConfigRow {
-    pub smtp_host:     Option<String>,
-    pub smtp_port:     Option<u16>,
-    pub smtp_user:     Option<String>,
-    pub smtp_password: Option<String>,
-    pub email_from:    Option<String>,
-}
