@@ -85,6 +85,17 @@ impl Database {
             .execute(&self.pool)
             .await;
 
+        // Idempotent: Tier-3 engagement tracking columns
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN first_cv_at TEXT")
+            .execute(&self.pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN nudge_sent_at TEXT")
+            .execute(&self.pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN winback_sent_at TEXT")
+            .execute(&self.pool)
+            .await;
+
         // Referrals table
         sqlx::query(
             r#"
@@ -272,6 +283,17 @@ impl DatabaseConfig {
 
         // Idempotent: add last_seen_at if not present (ignored if column already exists)
         let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
+            .execute(pool)
+            .await;
+
+        // Idempotent: Tier-3 engagement tracking columns
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN first_cv_at TEXT")
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN nudge_sent_at TEXT")
+            .execute(pool)
+            .await;
+        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN winback_sent_at TEXT")
             .execute(pool)
             .await;
 
@@ -523,6 +545,93 @@ impl<'a> TenantRepository<'a> {
         .fetch_all(self.pool)
         .await?;
         Ok(tenants)
+    }
+
+    // ── Tier-3 engagement helpers ─────────────────────────────────────────────
+
+    /// Mark first_cv_at = now for a tenant (idempotent — only sets if currently NULL).
+    pub async fn mark_first_cv(&self, email: &str) -> Result<()> {
+        sqlx::query(
+            "UPDATE tenants SET first_cv_at = ? WHERE email = ? AND first_cv_at IS NULL",
+        )
+        .bind(Utc::now())
+        .bind(email)
+        .execute(self.pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Email tenants that signed up > 7 days ago, never generated a CV, and haven't been nudged yet.
+    pub async fn find_nudge_candidates(&self) -> Result<Vec<(i64, String, String)>> {
+        let cutoff = Utc::now() - chrono::Duration::days(7);
+        let rows = sqlx::query_as::<_, (i64, String, String)>(
+            r#"
+            SELECT id, email, tenant_name
+            FROM tenants
+            WHERE is_active = TRUE
+              AND email IS NOT NULL
+              AND domain IS NULL
+              AND created_at < ?
+              AND first_cv_at IS NULL
+              AND nudge_sent_at IS NULL
+            "#,
+        )
+        .bind(cutoff)
+        .fetch_all(self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn mark_nudge_sent(&self, email: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET nudge_sent_at = ? WHERE email = ?")
+            .bind(Utc::now())
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Email tenants inactive for > 30 days that haven't received a win-back email yet.
+    pub async fn find_winback_candidates(&self) -> Result<Vec<(i64, String, String)>> {
+        let cutoff = Utc::now() - chrono::Duration::days(30);
+        let rows = sqlx::query_as::<_, (i64, String, String)>(
+            r#"
+            SELECT id, email, tenant_name
+            FROM tenants
+            WHERE is_active = TRUE
+              AND email IS NOT NULL
+              AND domain IS NULL
+              AND COALESCE(last_seen_at, created_at) < ?
+              AND winback_sent_at IS NULL
+            "#,
+        )
+        .bind(cutoff)
+        .fetch_all(self.pool)
+        .await?;
+        Ok(rows)
+    }
+
+    pub async fn mark_winback_sent(&self, email: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET winback_sent_at = ? WHERE email = ?")
+            .bind(Utc::now())
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Return (id, email, tenant_name) for all active email tenants — used for broadcasts.
+    pub async fn list_active_email_tenants(&self) -> Result<Vec<(i64, String, String)>> {
+        let rows = sqlx::query_as::<_, (i64, String, String)>(
+            r#"
+            SELECT id, email, tenant_name
+            FROM tenants
+            WHERE is_active = TRUE AND email IS NOT NULL AND domain IS NULL
+            "#,
+        )
+        .fetch_all(self.pool)
+        .await?;
+        Ok(rows)
     }
 
     /// Deactivate tenant by email or domain

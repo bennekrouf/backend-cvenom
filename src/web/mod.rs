@@ -59,6 +59,14 @@ pub use types::*;
 mod cors_utils;
 use cors_utils::universal_options_handler;
 
+use rocket::serde::Deserialize;
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AnnounceTemplateRequest {
+    pub template_name: String,
+}
+
 // CORS Fairing
 pub struct Cors;
 
@@ -409,6 +417,56 @@ pub async fn admin_credits(
     admin_add_credits_handler(request, auth.email(), db_config).await
 }
 
+/// POST /admin/templates/announce — broadcast a "new template" email to all active users (admin only).
+/// Body: { "template_name": "Modern Minimal" }
+#[post("/admin/templates/announce", data = "<body>")]
+pub async fn admin_announce_template(
+    body: Json<AnnounceTemplateRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    const ADMIN_EMAIL: &str = "mohamed.bennekrouf@gmail.com";
+    if auth.email().to_lowercase() != ADMIN_EMAIL {
+        return Err(Json(crate::web::types::StandardErrorResponse::new(
+            "Unauthorized".to_string(),
+            "UNAUTHORIZED".to_string(),
+            vec![],
+            None,
+        )));
+    }
+
+    let pool = db_config.pool().map_err(|e| {
+        Json(crate::web::types::StandardErrorResponse::new(
+            format!("DB error: {e}"),
+            "INTERNAL_ERROR".to_string(),
+            vec![],
+            None,
+        ))
+    })?;
+
+    let repo = TenantRepository::new(pool);
+    let tenants = repo.list_active_email_tenants().await.map_err(|e| {
+        Json(crate::web::types::StandardErrorResponse::new(
+            format!("DB query failed: {e}"),
+            "INTERNAL_ERROR".to_string(),
+            vec![],
+            None,
+        ))
+    })?;
+
+    let count = tenants.len();
+    let template_name = body.template_name.clone();
+    for (_id, email, _name) in tenants {
+        crate::email::send_email(
+            &email,
+            crate::email::EmailKind::NewTemplate { template_name: template_name.clone() },
+        );
+    }
+
+    app_log!(info, "[admin] New-template broadcast sent to {} users: {}", count, template_name);
+    Ok(Json(serde_json::json!({ "success": true, "sent_to": count, "template_name": template_name })))
+}
+
 // ── Business Developer routes ─────────────────────────────────────────────────
 
 /// POST /bd/register — register as a BD (idempotent)
@@ -683,6 +741,58 @@ pub async fn start_web_server(
         });
     }
 
+    // ── Tier-3 engagement email background task ───────────────────────────────
+    // Runs once per day. Sends nudge emails (7 days, no CV) and win-back emails (30 days inactive).
+    if let Ok(engage_pool) = db_config.pool().map(|p| p.clone()) {
+        tokio::spawn(async move {
+            // 10-minute initial delay so the server is fully up before the first run.
+            tokio::time::sleep(std::time::Duration::from_secs(600)).await;
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(24 * 3600));
+            loop {
+                interval.tick().await;
+                let repo = TenantRepository::new(&engage_pool);
+
+                // Nudge: signed up > 7 days ago, never generated a CV
+                match repo.find_nudge_candidates().await {
+                    Ok(candidates) => {
+                        app_log!(info, "[engagement] Nudge candidates: {}", candidates.len());
+                        for (_id, email, name) in candidates {
+                            // Fetch current credit balance (best-effort — omit on error)
+                            let credits = crate::web::handlers::payment_handlers::api0_get_balance(&email)
+                                .await
+                                .unwrap_or(0);
+                            crate::email::send_email(
+                                &email,
+                                crate::email::EmailKind::Nudge { name, credits },
+                            );
+                            if let Err(e) = repo.mark_nudge_sent(&email).await {
+                                app_log!(error, "[engagement] mark_nudge_sent failed for {}: {}", email, e);
+                            }
+                        }
+                    }
+                    Err(e) => app_log!(error, "[engagement] find_nudge_candidates failed: {}", e),
+                }
+
+                // Win-back: inactive for > 30 days, not yet emailed
+                match repo.find_winback_candidates().await {
+                    Ok(candidates) => {
+                        app_log!(info, "[engagement] Win-back candidates: {}", candidates.len());
+                        for (_id, email, name) in candidates {
+                            crate::email::send_email(
+                                &email,
+                                crate::email::EmailKind::WinBack { name },
+                            );
+                            if let Err(e) = repo.mark_winback_sent(&email).await {
+                                app_log!(error, "[engagement] mark_winback_sent failed for {}: {}", email, e);
+                            }
+                        }
+                    }
+                    Err(e) => app_log!(error, "[engagement] find_winback_candidates failed: {}", e),
+                }
+            }
+        });
+    }
+
     app_log!(info, "Starting CVenom Multi-tenant API server");
     app_log!(info, "Database: {}", db_config.database_path.display());
     app_log!(
@@ -753,6 +863,7 @@ pub async fn start_web_server(
                 admin_credits,
                 admin_credit_users,
                 admin_credit_user_transactions,
+                admin_announce_template,
                 get_output_file,
             ],
         )

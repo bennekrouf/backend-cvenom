@@ -22,7 +22,7 @@ pub async fn generate_cv_handler(
     request: Json<StandardRequest<GenerateRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    _db_config: &State<DatabaseConfig>,
+    db_config: &State<DatabaseConfig>,
 ) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
@@ -195,6 +195,18 @@ pub async fn generate_cv_handler(
                             download_url: pdf_url.clone(),
                         },
                     );
+
+                    // Track first CV generation for the Tier-3 nudge scheduler.
+                    if let Ok(pool) = db_config.pool() {
+                        let email = user.email.clone();
+                        let pool = pool.clone();
+                        tokio::spawn(async move {
+                            let repo = crate::core::database::TenantRepository::new(&pool);
+                            if let Err(e) = repo.mark_first_cv(&email).await {
+                                graflog::app_log!(warn, "mark_first_cv failed for {}: {}", email, e);
+                            }
+                        });
+                    }
 
                     Ok(Json(GeneratePdfResponse {
                         response_type: ResponseType::File,
