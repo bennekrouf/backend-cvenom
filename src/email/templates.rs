@@ -66,7 +66,7 @@ impl EmailKind {
             Self::BdWelcome { .. } => "Welcome to the CVenom Partner Program!".into(),
             Self::CommissionEarned { commission_dollars, .. } => format!("Commission earned: ${:.2}", commission_dollars),
             Self::CommissionPaid { total_paid, .. } => format!("Commission payout: ${:.2}", total_paid),
-            Self::Nudge { .. } => "Your CV is waiting — get started!".into(),
+            Self::Nudge { credits, .. } => if *credits > 0 { format!("You have {credits} credits — create your first CV!") } else { "Create your first CV with CVenom".into() },
             Self::WinBack { .. } => "We miss you! Here's what's new on CVenom".into(),
             Self::NewTemplate { template_name } => format!("New template available: {}", template_name),
         }
@@ -217,10 +217,16 @@ impl EmailKind {
             ),
 
             // ── Tier 3 ───────────────────────────────────────────────────────
-            Self::Nudge { name, credits } => format!(
-                r#"<h1>Your CV is Waiting, {name}!</h1>
+            Self::Nudge { name, credits } => {
+                let credits_line = if *credits > 0 {
+                    format!("<p>You still have <strong>{credits} credits</strong> — that's enough for several CV generations.</p>")
+                } else {
+                    "<p>Your first CV generation is just a few clicks away.</p>".to_string()
+                };
+                format!(
+                    r#"<h1>Your CV is Waiting, {name}!</h1>
 <p>You signed up recently but haven't generated your first CV yet.</p>
-<p>You still have <strong>{credits} credits</strong> — that's enough for several CV generations.</p>
+{credits_line}
 <h2>Get started in 3 steps:</h2>
 <ol>
   <li>Upload your existing CV or paste your information</li>
@@ -228,7 +234,8 @@ impl EmailKind {
   <li>Generate and download your polished PDF</li>
 </ol>
 <p><a href="https://studio.cvenom.com" style="display:inline-block;padding:10px 20px;background:#6366F1;color:white;text-decoration:none;border-radius:6px">Create Your CV</a></p>"#
-            ),
+                )
+            },
 
             Self::WinBack { name } => format!(
                 r#"<h1>We Miss You, {name}!</h1>

@@ -761,10 +761,14 @@ pub async fn start_web_server(
                     Ok(candidates) => {
                         app_log!(info, "[engagement] Nudge candidates: {}", candidates.len());
                         for (_id, email, name) in candidates {
-                            // Fetch current credit balance (best-effort — omit on error)
-                            let credits = crate::web::handlers::payment_handlers::api0_get_balance(&email)
-                                .await
-                                .unwrap_or(0);
+                            let credits = match crate::web::handlers::payment_handlers::api0_get_balance(&email).await {
+                                Ok(b) => b,
+                                Err(e) => {
+                                    app_log!(warn, "[engagement] balance fetch failed for {}: {}", email, e);
+                                    0
+                                }
+                            };
+                            app_log!(info, "[engagement] Nudge {} credits={}", email, credits);
                             crate::email::send_email(
                                 &email,
                                 crate::email::EmailKind::Nudge { name, credits },
