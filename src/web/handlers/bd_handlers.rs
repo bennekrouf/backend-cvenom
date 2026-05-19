@@ -550,8 +550,8 @@ pub async fn admin_list_commissions_handler(
     let groups: Vec<(String, String, String, i64, f64, f64)> = sqlx::query_as(
         "SELECT b.referral_code, b.name, b.email,
                 COUNT(CASE WHEN c.status = 'pending' THEN 1 END),
-                COALESCE(SUM(CASE WHEN c.status = 'pending' THEN c.commission_dollars ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN c.status = 'paid'    THEN c.commission_dollars ELSE 0 END), 0)
+                COALESCE(SUM(CASE WHEN c.status = 'pending' THEN c.commission_dollars ELSE 0.0 END), 0.0),
+                COALESCE(SUM(CASE WHEN c.status = 'paid'    THEN c.commission_dollars ELSE 0.0 END), 0.0)
          FROM business_developers b
          LEFT JOIN bd_commissions c ON c.referral_code = b.referral_code
          GROUP BY b.referral_code
@@ -601,7 +601,7 @@ pub async fn admin_mark_paid_handler(
     let pool = db_config.pool().map_err(pool_err)?;
 
     let total: f64 = sqlx::query_scalar(
-        "SELECT COALESCE(SUM(commission_dollars), 0) FROM bd_commissions \
+        "SELECT COALESCE(SUM(commission_dollars), 0.0) FROM bd_commissions \
          WHERE referral_code = ? AND status = 'pending'",
     )
     .bind(&body.referral_code)
