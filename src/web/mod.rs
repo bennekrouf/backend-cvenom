@@ -819,7 +819,34 @@ pub async fn start_web_server(
         ..Config::default()
     };
 
-    let _rocket = rocket::custom(config)
+    let _rocket = build_rocket(server_config, auth_config, db_config, cv_service_url, port)
+        .launch()
+        .await;
+
+    app_log!(info, "Server shutting down");
+    Ok(())
+}
+
+/// Build the Rocket instance from already-initialised state.
+/// Called by `start_web_server` in production and by tests with mocked state.
+pub fn build_rocket(
+    server_config: ServerConfig,
+    auth_config: AuthConfig,
+    db_config: DatabaseConfig,
+    cv_service_url: String,
+    port: u16,
+) -> rocket::Rocket<rocket::Build> {
+    let config = Config {
+        port,
+        log_level: LogLevel::Off,
+        limits: rocket::data::Limits::default()
+            .limit("file", ByteUnit::Megabyte(10))
+            .limit("data-form", ByteUnit::Megabyte(10))
+            .limit("form", ByteUnit::Megabyte(10)),
+        ..Config::default()
+    };
+
+    rocket::custom(config)
         .configure(rocket::Config::figment().merge(("port", port)))
         .attach(Cors)
         .manage(server_config)
@@ -879,13 +906,5 @@ pub async fn start_web_server(
                 get_output_file,
             ],
         )
-        .launch()
-        .await;
-
-    app_log!(
-        info,
-        "Server successfully started and bound to port: {}",
-        port
-    );
-    Ok(())
 }
+
