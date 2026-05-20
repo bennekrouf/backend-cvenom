@@ -419,6 +419,13 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                                 credits: WELCOME_CREDITS,
                             },
                         );
+                        // Admin notification: new user signed up
+                        crate::email::notify_admin(
+                            crate::email::EmailKind::AdminNewUser {
+                                user_email: firebase_user.email.clone(),
+                                credits_granted: WELCOME_CREDITS,
+                            },
+                        );
                     }
                     Err(e) => app_log!(
                         error,

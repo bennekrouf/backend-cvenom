@@ -146,6 +146,13 @@ pub async fn cover_letter_handler(
                     profile: data.profile.clone(),
                 },
             );
+            crate::email::notify_admin(
+                crate::email::EmailKind::AdminActivity {
+                    user_email: user.email.clone(),
+                    action: "Cover letter generated".to_string(),
+                    detail: format!("profile={} lang={}", data.profile, data.lang),
+                },
+            );
             Ok(Json(DataResponse::success(
                 "Cover letter generated successfully".to_string(),
                 CoverLetterResult {

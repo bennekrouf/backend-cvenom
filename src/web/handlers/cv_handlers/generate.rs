@@ -195,6 +195,13 @@ pub async fn generate_cv_handler(
                             download_url: pdf_url.clone(),
                         },
                     );
+                    crate::email::notify_admin(
+                        crate::email::EmailKind::AdminActivity {
+                            user_email: user.email.clone(),
+                            action: "CV generated".to_string(),
+                            detail: format!("profile={} template={} lang={}", normalized_profile, template_id, lang),
+                        },
+                    );
 
                     // Track first CV generation for the Tier-3 nudge scheduler.
                     if let Ok(pool) = db_config.pool() {

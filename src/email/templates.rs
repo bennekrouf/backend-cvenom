@@ -20,6 +20,9 @@ pub enum EmailKind {
     Nudge { name: String, credits: i64 },
     WinBack { name: String },
     NewTemplate { template_name: String },
+    // ── Admin notifications ───────────────────────────────────────────────────
+    AdminNewUser { user_email: String, credits_granted: i64 },
+    AdminActivity { user_email: String, action: String, detail: String },
 }
 
 impl EmailKind {
@@ -43,6 +46,8 @@ impl EmailKind {
             Self::Nudge { .. } => "nudge",
             Self::WinBack { .. } => "win_back",
             Self::NewTemplate { .. } => "new_template",
+            Self::AdminNewUser { .. } => "admin_new_user",
+            Self::AdminActivity { .. } => "admin_activity",
         }
     }
 
@@ -69,6 +74,8 @@ impl EmailKind {
             Self::Nudge { credits, .. } => if *credits > 0 { format!("You have {credits} credits — create your first CV!") } else { "Create your first CV with CVenom".into() },
             Self::WinBack { .. } => "We miss you! Here's what's new on CVenom".into(),
             Self::NewTemplate { template_name } => format!("New template available: {}", template_name),
+            Self::AdminNewUser { user_email, .. } => format!("[CVenom] New user: {}", user_email),
+            Self::AdminActivity { user_email, action, .. } => format!("[CVenom] {} — {}", action, user_email),
         }
     }
 
@@ -255,6 +262,29 @@ impl EmailKind {
 <p>We've just added a new CV template: <strong>{template_name}</strong>.</p>
 <p>Try it out with your existing profile — no extra setup needed.</p>
 <p><a href="https://studio.cvenom.com" style="display:inline-block;padding:10px 20px;background:#6366F1;color:white;text-decoration:none;border-radius:6px">Try It Now</a></p>"#
+            ),
+
+            // ── Admin notifications ───────────────────────────────────────────
+            Self::AdminNewUser { user_email, credits_granted } => format!(
+                r#"<h2 style="color:#0F172A">🎉 New user signed up</h2>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:6px 0;color:#64748B;width:140px">Email</td><td style="padding:6px 0;font-weight:bold">{user_email}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Credits granted</td><td style="padding:6px 0">{credits_granted}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Time</td><td style="padding:6px 0">{}</td></tr>
+</table>
+<p style="margin-top:16px"><a href="https://studio.cvenom.com/en/admin/bd" style="display:inline-block;padding:8px 16px;background:#0F172A;color:white;text-decoration:none;border-radius:6px;font-size:13px">View in Admin</a></p>"#,
+                chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
+            ),
+
+            Self::AdminActivity { user_email, action, detail } => format!(
+                r#"<h2 style="color:#0F172A">⚡ User activity</h2>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:6px 0;color:#64748B;width:140px">Action</td><td style="padding:6px 0;font-weight:bold">{action}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">User</td><td style="padding:6px 0">{user_email}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Detail</td><td style="padding:6px 0">{detail}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Time</td><td style="padding:6px 0">{}</td></tr>
+</table>"#,
+                chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")
             ),
         };
 

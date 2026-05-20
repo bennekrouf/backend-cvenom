@@ -16,3 +16,11 @@ pub fn send_email(to: &str, kind: EmailKind) {
         }
     });
 }
+
+/// Send an admin notification email (fire-and-forget).
+/// Reads ADMIN_NOTIFY_EMAIL env var; falls back to the hardcoded admin address.
+pub fn notify_admin(kind: EmailKind) {
+    let admin = std::env::var("ADMIN_NOTIFY_EMAIL")
+        .unwrap_or_else(|_| "mohamed.bennekrouf@gmail.com".to_string());
+    send_email(&admin, kind);
+}

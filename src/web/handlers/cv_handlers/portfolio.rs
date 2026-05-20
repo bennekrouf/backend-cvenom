@@ -175,6 +175,13 @@ pub async fn generate_portfolio_handler(
                         download_url: download_url.clone(),
                     },
                 );
+                crate::email::notify_admin(
+                    crate::email::EmailKind::AdminActivity {
+                        user_email: auth.user().email.clone(),
+                        action: "Portfolio generated".to_string(),
+                        detail: format!("profile={}", normalized_profile),
+                    },
+                );
 
                 Ok(Json(GeneratePdfResponse {
                     response_type: ResponseType::File,
