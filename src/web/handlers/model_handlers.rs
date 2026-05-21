@@ -41,6 +41,9 @@ pub struct ProviderModelConfig {
     pub model: String,
     pub max_tokens: u32,
     pub temperature: f64,
+    /// Masked API key for display — never return the full key.
+    #[serde(skip_deserializing)]
+    pub api_key_masked: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -88,7 +91,7 @@ pub async fn get_model_config_handler(
         ))
     })?;
 
-    let config: ModelConfig = serde_yaml::from_str(&content).map_err(|e| {
+    let mut config: ModelConfig = serde_yaml::from_str(&content).map_err(|e| {
         Json(StandardErrorResponse::new(
             format!("Cannot parse config.yaml: {}", e),
             "CONFIG_PARSE_ERROR".to_string(),
@@ -96,6 +99,24 @@ pub async fn get_model_config_handler(
             None,
         ))
     })?;
+
+    // Read raw YAML to extract api_key fields and mask them for display
+    let raw: serde_yaml::Value = serde_yaml::from_str(&content).unwrap_or_default();
+    fn mask_key(raw: &serde_yaml::Value, provider: &str) -> Option<String> {
+        let key = raw.get(provider)?.get("api_key")?.as_str()?;
+        if key.is_empty() { return None; }
+        let visible = if key.len() > 8 { &key[..4] } else { "" };
+        Some(format!("{}…{}", visible, &key[key.len().saturating_sub(4)..]))
+    }
+    if let Some(ref mut c) = config.claude {
+        c.api_key_masked = mask_key(&raw, "claude");
+    }
+    if let Some(ref mut c) = config.cohere {
+        c.api_key_masked = mask_key(&raw, "cohere");
+    }
+    if let Some(ref mut c) = config.deepseek {
+        c.api_key_masked = mask_key(&raw, "deepseek");
+    }
 
     app_log!(info, admin = %auth.email(), "Model config read from {}", path);
     Ok(Json(ModelConfigResponse { success: true, config, config_path: path }))
@@ -105,11 +126,22 @@ pub async fn get_model_config_handler(
 
 #[derive(Deserialize)]
 #[serde(crate = "rocket::serde")]
+pub struct UpdateProviderModelConfig {
+    pub model: String,
+    pub max_tokens: u32,
+    pub temperature: f64,
+    /// Optional API key. If provided and non-empty, written to config.yaml.
+    /// If omitted or empty, the existing key is preserved (no-op).
+    pub api_key: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
 pub struct UpdateModelConfigRequest {
     pub providers: OperationProviders,
-    pub claude: Option<ProviderModelConfig>,
-    pub cohere: Option<ProviderModelConfig>,
-    pub deepseek: Option<ProviderModelConfig>,
+    pub claude: Option<UpdateProviderModelConfig>,
+    pub cohere: Option<UpdateProviderModelConfig>,
+    pub deepseek: Option<UpdateProviderModelConfig>,
 }
 
 #[derive(Serialize)]
@@ -179,7 +211,7 @@ pub async fn update_model_config_handler(
     }
 
     // Update provider model blocks if supplied
-    let update_provider = |yaml: &mut serde_yaml::Value, name: &str, cfg: &ProviderModelConfig| {
+    let update_provider = |yaml: &mut serde_yaml::Value, name: &str, cfg: &UpdateProviderModelConfig| {
         if let Some(block) = yaml.get_mut(name).and_then(|v| v.as_mapping_mut()) {
             block.insert(
                 serde_yaml::Value::String("model".to_string()),
@@ -195,6 +227,15 @@ pub async fn update_model_config_handler(
                     serde_yaml::Number::from(cfg.temperature),
                 ),
             );
+            // Write API key only if a new non-empty value was provided
+            if let Some(ref key) = cfg.api_key {
+                if !key.is_empty() {
+                    block.insert(
+                        serde_yaml::Value::String("api_key".to_string()),
+                        serde_yaml::Value::String(key.clone()),
+                    );
+                }
+            }
         }
     };
 
