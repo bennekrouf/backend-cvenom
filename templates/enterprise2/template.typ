@@ -422,6 +422,7 @@
   show link: set text(fill: primary)
   show list: set text(size: 9pt)
   show "C++": box
+  show heading.where(level: 1): none
 
   set text(font: ("Arial", "Helvetica", "Liberation Sans", "DejaVu Sans"), ligatures: false, size: 9.5pt)
   set par(justify: true, leading: 0.65em)

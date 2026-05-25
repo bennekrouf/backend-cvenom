@@ -309,6 +309,7 @@
   show link: set text(fill: accent)
   show list: set text(size: 9.5pt)
   show "C++": box
+  show heading.where(level: 1): none
 
   set text(font: ("Arial", "Helvetica"), ligatures: false)
   set par(justify: true)

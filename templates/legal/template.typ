@@ -272,6 +272,10 @@
   show list: set text(size: 9.5pt)
   show "C++": box
 
+  // Suppress the raw "= Work Experience" heading from experiences.typ —
+  // main.typ provides its own translated section heading via get_text().
+  show heading.where(level: 1): none
+
   // Serif-forward: Georgia / Palatino / fallback to Liberation Serif
   set text(font: ("Georgia", "Palatino Linotype", "Liberation Serif"), ligatures: false)
   set par(justify: true)
