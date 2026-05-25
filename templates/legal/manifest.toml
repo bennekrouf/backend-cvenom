@@ -1,0 +1,7 @@
+name = "legal"
+description = "Conservative serif layout for legal professionals — juriste, avocat, notaire, solicitor"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["bar_admissions", "practice_areas", "publications", "classic_serif"]
+languages = ["en", "fr", "de"]
+version = "1.0.0"

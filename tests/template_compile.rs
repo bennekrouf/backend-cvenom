@@ -228,6 +228,45 @@ fn enterprise2_compiles_de() {
     );
 }
 
+// ── Legal template ───────────────────────────────────────────────────────────
+
+#[test]
+fn legal_compiles_en() {
+    compile_template("legal").expect("legal (en) failed to compile");
+}
+
+#[test]
+fn legal_compiles_fr() {
+    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
+    let tpl_dir = templates_dir.join("legal");
+    let tmp = tempfile::tempdir().unwrap();
+
+    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.path().is_file() {
+            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
+        }
+    }
+    let font_cfg = templates_dir.join("font_config.typ");
+    if font_cfg.exists() {
+        std::fs::copy(&font_cfg, tmp.path().join("font_config.typ")).unwrap();
+    }
+    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
+    std::fs::write(tmp.path().join("experiences.typ"), EXPERIENCES_STUB).unwrap();
+
+    let out = Command::new(typst_bin())
+        .args(["compile", "main.typ", "output.pdf", "--input", "lang=fr"])
+        .current_dir(tmp.path())
+        .output()
+        .expect("could not run typst");
+
+    assert!(
+        out.status.success(),
+        "legal (fr) failed:\n{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 // Smoke-test every template so a change to shared font_config.typ
 // or experiences_template.typ doesn't silently break other templates.
 #[test]

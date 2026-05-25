@@ -498,6 +498,7 @@ mod tests {
         let expected = [
             "default", "consulting", "academic", "creative",
             "tech", "executive", "keyteo", "keyteo_full", "enterprise2",
+            "legal", "portfolio",
         ];
         for name in expected {
             assert!(engine.get_template(name).is_some(), "template '{name}' not found");
