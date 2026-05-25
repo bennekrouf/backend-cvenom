@@ -170,6 +170,13 @@ fn get_section_ci<'a>(
 
 // ===== Local Conversion Logic =====
 
+/// Escape a string for embedding inside Typst double-quoted literals.
+/// Without this, AI-generated text containing `"` or `\` breaks the
+/// experiences parser and causes experiences to disappear in the form editor.
+fn escape_typst(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
 pub struct CvConverter;
 
 impl CvConverter {
@@ -296,6 +303,7 @@ impl CvConverter {
         // Section title based on language
         let section_title = match language {
             "fr" => "= Expérience Professionnelle",
+            "de" => "= Berufserfahrung",
             _ => "= Work Experience",
         };
         typst_content.push_str(&format!("  {}\n\n", section_title));
@@ -307,34 +315,37 @@ impl CvConverter {
             } else {
                 match language {
                     "fr" => format!("{} - Présent", exp.start_date),
+                    "de" => format!("{} - Heute", exp.start_date),
                     _ => format!("{} - Present", exp.start_date),
                 }
             };
 
             typst_content.push_str(&format!("  == {}\n", exp.company));
             typst_content.push_str("  #dated_experience(\n");
-            typst_content.push_str(&format!("    \"{}\",\n", exp.title));
-            typst_content.push_str(&format!("    date: \"{}\",\n", date_range));
+            typst_content.push_str(&format!("    \"{}\",\n", escape_typst(&exp.title)));
+            typst_content.push_str(&format!("    date: \"{}\",\n", escape_typst(&date_range)));
 
             if let Some(desc) = &exp.description {
-                typst_content.push_str(&format!("    description: \"{}\",\n", desc));
+                typst_content.push_str(&format!("    description: \"{}\",\n", escape_typst(desc)));
             }
 
             typst_content.push_str("    content: [\n");
 
             // Add responsibilities
             for responsibility in &exp.responsibilities {
-                typst_content.push_str("      #experience_details(\n");
-                typst_content.push_str(&format!("        \"{}\"\n", responsibility));
-                typst_content.push_str("      )\n");
+                typst_content.push_str(&format!(
+                    "      #experience_details(\"{}\")\n",
+                    escape_typst(responsibility)
+                ));
             }
 
             // Add achievements if present
             if let Some(achievements) = &exp.achievements {
                 for achievement in achievements {
-                    typst_content.push_str("      #experience_details(\n");
-                    typst_content.push_str(&format!("        \"{}\"\n", achievement));
-                    typst_content.push_str("      )\n");
+                    typst_content.push_str(&format!(
+                        "      #experience_details(\"{}\")\n",
+                        escape_typst(achievement)
+                    ));
                 }
             }
 
