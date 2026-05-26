@@ -28,6 +28,9 @@ pub async fn get_templates_handler(
                         description: template_info
                             .and_then(|t| t.manifest.description.clone())
                             .unwrap_or_else(|| "No description available".to_string()),
+                        photo_recommended: template_info
+                            .and_then(|t| t.manifest.photo_recommended)
+                            .unwrap_or(false),
                     }
                 })
                 .collect();

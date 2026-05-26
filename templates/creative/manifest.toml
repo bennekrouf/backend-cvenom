@@ -3,5 +3,6 @@ description = "Bold asymmetric layout for designers, UX and creative professiona
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = ["sidebar", "portfolio_link", "visual_skills", "bold_header"]
+photo_recommended = true
 languages = ["en", "fr", "de"]
 version = "1.0.0"

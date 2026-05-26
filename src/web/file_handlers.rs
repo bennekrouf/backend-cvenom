@@ -258,11 +258,15 @@ async fn build_file_tree(
         let metadata = entry.metadata().await?;
         if metadata.is_dir() {
             let children = build_file_tree(&path).await?;
+            let has_photo = path.join("profile.png").exists()
+                || path.join("profile.jpg").exists()
+                || path.join("profile.jpeg").exists();
             tree.insert(
                 name,
                 serde_json::json!({
                     "type": "folder",
-                    "children": children
+                    "children": children,
+                    "has_photo": has_photo
                 }),
             );
         } else if name.ends_with(".typ") || name.ends_with(".toml") {

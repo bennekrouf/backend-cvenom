@@ -3,5 +3,6 @@ description = "Two-column enterprise layout with purple sidebar — inspired by 
 main_file = "main.typ"
 dependencies = ["template.typ"]
 features = ["key_competencies", "sector_expertise", "sidebar_layout", "mission_format"]
+photo_recommended = true
 languages = ["en", "fr", "de"]
 version = "1.0.0"

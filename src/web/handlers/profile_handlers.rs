@@ -297,14 +297,15 @@ pub async fn upload_picture_handler(
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
-    let normalized_profile = FsOps::normalize_profile_name(&upload.profile);
+    let normalized_profile = crate::utils::normalize_profile_name(&upload.profile);
 
     app_log!(
         info,
-        "User {} (tenant: {}) uploading picture for {}",
+        "User {} (tenant: {}) uploading picture for {} (normalized: {})",
         user.email,
         tenant.tenant_name,
-        upload.profile
+        upload.profile,
+        normalized_profile
     );
 
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
@@ -370,6 +371,31 @@ pub async fn upload_picture_handler(
                 normalized_profile
             );
 
+            // Auto-enable show_photo in cv_params.toml so the photo renders in templates
+            let cv_params_path = profile_dir.join("cv_params.toml");
+            if cv_params_path.exists() {
+                if let Ok(content) = tokio::fs::read_to_string(&cv_params_path).await {
+                    if !content.contains("show_photo = true") {
+                        let updated = if content.contains("[styling]") {
+                            // Replace show_photo = false with true, or append after [styling]
+                            if content.contains("show_photo = false") {
+                                content.replace("show_photo = false", "show_photo = true")
+                            } else {
+                                content.replace("[styling]", "[styling]\nshow_photo = true")
+                            }
+                        } else {
+                            // Append [styling] section
+                            format!("{}\n[styling]\nshow_photo = true\n", content.trim_end())
+                        };
+                        if let Err(e) = tokio::fs::write(&cv_params_path, updated).await {
+                            app_log!(warn, "Failed to auto-enable show_photo in cv_params.toml: {}", e);
+                        } else {
+                            app_log!(info, "Auto-enabled show_photo for profile: {}", normalized_profile);
+                        }
+                    }
+                }
+            }
+
             Ok(Json(ActionResponse::success(
                 format!(
                     "Profile picture uploaded successfully for {}",
@@ -397,7 +423,7 @@ pub async fn get_picture_handler(
     config: &State<crate::web::types::ServerConfig>,
     _db_config: &State<DatabaseConfig>,
 ) -> Result<NamedFile, Json<StandardErrorResponse>> {
-    let normalized_profile = FsOps::normalize_profile_name(&profile);
+    let normalized_profile = crate::utils::normalize_profile_name(&profile);
 
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
     let profile_path = tenant_data_dir

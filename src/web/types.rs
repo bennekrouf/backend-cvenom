@@ -202,6 +202,7 @@ pub struct CvConvertResponse {
 pub struct TemplateInfo {
     pub name: String,
     pub description: String,
+    pub photo_recommended: bool,
 }
 
 #[derive(Serialize)]

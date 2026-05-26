@@ -28,6 +28,7 @@ pub struct TemplateManifest {
     pub dependencies: Option<Vec<String>>,
     pub features: Option<Vec<String>>,
     pub languages: Option<Vec<String>>,
+    pub photo_recommended: Option<bool>,
 }
 
 // ===== Main Template Engine =====
@@ -115,6 +116,7 @@ impl TemplateEngine {
                 dependencies: None,
                 features: None,
                 languages: None,
+                photo_recommended: None,
             }
         };
 
