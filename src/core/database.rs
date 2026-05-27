@@ -47,79 +47,7 @@ impl Database {
 
     /// Run database migrations
     async fn migrate(&self) -> Result<()> {
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS tenants (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                email TEXT,
-                domain TEXT,
-                tenant_name TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                is_active BOOLEAN NOT NULL DEFAULT TRUE,
-                CONSTRAINT email_or_domain_check CHECK (
-                    (email IS NOT NULL AND domain IS NULL) OR 
-                    (email IS NULL AND domain IS NOT NULL)
-                )
-            );
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        // Create indexes
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_email ON tenants(email);")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_domain ON tenants(domain);")
-            .execute(&self.pool)
-            .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_tenant_name ON tenants(tenant_name);")
-            .execute(&self.pool)
-            .await?;
-
-        // Idempotent: add last_seen_at if not present (ignored if column already exists)
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
-            .execute(&self.pool)
-            .await;
-
-        // Idempotent: Tier-3 engagement tracking columns
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN first_cv_at TEXT")
-            .execute(&self.pool)
-            .await;
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN nudge_sent_at TEXT")
-            .execute(&self.pool)
-            .await;
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN winback_sent_at TEXT")
-            .execute(&self.pool)
-            .await;
-
-        // Referrals table
-        sqlx::query(
-            r#"
-            CREATE TABLE IF NOT EXISTS referrals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                referrer_email TEXT NOT NULL,
-                referred_email TEXT NOT NULL UNIQUE,
-                status TEXT NOT NULL DEFAULT 'pending',
-                credited_at TEXT,
-                created_at TEXT NOT NULL DEFAULT (datetime('now'))
-            );
-            "#,
-        )
-        .execute(&self.pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_email);",
-        )
-        .execute(&self.pool)
-        .await?;
-
-        app_log!(info, "Database migrations completed");
-        Ok(())
+        run_migrations(&self.pool).await
     }
 
     /// Execute a transaction with automatic rollback on error
@@ -152,6 +80,136 @@ impl Database {
             .context("Database health check failed")?;
         Ok(())
     }
+}
+
+// ===== Shared Migration Logic =====
+
+/// Single source of truth for all database schema migrations.
+/// Called by both `Database::migrate()` and `DatabaseConfig::migrate()`.
+async fn run_migrations(pool: &SqlitePool) -> Result<()> {
+    // ── Tenants table ────────────────────────────────────────────────────────
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS tenants (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT,
+            domain TEXT,
+            tenant_name TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            is_active BOOLEAN NOT NULL DEFAULT TRUE,
+            CONSTRAINT email_or_domain_check CHECK (
+                (email IS NOT NULL AND domain IS NULL) OR
+                (email IS NULL AND domain IS NOT NULL)
+            )
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_email ON tenants(email);")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_domain ON tenants(domain);")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_tenant_name ON tenants(tenant_name);")
+        .execute(pool)
+        .await?;
+
+    // Idempotent ALTER TABLE additions (ignored if column already exists)
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN first_cv_at TEXT")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN nudge_sent_at TEXT")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN winback_sent_at TEXT")
+        .execute(pool)
+        .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN referred_by_code TEXT")
+        .execute(pool)
+        .await;
+
+    // ── Referrals table ──────────────────────────────────────────────────────
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS referrals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            referrer_email TEXT NOT NULL,
+            referred_email TEXT NOT NULL UNIQUE,
+            status TEXT NOT NULL DEFAULT 'pending',
+            credited_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_email);")
+        .execute(pool)
+        .await?;
+
+    // ── Business developers table ────────────────────────────────────────────
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS business_developers (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT NOT NULL UNIQUE,
+            name            TEXT NOT NULL DEFAULT '',
+            referral_code   TEXT NOT NULL UNIQUE,
+            commission_rate REAL NOT NULL DEFAULT 0.30,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_bd_email ON business_developers(email);")
+        .execute(pool)
+        .await?;
+    sqlx::query("CREATE INDEX IF NOT EXISTS idx_bd_code ON business_developers(referral_code);")
+        .execute(pool)
+        .await?;
+
+    // ── Commission ledger ────────────────────────────────────────────────────
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS bd_commissions (
+            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
+            referral_code           TEXT NOT NULL,
+            customer_email          TEXT NOT NULL,
+            stripe_payment_intent   TEXT NOT NULL UNIQUE,
+            amount_dollars          REAL NOT NULL,
+            commission_dollars      REAL NOT NULL,
+            status                  TEXT NOT NULL DEFAULT 'pending',
+            paid_at                 TEXT,
+            created_at              TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_commissions_code ON bd_commissions(referral_code);",
+    )
+    .execute(pool)
+    .await?;
+    sqlx::query(
+        "CREATE INDEX IF NOT EXISTS idx_commissions_status ON bd_commissions(status);",
+    )
+    .execute(pool)
+    .await?;
+
+    app_log!(info, "Database migrations completed successfully");
+    Ok(())
 }
 
 // ===== Tenant Models =====
@@ -246,143 +304,7 @@ impl DatabaseConfig {
     /// Run database migrations
     pub async fn migrate(&self) -> Result<()> {
         let pool = self.pool()?;
-
-        // Create tenants table with domain support
-        sqlx::query(
-            r#"
-        CREATE TABLE IF NOT EXISTS tenants (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT,
-            domain TEXT,
-            tenant_name TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-            is_active BOOLEAN NOT NULL DEFAULT TRUE,
-            CONSTRAINT email_or_domain_check CHECK (
-                (email IS NOT NULL AND domain IS NULL) OR 
-                (email IS NULL AND domain IS NOT NULL)
-            )
-        );
-        "#,
-        )
-        .execute(pool)
-        .await?;
-
-        // Create indexes
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_email ON tenants(email);")
-            .execute(pool)
-            .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_domain ON tenants(domain);")
-            .execute(pool)
-            .await?;
-
-        sqlx::query("CREATE INDEX IF NOT EXISTS idx_tenants_tenant_name ON tenants(tenant_name);")
-            .execute(pool)
-            .await?;
-
-        // Idempotent: add last_seen_at if not present (ignored if column already exists)
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN last_seen_at TEXT")
-            .execute(pool)
-            .await;
-
-        // Idempotent: Tier-3 engagement tracking columns
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN first_cv_at TEXT")
-            .execute(pool)
-            .await;
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN nudge_sent_at TEXT")
-            .execute(pool)
-            .await;
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN winback_sent_at TEXT")
-            .execute(pool)
-            .await;
-
-        // Referrals table
-        sqlx::query(
-            r#"
-        CREATE TABLE IF NOT EXISTS referrals (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            referrer_email TEXT NOT NULL,
-            referred_email TEXT NOT NULL UNIQUE,
-            status TEXT NOT NULL DEFAULT 'pending',
-            credited_at TEXT,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        "#,
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_email);",
-        )
-        .execute(pool)
-        .await?;
-
-        // Business developers table
-        sqlx::query(r#"
-        CREATE TABLE IF NOT EXISTS business_developers (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            email           TEXT NOT NULL UNIQUE,
-            name            TEXT NOT NULL DEFAULT '',
-            referral_code   TEXT NOT NULL UNIQUE,
-            commission_rate REAL NOT NULL DEFAULT 0.30,
-            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        "#)
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_bd_email ON business_developers(email);",
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_bd_code ON business_developers(referral_code);",
-        )
-        .execute(pool)
-        .await?;
-
-        // Idempotent: attach referral code to tenant on customer sign-up
-        let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN referred_by_code TEXT")
-            .execute(pool)
-            .await;
-
-        // Commission ledger — one row per Stripe payment from a referred customer
-        sqlx::query(r#"
-        CREATE TABLE IF NOT EXISTS bd_commissions (
-            id                      INTEGER PRIMARY KEY AUTOINCREMENT,
-            referral_code           TEXT NOT NULL,
-            customer_email          TEXT NOT NULL,
-            stripe_payment_intent   TEXT NOT NULL UNIQUE,
-            amount_dollars          REAL NOT NULL,
-            commission_dollars      REAL NOT NULL,
-            status                  TEXT NOT NULL DEFAULT 'pending',
-            paid_at                 TEXT,
-            created_at              TEXT NOT NULL DEFAULT (datetime('now'))
-        );
-        "#)
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_commissions_code \
-             ON bd_commissions(referral_code);",
-        )
-        .execute(pool)
-        .await?;
-
-        sqlx::query(
-            "CREATE INDEX IF NOT EXISTS idx_commissions_status \
-             ON bd_commissions(status);",
-        )
-        .execute(pool)
-        .await?;
-
-        app_log!(info, "Database migrations completed successfully");
-        Ok(())
+        run_migrations(pool).await
     }
 }
 

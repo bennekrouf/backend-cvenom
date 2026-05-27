@@ -1,5 +1,6 @@
 
 #import "font_config.typ": font_config, get_icon
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links
 // global variables
 #let default_primary_color = rgb("#14A4E6")
 #let default_secondary_color = rgb("#757575")
@@ -12,11 +13,6 @@
   font: "Liberation Sans",
   " \u{007c} ",
 )
-
-// Get language from system inputs, fallback to 'en'
-#let get_lang() = {
-  sys.inputs.at("lang", default: "en")
-}
 
 // Language-specific text content
 #let get_text(key) = {
@@ -77,99 +73,12 @@
   texts.at(lang, default: texts.en).at(key, default: key)
 }
 
-// dictionary of common icons and values
-#let get_default_icons(color: none) = {
-  if color == none {
-    color = default_primary_color
-  }
-  (
-    "github": (
-      "displayname": "GitHub",
-      "logo": get_icon("github", font_type: "brands")
-    ),
-    "linkedin": (
-      "displayname": "LinkedIn",
-      "logo": get_icon("linkedin", font_type: "brands")
-    ),
-    "personal_info": (
-      "displayname": "Personal",
-      "logo": get_icon("personal_info", font_type: "solid")
-    ),
-    "orcid": ("displayname": "ORCID", "logo": box(baseline: 0.2em, circle(
-      radius: 0.5em,
-      fill: color,
-      inset: 0pt,
-      align(center + horizon, text(size: 0.8em, fill: white, "iD")),
-    ))),
-  )
-}
-
-/* join dictionaries (kind of like Python's {**a, **b}) */
-#let join_dicts(..args) = {
-  let result = (:)
-  for arg in args.pos() {
-    for (key, value) in arg.pairs(){
-      result.insert(key, value)
-    }
-  }
-  result
-}
-
 /* function that applies a color to a link */
 #let colorlink(color: none, url, body) = {
   if color == none {
     color = default_link_color
   }
   text(fill: color, link(url)[#body<colorlink>])
-}
-
-/* function that processes links */
-#let process_links(color: none, icons: none, links) = {
-  if icons == none {
-    icons = get_default_icons(color: color)
-  } else {
-    // if the user supplies a custom dictionary, update the default one
-    icons = join_dicts(get_default_icons(color: color), icons)
-  }
-  
-  // Handle both array and dictionary formats for links
-  let link_pairs = ()
-  
-  if type(links) == array {
-    // If links is an array, treat each item as a URL with default icon
-    for link in links {
-      if link != "" and link != none {
-        link_pairs.push(("personal_info", link))
-      }
-    }
-  } else if type(links) == dictionary {
-    // If links is a dictionary, filter out empty/none values
-    for (key, value) in links.pairs() {
-      if value != "" and value != none and type(value) == str {
-        link_pairs.push((key, value))
-      }
-    }
-  }
-  
-  // Only process non-empty links
-  if link_pairs.len() > 0 {
-    link_pairs.map(
-      it => {
-        let key = it.at(0)
-        let url = it.at(1)
-        text(
-          fill: color,
-          link(
-            url,
-            icons.at(key, default: (:)).at("logo", default: "") + " " + icons.at(key, default: (:)).at("displayname", default: key),
-          ),
-        )
-      }
-    )
-  } else {
-    // Return empty array if no valid links
-    ()
-  }
 }
 
 /* the section(s) that are colored and have a line */

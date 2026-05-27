@@ -1,0 +1,57 @@
+// templates/common.typ — shared utilities for all CV templates
+// Import this alongside font_config.typ to avoid duplicating helpers.
+
+#import "font_config.typ": font_config, get_icon
+
+// ── Language helpers ───────────────────────────────────────────────────────────
+#let get_lang() = { sys.inputs.at("lang", default: "en") }
+
+// ── Dictionary merge ──────────────────────────────────────────────────────────
+#let join_dicts(..args) = {
+  let result = (:)
+  for arg in args.pos() {
+    for (key, value) in arg.pairs() { result.insert(key, value) }
+  }
+  result
+}
+
+// ── Default social-link icons (superset — includes ORCID) ─────────────────────
+#let get_default_icons(color: none) = {
+  (
+    "github":        ("displayname": "GitHub",   "logo": get_icon("github",        font_type: "brands")),
+    "linkedin":      ("displayname": "LinkedIn", "logo": get_icon("linkedin",      font_type: "brands")),
+    "personal_info": ("displayname": "Web",      "logo": get_icon("personal_info", font_type: "solid")),
+    "orcid": ("displayname": "ORCID", "logo": box(baseline: 0.2em,
+      circle(radius: 0.5em, fill: color, inset: 0pt,
+        align(center + horizon, text(size: 0.8em, fill: white, "iD"))))),
+  )
+}
+
+// ── Link processing (handles both array and dictionary formats) ───────────────
+#let process_links(color: none, icons: none, links) = {
+  let resolved_icons = if icons == none {
+    get_default_icons(color: color)
+  } else {
+    join_dicts(get_default_icons(color: color), icons)
+  }
+  let link_pairs = ()
+  if type(links) == array {
+    for l in links {
+      if l != "" and l != none { link_pairs.push(("personal_info", l)) }
+    }
+  } else if type(links) == dictionary {
+    for (key, value) in links.pairs() {
+      if value != "" and value != none and type(value) == str {
+        link_pairs.push((key, value))
+      }
+    }
+  }
+  if link_pairs.len() > 0 {
+    link_pairs.map(it => {
+      let key = it.at(0); let url = it.at(1)
+      text(fill: color, link(url,
+        resolved_icons.at(key, default: (:)).at("logo", default: "") + " " +
+        resolved_icons.at(key, default: (:)).at("displayname", default: key)))
+    })
+  } else { () }
+}

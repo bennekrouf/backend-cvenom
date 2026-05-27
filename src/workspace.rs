@@ -32,11 +32,12 @@ impl<'a> WorkspaceManager<'a> {
             self.copy_profile_files()?;
             self.copy_logo_files()?;
 
-            // ADD THESE 5 LINES:
-            let font_config_source = self.config.templates_dir.join("font_config.typ");
-            if font_config_source.exists() {
-                let font_config_dest = PathBuf::from("font_config.typ");
-                fs::copy(&font_config_source, &font_config_dest)?;
+            // Copy shared Typst utilities into the workspace
+            for shared_file in &["font_config.typ", "common.typ"] {
+                let source = self.config.templates_dir.join(shared_file);
+                if source.exists() {
+                    fs::copy(&source, PathBuf::from(shared_file))?;
+                }
             }
 
             self.prepare_template_files().await?;

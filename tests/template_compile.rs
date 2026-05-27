@@ -89,6 +89,29 @@ fn typst_bin() -> String {
     std::env::var("TYPST_BIN").unwrap_or_else(|_| "typst".to_string())
 }
 
+/// Copy template + shared utilities into a temp dir, returning the tempdir handle.
+fn setup_template_workspace(template_name: &str) -> tempfile::TempDir {
+    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
+    let tpl_dir = templates_dir.join(template_name);
+    let tmp = tempfile::tempdir().unwrap();
+
+    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
+        let entry = entry.unwrap();
+        if entry.path().is_file() {
+            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
+        }
+    }
+    for shared in &["font_config.typ", "common.typ"] {
+        let src = templates_dir.join(shared);
+        if src.exists() {
+            std::fs::copy(&src, tmp.path().join(shared)).unwrap();
+        }
+    }
+    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
+    std::fs::write(tmp.path().join("experiences.typ"), EXPERIENCES_STUB).unwrap();
+    tmp
+}
+
 fn compile_template(template_name: &str) -> Result<(), String> {
     let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
     let tpl_dir = templates_dir.join(template_name);
@@ -108,11 +131,13 @@ fn compile_template(template_name: &str) -> Result<(), String> {
         }
     }
 
-    // Copy shared font_config.typ
-    let font_cfg = templates_dir.join("font_config.typ");
-    if font_cfg.exists() {
-        std::fs::copy(&font_cfg, tmp.path().join("font_config.typ"))
-            .map_err(|e| e.to_string())?;
+    // Copy shared Typst utilities
+    for shared in &["font_config.typ", "common.typ"] {
+        let src = templates_dir.join(shared);
+        if src.exists() {
+            std::fs::copy(&src, tmp.path().join(shared))
+                .map_err(|e| e.to_string())?;
+        }
     }
 
     std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).map_err(|e| e.to_string())?;
@@ -139,19 +164,7 @@ fn portfolio_compiles_en() {
 
 #[test]
 fn portfolio_compiles_fr() {
-    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
-    let tpl_dir = templates_dir.join("portfolio");
-    let tmp = tempfile::tempdir().unwrap();
-    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
-        let entry = entry.unwrap();
-        if entry.path().is_file() {
-            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
-        }
-    }
-    let font_cfg = templates_dir.join("font_config.typ");
-    if font_cfg.exists() { std::fs::copy(&font_cfg, tmp.path().join("font_config.typ")).unwrap(); }
-    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
-    // Portfolio doesn't use experiences.typ — no stub needed
+    let tmp = setup_template_workspace("portfolio");
     let out = Command::new(typst_bin())
         .args(["compile", "main.typ", "output.pdf", "--input", "lang=fr"])
         .current_dir(tmp.path())
@@ -166,66 +179,24 @@ fn enterprise2_compiles_en() {
 
 #[test]
 fn enterprise2_compiles_fr() {
-    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
-    let tpl_dir = templates_dir.join("enterprise2");
-    let tmp = tempfile::tempdir().unwrap();
-
-    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
-        let entry = entry.unwrap();
-        if entry.path().is_file() {
-            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
-        }
-    }
-    let font_cfg = templates_dir.join("font_config.typ");
-    if font_cfg.exists() {
-        std::fs::copy(&font_cfg, tmp.path().join("font_config.typ")).unwrap();
-    }
-    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
-    std::fs::write(tmp.path().join("experiences.typ"), EXPERIENCES_STUB).unwrap();
-
+    let tmp = setup_template_workspace("enterprise2");
     let out = Command::new(typst_bin())
         .args(["compile", "main.typ", "output.pdf", "--input", "lang=fr"])
         .current_dir(tmp.path())
         .output()
         .expect("could not run typst");
-
-    assert!(
-        out.status.success(),
-        "enterprise2 (fr) failed:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "enterprise2 (fr) failed:\n{}", String::from_utf8_lossy(&out.stderr));
 }
 
 #[test]
 fn enterprise2_compiles_de() {
-    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
-    let tpl_dir = templates_dir.join("enterprise2");
-    let tmp = tempfile::tempdir().unwrap();
-
-    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
-        let entry = entry.unwrap();
-        if entry.path().is_file() {
-            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
-        }
-    }
-    let font_cfg = templates_dir.join("font_config.typ");
-    if font_cfg.exists() {
-        std::fs::copy(&font_cfg, tmp.path().join("font_config.typ")).unwrap();
-    }
-    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
-    std::fs::write(tmp.path().join("experiences.typ"), EXPERIENCES_STUB).unwrap();
-
+    let tmp = setup_template_workspace("enterprise2");
     let out = Command::new(typst_bin())
         .args(["compile", "main.typ", "output.pdf", "--input", "lang=de"])
         .current_dir(tmp.path())
         .output()
         .expect("could not run typst");
-
-    assert!(
-        out.status.success(),
-        "enterprise2 (de) failed:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "enterprise2 (de) failed:\n{}", String::from_utf8_lossy(&out.stderr));
 }
 
 // ── Legal template ───────────────────────────────────────────────────────────
@@ -237,34 +208,13 @@ fn legal_compiles_en() {
 
 #[test]
 fn legal_compiles_fr() {
-    let templates_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates");
-    let tpl_dir = templates_dir.join("legal");
-    let tmp = tempfile::tempdir().unwrap();
-
-    for entry in std::fs::read_dir(&tpl_dir).unwrap() {
-        let entry = entry.unwrap();
-        if entry.path().is_file() {
-            std::fs::copy(entry.path(), tmp.path().join(entry.file_name())).unwrap();
-        }
-    }
-    let font_cfg = templates_dir.join("font_config.typ");
-    if font_cfg.exists() {
-        std::fs::copy(&font_cfg, tmp.path().join("font_config.typ")).unwrap();
-    }
-    std::fs::write(tmp.path().join("cv_params.toml"), MIN_TOML).unwrap();
-    std::fs::write(tmp.path().join("experiences.typ"), EXPERIENCES_STUB).unwrap();
-
+    let tmp = setup_template_workspace("legal");
     let out = Command::new(typst_bin())
         .args(["compile", "main.typ", "output.pdf", "--input", "lang=fr"])
         .current_dir(tmp.path())
         .output()
         .expect("could not run typst");
-
-    assert!(
-        out.status.success(),
-        "legal (fr) failed:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    assert!(out.status.success(), "legal (fr) failed:\n{}", String::from_utf8_lossy(&out.stderr));
 }
 
 // Smoke-test every template so a change to shared font_config.typ

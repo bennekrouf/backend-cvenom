@@ -21,7 +21,6 @@ pub async fn create_profile_handler(
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
     let tenant = auth.tenant();
-    // let normalized_profile = FsOps::normalize_profile_name(&request.data.profile);
     let profile_name = &request.data.profile;
     let conversation_id = request.conversation_id();
 
@@ -116,7 +115,7 @@ pub async fn rename_profile_handler(
     }
 
     // DON'T normalize the old_name - use it as-is from the URL
-    let normalized_new_name = FsOps::normalize_profile_name(&request.data.new_name);
+    let normalized_new_name = crate::utils::normalize_profile_name(&request.data.new_name);
 
     if old_name == normalized_new_name {
         return Err(Json(StandardErrorResponse::new(

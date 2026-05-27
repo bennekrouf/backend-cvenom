@@ -1,4 +1,5 @@
 #import "font_config.typ": font_config, get_icon
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 #let primary   = rgb("#2D3748")   // slate dark
@@ -11,8 +12,6 @@
 #let default_separator = text(font: "Liberation Sans", fill: accent, " \u{007c} ")
 
 // ── Language helpers ───────────────────────────────────────────────────────────
-#let get_lang() = { sys.inputs.at("lang", default: "en") }
-
 #let get_text(key) = {
   let lang = get_lang()
   let texts = (
@@ -44,51 +43,10 @@
   texts.at(lang, default: texts.en).at(key, default: key)
 }
 
-// ── Icon helpers (reused from default) ────────────────────────────────────────
-#let get_default_icons(color: none) = {
-  if color == none { color = accent }
-  (
-    "github":        ("displayname": "GitHub",   "logo": get_icon("github",   font_type: "brands")),
-    "linkedin":      ("displayname": "LinkedIn", "logo": get_icon("linkedin", font_type: "brands")),
-    "personal_info": ("displayname": "Web",      "logo": get_icon("personal_info", font_type: "solid")),
-    "orcid": ("displayname": "ORCID", "logo": box(baseline: 0.2em,
-      circle(radius: 0.5em, fill: color, inset: 0pt,
-        align(center + horizon, text(size: 0.8em, fill: white, "iD"))))),
-  )
-}
-
-#let join_dicts(..args) = {
-  let result = (:)
-  for arg in args.pos() {
-    for (key, value) in arg.pairs() { result.insert(key, value) }
-  }
-  result
-}
-
+// ── Color link helper ─────────────────────────────────────────────────────────
 #let colorlink(color: none, url, body) = {
   if color == none { color = accent }
   text(fill: color, link(url)[#body])
-}
-
-#let process_links(color: none, icons: none, links) = {
-  if icons == none { icons = get_default_icons(color: color) }
-  else { icons = join_dicts(get_default_icons(color: color), icons) }
-  let link_pairs = ()
-  if type(links) == array {
-    for l in links { if l != "" and l != none { link_pairs.push(("personal_info", l)) } }
-  } else if type(links) == dictionary {
-    for (key, value) in links.pairs() {
-      if value != "" and value != none and type(value) == str { link_pairs.push((key, value)) }
-    }
-  }
-  if link_pairs.len() > 0 {
-    link_pairs.map(it => {
-      let key = it.at(0); let url = it.at(1)
-      text(fill: color, link(url,
-        icons.at(key, default: (:)).at("logo", default: "") + " " +
-        icons.at(key, default: (:)).at("displayname", default: key)))
-    })
-  } else { () }
 }
 
 // ── Section heading — left accent bar style ────────────────────────────────────

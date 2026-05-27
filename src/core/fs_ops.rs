@@ -106,23 +106,6 @@ impl FsOps {
         }
     }
 
-    /// Normalize profile name - replaces utils::normalize_profile_name
-    pub fn normalize_profile_name(name: &str) -> String {
-        name.trim()
-            .to_lowercase()
-            .chars()
-            .map(|c| match c {
-                ' ' | '_' | '.' => '-',
-                c if c.is_alphanumeric() => c,
-                _ => '-',
-            })
-            .collect::<String>()
-            .split('-')
-            .filter(|s| !s.is_empty())
-            .collect::<Vec<_>>()
-            .join("-")
-    }
-
     /// Get file extension safely
     pub fn get_extension(path: &Path) -> Option<String> {
         path.extension()

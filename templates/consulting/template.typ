@@ -1,4 +1,5 @@
 #import "font_config.typ": font_config, get_icon
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 #let primary   = rgb("#023E8A")   // deep corporate blue
@@ -10,8 +11,6 @@
 #let default_math_font = "Times"
 
 // ── Language helpers ───────────────────────────────────────────────────────────
-#let get_lang() = { sys.inputs.at("lang", default: "en") }
-
 #let get_text(key) = {
   let lang = get_lang()
   let texts = (
@@ -53,45 +52,6 @@
     )
   )
   texts.at(lang, default: texts.en).at(key, default: key)
-}
-
-// ── Icon helpers ───────────────────────────────────────────────────────────────
-#let get_default_icons(color: none) = {
-  if color == none { color = accent }
-  (
-    "github":        ("displayname": "GitHub",   "logo": get_icon("github",        font_type: "brands")),
-    "linkedin":      ("displayname": "LinkedIn", "logo": get_icon("linkedin",      font_type: "brands")),
-    "personal_info": ("displayname": "Web",      "logo": get_icon("personal_info", font_type: "solid")),
-  )
-}
-
-#let join_dicts(..args) = {
-  let result = (:)
-  for arg in args.pos() {
-    for (key, value) in arg.pairs() { result.insert(key, value) }
-  }
-  result
-}
-
-#let process_links(color: none, icons: none, links) = {
-  if icons == none { icons = get_default_icons(color: color) }
-  else { icons = join_dicts(get_default_icons(color: color), icons) }
-  let link_pairs = ()
-  if type(links) == array {
-    for l in links { if l != "" and l != none { link_pairs.push(("personal_info", l)) } }
-  } else if type(links) == dictionary {
-    for (key, value) in links.pairs() {
-      if value != "" and value != none and type(value) == str { link_pairs.push((key, value)) }
-    }
-  }
-  if link_pairs.len() > 0 {
-    link_pairs.map(it => {
-      let key = it.at(0); let url = it.at(1)
-      text(fill: color, link(url,
-        icons.at(key, default: (:)).at("logo", default: "") + " " +
-        icons.at(key, default: (:)).at("displayname", default: key)))
-    })
-  } else { () }
 }
 
 // ── Section heading — solid blue band ─────────────────────────────────────────
