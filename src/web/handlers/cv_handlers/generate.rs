@@ -194,6 +194,7 @@ pub async fn generate_cv_handler(
                             filename: filename.clone(),
                             download_url: pdf_url.clone(),
                         },
+                        &lang,
                     );
                     crate::email::notify_admin(
                         crate::email::EmailKind::AdminActivity {
@@ -203,14 +204,19 @@ pub async fn generate_cv_handler(
                         },
                     );
 
-                    // Track first CV generation for the Tier-3 nudge scheduler.
+                    // Track first CV generation for the Tier-3 nudge scheduler
+                    // and persist the user's preferred language.
                     if let Ok(pool) = db_config.pool() {
                         let email = user.email.clone();
+                        let preferred = lang.clone();
                         let pool = pool.clone();
                         tokio::spawn(async move {
                             let repo = crate::core::database::TenantRepository::new(&pool);
                             if let Err(e) = repo.mark_first_cv(&email).await {
                                 graflog::app_log!(warn, "mark_first_cv failed for {}: {}", email, e);
+                            }
+                            if let Err(e) = repo.update_preferred_lang(&email, &preferred).await {
+                                graflog::app_log!(warn, "update_preferred_lang failed for {}: {}", email, e);
                             }
                         });
                     }

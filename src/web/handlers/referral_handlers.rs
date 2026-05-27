@@ -236,6 +236,7 @@ pub async fn credit_referral(
             credits_earned: 50,
             referral_type: "referrer".into(),
         },
+        "en",
     );
     crate::email::send_email(
         &referred_email,
@@ -243,6 +244,7 @@ pub async fn credit_referral(
             credits_earned: 25,
             referral_type: "welcome bonus".into(),
         },
+        "en",
     );
 
     app_log!(

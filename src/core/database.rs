@@ -134,6 +134,9 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN referred_by_code TEXT")
         .execute(pool)
         .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN preferred_lang TEXT DEFAULT 'en'")
+        .execute(pool)
+        .await;
 
     // ── Referrals table ──────────────────────────────────────────────────────
     sqlx::query(
@@ -225,6 +228,7 @@ pub struct Tenant {
     pub is_active: bool,
     pub last_seen_at: Option<DateTime<Utc>>,
     pub referred_by_code: Option<String>,
+    pub preferred_lang: Option<String>,
 }
 
 impl Tenant {
@@ -326,7 +330,7 @@ impl<'a> TenantRepository<'a> {
 
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang
             FROM tenants
             WHERE is_active = TRUE AND (
                 email = ? OR domain = ?
@@ -372,6 +376,7 @@ impl<'a> TenantRepository<'a> {
             is_active: true,
             last_seen_at: None,
             referred_by_code: None,
+            preferred_lang: Some("en".to_string()),
         };
 
         app_log!(
@@ -412,6 +417,7 @@ impl<'a> TenantRepository<'a> {
             is_active: true,
             last_seen_at: None,
             referred_by_code: None,
+            preferred_lang: Some("en".to_string()),
         };
 
         app_log!(
@@ -427,7 +433,7 @@ impl<'a> TenantRepository<'a> {
     pub async fn list_active(&self) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang
             FROM tenants
             WHERE is_active = TRUE
             ORDER BY tenant_name ASC, email ASC, domain ASC
@@ -437,6 +443,16 @@ impl<'a> TenantRepository<'a> {
         .await?;
 
         Ok(tenants)
+    }
+
+    /// Update the preferred language for a tenant (set when user performs an action with a lang param).
+    pub async fn update_preferred_lang(&self, email: &str, lang: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET preferred_lang = ? WHERE email = ?")
+            .bind(lang)
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+        Ok(())
     }
 
     /// Update last_seen_at to NOW() for a given email tenant (fire-and-forget safe).
@@ -455,7 +471,7 @@ impl<'a> TenantRepository<'a> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang
             FROM tenants
             WHERE is_active = TRUE
               AND email IS NOT NULL

@@ -124,6 +124,7 @@ pub async fn optimize_cv_handler(
     request: Json<StandardRequest<OptimizeCvRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<OptimizeResponse>>, Json<StandardErrorResponse>> {
     let conversation_id = request.conversation_id();
@@ -174,7 +175,21 @@ pub async fn optimize_cv_handler(
             before_score: response.before_score.map(|s| s as u8),
             after_score: response.after_score.map(|s| s as u8),
         },
+        &lang,
     );
+
+    // Persist user's preferred language
+    if let Ok(pool) = db_config.pool() {
+        let email = auth.user().email.clone();
+        let preferred = lang.clone();
+        let pool = pool.clone();
+        tokio::spawn(async move {
+            let repo = crate::core::database::TenantRepository::new(&pool);
+            if let Err(e) = repo.update_preferred_lang(&email, &preferred).await {
+                graflog::app_log!(warn, "update_preferred_lang failed for {}: {}", email, e);
+            }
+        });
+    }
 
     Ok(Json(DataResponse::success(
         format!(
@@ -192,7 +207,7 @@ pub async fn optimize_and_generate_handler(
     request: Json<StandardRequest<OptimizeCvRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    _db_config: &State<DatabaseConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     let conversation_id = request.conversation_id();
@@ -326,6 +341,19 @@ pub async fn optimize_and_generate_handler(
             let base_url = env::var("PUBLIC_BASE_URL")
                 .unwrap_or_else(|_| "https://api.cvenom.com".to_string());
             let pdf_url = format!("{}/outputs/{}", base_url, ats_filename);
+
+            // Persist user's preferred language
+            if let Ok(pool) = db_config.pool() {
+                let email = auth.user().email.clone();
+                let preferred = lang.clone();
+                let pool = pool.clone();
+                tokio::spawn(async move {
+                    let repo = crate::core::database::TenantRepository::new(&pool);
+                    if let Err(e) = repo.update_preferred_lang(&email, &preferred).await {
+                        graflog::app_log!(warn, "update_preferred_lang failed for {}: {}", email, e);
+                    }
+                });
+            }
 
             Ok(Json(GeneratePdfResponse {
                 response_type: ResponseType::File,

@@ -130,7 +130,7 @@ pub async fn delete_account_handler(
     }
 
     app_log!(info, "Account fully deleted for: {}", email);
-    crate::email::send_email(&email, crate::email::EmailKind::AccountDeleted);
+    crate::email::send_email(&email, crate::email::EmailKind::AccountDeleted, auth.lang());
     Ok(Json(ActionResponse::success(
         "Account and all associated data deleted".to_string(),
         "account_deleted".to_string(),

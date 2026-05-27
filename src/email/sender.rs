@@ -3,7 +3,7 @@
 use anyhow::{Context, Result};
 use super::templates::EmailKind;
 
-pub async fn deliver(to: &str, kind: &EmailKind) -> Result<()> {
+pub async fn deliver(to: &str, kind: &EmailKind, lang: &str) -> Result<()> {
     let store_url = std::env::var("API0_STORE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5007".into());
     let internal_secret = std::env::var("API0_INTERNAL_SECRET")
@@ -15,8 +15,8 @@ pub async fn deliver(to: &str, kind: &EmailKind) -> Result<()> {
         .header("X-Internal-Secret", &internal_secret)
         .json(&serde_json::json!({
             "to":        to,
-            "subject":   kind.subject(),
-            "html_body": kind.html_body(),
+            "subject":   kind.subject(lang),
+            "html_body": kind.html_body(lang),
         }))
         .send()
         .await

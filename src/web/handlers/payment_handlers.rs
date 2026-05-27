@@ -305,6 +305,7 @@ pub async fn check_and_deduct_credits(
         crate::email::send_email(
             user_email,
             crate::email::EmailKind::LowCredits { balance: new_balance },
+            "en", // no lang context in credit check
         );
     }
 
@@ -532,6 +533,7 @@ pub async fn confirm_payment_handler(
                                     amount_dollars: amount_dollars as f64,
                                     commission_dollars: commission,
                                 },
+                                "en", // BD emails in English
                             );
                         }
                     }
@@ -545,6 +547,7 @@ pub async fn confirm_payment_handler(
                     credits_added: credits_to_add,
                     new_balance,
                 },
+                "en", // webhook — no user lang context
             );
 
             Ok(Json(ConfirmPaymentResponse {
@@ -797,6 +800,7 @@ pub async fn admin_add_credits_handler(
                     reason: request.description.clone().unwrap_or_else(|| action_type.to_string()),
                     new_balance,
                 },
+                "en", // admin action — no user lang context
             );
 
             Ok(Json(AdminCreditResponse {

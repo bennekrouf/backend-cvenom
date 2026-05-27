@@ -204,6 +204,11 @@ impl AuthenticatedUser {
         &self.tenant.tenant_name
     }
 
+    /// User's preferred email language (falls back to "en").
+    pub fn lang(&self) -> &str {
+        self.tenant.preferred_lang.as_deref().unwrap_or("en")
+    }
+
     pub async fn ensure_tenant_exists(
         &self,
         config: &ServerConfig,
@@ -418,6 +423,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                                 name: firebase_user.email.split('@').next().unwrap_or("there").to_string(),
                                 credits: WELCOME_CREDITS,
                             },
+                            "en", // new user, no preference yet
                         );
                         // Admin notification: new user signed up
                         crate::email::notify_admin(

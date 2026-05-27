@@ -140,6 +140,7 @@ pub async fn register_bd_handler(
                 referral_code: code.clone(),
                 commission_rate: 0.30,
             },
+            "en",
         );
 
         let row: (String, String, f64, String) = sqlx::query_as(
@@ -640,6 +641,7 @@ pub async fn admin_mark_paid_handler(
                 total_paid: total,
                 rows: result.rows_affected(),
             },
+            "en",
         );
     }
 

@@ -17,6 +17,7 @@ pub struct CvJson {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub projects: Option<Vec<Project>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_certifications")]
     pub certifications: Option<Vec<Certification>>,
     pub metadata: CvMetadata,
 }
@@ -122,7 +123,9 @@ pub struct Project {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Certification {
     pub name: String,
+    #[serde(default)]
     pub issuer: String,
+    #[serde(default)]
     pub date: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expiry: Option<String>,
@@ -130,6 +133,40 @@ pub struct Certification {
     pub credential_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+}
+
+/// Deserializer that accepts both `"string"` and `{ name, issuer, date, … }` for certifications.
+/// AI models sometimes return plain strings instead of structured objects.
+fn deserialize_certifications<'de, D>(deserializer: D) -> Result<Option<Vec<Certification>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum CertItem {
+        Struct(Certification),
+        Plain(String),
+    }
+
+    let opt: Option<Vec<CertItem>> = Option::deserialize(deserializer)?;
+    Ok(opt.map(|items| {
+        items
+            .into_iter()
+            .map(|item| match item {
+                CertItem::Struct(c) => c,
+                CertItem::Plain(s) => Certification {
+                    name: s,
+                    issuer: String::new(),
+                    date: String::new(),
+                    expiry: None,
+                    credential_id: None,
+                    url: None,
+                },
+            })
+            .collect()
+    }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -698,4 +735,69 @@ fn typ_extract_details(block: &str) -> Vec<String> {
         }
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn certifications_as_strings() {
+        let json = r#"{
+            "personal_info": { "name": "Test" },
+            "work_experience": [],
+            "education": [],
+            "skills": {},
+            "languages": {},
+            "certifications": [
+                "AWS Solutions Architect",
+                "Certifications en architectures logicielles"
+            ],
+            "metadata": { "language": "fr" }
+        }"#;
+        let cv: CvJson = serde_json::from_str(json).expect("should parse string certifications");
+        let certs = cv.certifications.unwrap();
+        assert_eq!(certs.len(), 2);
+        assert_eq!(certs[0].name, "AWS Solutions Architect");
+        assert!(certs[0].issuer.is_empty());
+    }
+
+    #[test]
+    fn certifications_as_structs() {
+        let json = r#"{
+            "personal_info": { "name": "Test" },
+            "work_experience": [],
+            "education": [],
+            "skills": {},
+            "languages": {},
+            "certifications": [
+                { "name": "AWS SAA", "issuer": "Amazon", "date": "2023" }
+            ],
+            "metadata": { "language": "en" }
+        }"#;
+        let cv: CvJson = serde_json::from_str(json).expect("should parse struct certifications");
+        let certs = cv.certifications.unwrap();
+        assert_eq!(certs[0].issuer, "Amazon");
+    }
+
+    #[test]
+    fn certifications_mixed() {
+        let json = r#"{
+            "personal_info": { "name": "Test" },
+            "work_experience": [],
+            "education": [],
+            "skills": {},
+            "languages": {},
+            "certifications": [
+                "Plain cert",
+                { "name": "Structured", "issuer": "Org", "date": "2024" }
+            ],
+            "metadata": { "language": "en" }
+        }"#;
+        let cv: CvJson = serde_json::from_str(json).expect("should parse mixed certifications");
+        let certs = cv.certifications.unwrap();
+        assert_eq!(certs.len(), 2);
+        assert_eq!(certs[0].name, "Plain cert");
+        assert_eq!(certs[1].issuer, "Org");
+    }
 }

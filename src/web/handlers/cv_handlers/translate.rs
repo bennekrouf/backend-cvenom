@@ -1,7 +1,7 @@
 // src/web/handlers/cv_handlers/translate.rs
 //! CV translation handler
 use crate::auth::AuthenticatedUser;
-use crate::core::database::get_tenant_folder_path;
+use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::ServiceClient;
 use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use crate::types::cv_data::CvConverter;
@@ -22,6 +22,7 @@ pub async fn translate_cv_handler(
     request: Json<StandardRequest<TranslateCvRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<TranslateResponse>>, Json<StandardErrorResponse>> {
     let user = auth.user();
@@ -152,7 +153,21 @@ pub async fn translate_cv_handler(
                     source_lang: "original".into(),
                     target_lang: request.data.target_lang.clone(),
                 },
+                &request.data.target_lang,
             );
+
+            // Persist user's preferred language
+            if let Ok(pool) = db_config.pool() {
+                let email = user.email.clone();
+                let preferred = request.data.target_lang.clone();
+                let pool = pool.clone();
+                tokio::spawn(async move {
+                    let repo = crate::core::database::TenantRepository::new(&pool);
+                    if let Err(e) = repo.update_preferred_lang(&email, &preferred).await {
+                        graflog::app_log!(warn, "update_preferred_lang failed for {}: {}", email, e);
+                    }
+                });
+            }
 
             Ok(Json(DataResponse::success(
                 format!(

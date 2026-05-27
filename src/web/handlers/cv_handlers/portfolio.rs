@@ -32,7 +32,7 @@ pub async fn generate_portfolio_handler(
     request: Json<StandardRequest<GeneratePortfolioRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
-    _db_config: &State<DatabaseConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
     let user = auth.user();
@@ -174,6 +174,7 @@ pub async fn generate_portfolio_handler(
                         filename: filename.clone(),
                         download_url: download_url.clone(),
                     },
+                    &lang,
                 );
                 crate::email::notify_admin(
                     crate::email::EmailKind::AdminActivity {
@@ -182,6 +183,19 @@ pub async fn generate_portfolio_handler(
                         detail: format!("profile={}", normalized_profile),
                     },
                 );
+
+                // Persist user's preferred language
+                if let Ok(pool) = db_config.pool() {
+                    let email = auth.user().email.clone();
+                    let preferred = lang.clone();
+                    let pool = pool.clone();
+                    tokio::spawn(async move {
+                        let repo = crate::core::database::TenantRepository::new(&pool);
+                        if let Err(e) = repo.update_preferred_lang(&email, &preferred).await {
+                            graflog::app_log!(warn, "update_preferred_lang failed for {}: {}", email, e);
+                        }
+                    });
+                }
 
                 Ok(Json(GeneratePdfResponse {
                     response_type: ResponseType::File,

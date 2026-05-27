@@ -268,6 +268,7 @@ pub async fn upload_and_convert_cv_handler(
                     profile: profile_name.to_string(),
                     lang: "auto".into(),
                 },
+                auth.lang(),
             );
 
             let response = ActionResponse::success(
@@ -431,6 +432,7 @@ pub async fn import_text_cv_handler(
                     profile: normalized_profile.clone(),
                     lang: "auto".into(),
                 },
+                auth.lang(),
             );
 
             Ok(Json(

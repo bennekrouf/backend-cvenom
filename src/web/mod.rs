@@ -297,9 +297,10 @@ pub async fn optimize_cv(
     request: Json<StandardRequest<OptimizeCvRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<OptimizeResponse>>, Json<StandardErrorResponse>> {
-    optimize_cv_handler(request, auth, config, cv_service_url).await
+    optimize_cv_handler(request, auth, config, db_config, cv_service_url).await
 }
 
 /// Optimize the CV with ATS keyword injection **and** immediately compile + stream the PDF.
@@ -332,9 +333,10 @@ pub async fn translate_cv(
     request: Json<StandardRequest<TranslateCvRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<TranslateResponse>>, Json<StandardErrorResponse>> {
-    translate_cv_handler(request, auth, config, cv_service_url).await
+    translate_cv_handler(request, auth, config, db_config, cv_service_url).await
 }
 
 /// POST /cover-letter — generate a cover letter from CV data + job description.
@@ -344,9 +346,10 @@ pub async fn generate_cover_letter(
     request: Json<StandardRequest<CoverLetterRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
 ) -> Result<Json<DataResponse<CoverLetterResult>>, Json<StandardErrorResponse>> {
-    cover_letter_handler(request, auth, config, cv_service_url).await
+    cover_letter_handler(request, auth, config, db_config, cv_service_url).await
 }
 
 /// POST /cover-letter/export — export a cover letter text as .docx (no credit cost)
@@ -463,6 +466,7 @@ pub async fn admin_announce_template(
         crate::email::send_email(
             &email,
             crate::email::EmailKind::NewTemplate { template_name: template_name.clone() },
+            "en",
         );
     }
 
@@ -772,6 +776,7 @@ pub async fn start_web_server(
                             crate::email::send_email(
                                 &email,
                                 crate::email::EmailKind::Nudge { name, credits },
+                                "en",
                             );
                             if let Err(e) = repo.mark_nudge_sent(&email).await {
                                 app_log!(error, "[engagement] mark_nudge_sent failed for {}: {}", email, e);
@@ -789,6 +794,7 @@ pub async fn start_web_server(
                             crate::email::send_email(
                                 &email,
                                 crate::email::EmailKind::WinBack { name },
+                                "en",
                             );
                             if let Err(e) = repo.mark_winback_sent(&email).await {
                                 app_log!(error, "[engagement] mark_winback_sent failed for {}: {}", email, e);
