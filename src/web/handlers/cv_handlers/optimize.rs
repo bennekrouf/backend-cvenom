@@ -166,7 +166,7 @@ pub async fn optimize_cv_handler(
     )
     .await?;
 
-    crate::email::send_email(
+    crate::email::send_email_with_prefs(
         &auth.user().email,
         crate::email::EmailKind::AtsResults {
             profile: profile.clone(),
@@ -176,6 +176,7 @@ pub async fn optimize_cv_handler(
             after_score: response.after_score.map(|s| s as u8),
         },
         &lang,
+        auth.email_prefs(),
     );
 
     // Persist user's preferred language

@@ -227,7 +227,7 @@
     [
       #set align(right)
       #let _pic = sys.inputs.at("picture", default: none)
-      #let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+      #let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
       #if _pic != none and show_photo {
         block(clip: true, radius: 50%,
           image(_pic, width: 70pt, height: 70pt, fit: "cover"))

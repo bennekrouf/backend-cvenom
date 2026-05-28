@@ -117,24 +117,36 @@ impl<'a> WorkspaceManager<'a> {
         );
         app_log!(info, "DEBUG: Image exists: {}", profile_image_png.exists());
 
-        if profile_image_png.exists() {
+        // Resolve photo: profile-specific first, then tenant-level default
+        let resolved_image = if profile_image_png.exists() {
+            Some(profile_image_png)
+        } else {
+            let default_photo = self.config.data_dir_absolute().join("default_photo.png");
+            if default_photo.exists() {
+                app_log!(info, "No profile photo — using tenant default photo");
+                Some(default_photo)
+            } else {
+                None
+            }
+        };
+
+        if let Some(image_path) = resolved_image {
             // Validate the image before copying
-            match self.validate_image_sync(&profile_image_png) {
+            match self.validate_image_sync(&image_path) {
                 Ok(_) => {
                     // The stored file is always named "profile.png" on disk but may
                     // contain JPEG bytes (uploaded as .jpg then saved under .png name).
                     // Typst decodes by extension, so copy with the real extension so
                     // that image("profile.jpg") / image("profile.png") uses the right codec.
-                    let header = fs::read(&profile_image_png).unwrap_or_default();
+                    let header = fs::read(&image_path).unwrap_or_default();
                     const JPEG_SIG: &[u8] = &[0xFF, 0xD8, 0xFF];
                     let dest_name = if header.starts_with(JPEG_SIG) { "profile.jpg" } else { "profile.png" };
                     let profile_dest = PathBuf::from(dest_name);
-                    fs::copy(&profile_image_png, &profile_dest)?;
+                    fs::copy(&image_path, &profile_dest)?;
                     app_log!(info, "✅ Copied valid profile image as {}", dest_name);
                 }
                 Err(error_msg) => {
                     app_log!(info, "❌ Skipping corrupted image: {}", error_msg);
-                    // Don't copy the corrupted file - let CV generate without photo
                 }
             }
         } else {

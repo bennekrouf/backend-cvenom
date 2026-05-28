@@ -141,12 +141,13 @@ pub async fn cover_letter_handler(
                 user.email,
                 tenant.tenant_name
             );
-            crate::email::send_email(
+            crate::email::send_email_with_prefs(
                 &user.email,
                 crate::email::EmailKind::CoverLetterReady {
                     profile: data.profile.clone(),
                 },
                 &data.lang,
+                auth.email_prefs(),
             );
             crate::email::notify_admin(
                 crate::email::EmailKind::AdminActivity {

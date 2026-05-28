@@ -146,7 +146,7 @@ pub async fn translate_cv_handler(
                 status: "success".to_string(),
             };
 
-            crate::email::send_email(
+            crate::email::send_email_with_prefs(
                 &user.email,
                 crate::email::EmailKind::TranslationReady {
                     profile: request.data.profile_name.clone(),
@@ -154,6 +154,7 @@ pub async fn translate_cv_handler(
                     target_lang: request.data.target_lang.clone(),
                 },
                 &request.data.target_lang,
+                auth.email_prefs(),
             );
 
             // Persist user's preferred language

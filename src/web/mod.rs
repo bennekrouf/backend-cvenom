@@ -231,6 +231,49 @@ pub async fn get_current_user_error() -> Json<StandardErrorResponse> {
     handlers::get_current_user_error_handler().await
 }
 
+#[get("/preferences")]
+pub async fn get_preferences(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    let pool = db_config.pool().map_err(|e| {
+        Json(StandardErrorResponse::new(format!("DB error: {e}"), "INTERNAL_ERROR".into(), vec![], None))
+    })?;
+    let repo = crate::core::database::TenantRepository::new(pool);
+    let prefs_json = repo.get_email_prefs(&auth.user().email).await.map_err(|e| {
+        Json(StandardErrorResponse::new(format!("Failed to load preferences: {e}"), "PREFS_ERROR".into(), vec![], None))
+    })?;
+    let prefs: serde_json::Value = serde_json::from_str(&prefs_json).unwrap_or_default();
+    let lang = auth.lang().to_string();
+    Ok(Json(serde_json::json!({ "email_prefs": prefs, "preferred_lang": lang })))
+}
+
+#[put("/preferences", data = "<body>")]
+pub async fn update_preferences(
+    body: Json<serde_json::Value>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    let pool = db_config.pool().map_err(|e| {
+        Json(StandardErrorResponse::new(format!("DB error: {e}"), "INTERNAL_ERROR".into(), vec![], None))
+    })?;
+    let repo = crate::core::database::TenantRepository::new(pool);
+
+    if let Some(email_prefs) = body.get("email_prefs") {
+        let json_str = serde_json::to_string(email_prefs).unwrap_or_else(|_| "{}".into());
+        repo.update_email_prefs(&auth.user().email, &json_str).await.map_err(|e| {
+            Json(StandardErrorResponse::new(format!("Failed to save preferences: {e}"), "PREFS_ERROR".into(), vec![], None))
+        })?;
+    }
+    if let Some(lang) = body.get("preferred_lang").and_then(|v| v.as_str()) {
+        repo.update_preferred_lang(&auth.user().email, lang).await.map_err(|e| {
+            Json(StandardErrorResponse::new(format!("Failed to save language: {e}"), "PREFS_ERROR".into(), vec![], None))
+        })?;
+    }
+
+    Ok(Json(serde_json::json!({ "success": true })))
+}
+
 #[get("/health")]
 pub async fn health(auth: OptionalAuth) -> Json<TextResponse> {
     handlers::health_handler(auth).await
@@ -910,6 +953,8 @@ pub fn build_rocket(
                 admin_credit_user_transactions,
                 admin_announce_template,
                 get_output_file,
+                get_preferences,
+                update_preferences,
             ],
         )
 }

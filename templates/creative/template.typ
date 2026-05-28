@@ -190,7 +190,7 @@
   )[
     // Photo — use sys.inputs directly; no need for a `picture` key in the TOML
     #let _pic = sys.inputs.at("picture", default: none)
-    #if _pic != none and details.at("styling", default: (:)).at("show_photo", default: false) {
+    #if _pic != none and details.at("styling", default: (:)).at("show_photo", default: true) {
       align(center,
         block(clip: true, radius: 50%,
           image(_pic, width: 75pt, height: 75pt, fit: "cover")))

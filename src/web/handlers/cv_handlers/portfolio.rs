@@ -167,7 +167,7 @@ pub async fn generate_portfolio_handler(
                 app_log!(info, "Portfolio generated: {}", filename);
 
                 let download_url = format!("{}/outputs/{}", base_url, filename);
-                crate::email::send_email(
+                crate::email::send_email_with_prefs(
                     &auth.user().email,
                     crate::email::EmailKind::PortfolioReady {
                         profile: normalized_profile.clone(),
@@ -175,6 +175,7 @@ pub async fn generate_portfolio_handler(
                         download_url: download_url.clone(),
                     },
                     &lang,
+                    auth.email_prefs(),
                 );
                 crate::email::notify_admin(
                     crate::email::EmailKind::AdminActivity {

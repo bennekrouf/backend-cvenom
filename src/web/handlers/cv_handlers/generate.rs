@@ -187,7 +187,7 @@ pub async fn generate_cv_handler(
                         .unwrap_or_else(|_| "https://api.cvenom.com".to_string());
                     let pdf_url = format!("{}/outputs/{}", base_url, filename);
 
-                    crate::email::send_email(
+                    crate::email::send_email_with_prefs(
                         &user.email,
                         crate::email::EmailKind::CvReady {
                             profile: normalized_profile.clone(),
@@ -195,6 +195,7 @@ pub async fn generate_cv_handler(
                             download_url: pdf_url.clone(),
                         },
                         &lang,
+                        auth.email_prefs(),
                     );
                     crate::email::notify_admin(
                         crate::email::EmailKind::AdminActivity {

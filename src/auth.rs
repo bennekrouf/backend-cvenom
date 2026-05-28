@@ -209,6 +209,11 @@ impl AuthenticatedUser {
         self.tenant.preferred_lang.as_deref().unwrap_or("en")
     }
 
+    /// User's email notification preferences as raw JSON string.
+    pub fn email_prefs(&self) -> Option<&str> {
+        self.tenant.email_prefs.as_deref()
+    }
+
     pub async fn ensure_tenant_exists(
         &self,
         config: &ServerConfig,

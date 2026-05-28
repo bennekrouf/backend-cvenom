@@ -370,6 +370,14 @@ pub async fn upload_picture_handler(
                 normalized_profile
             );
 
+            // Also save as the tenant-level default photo so other profiles can use it
+            let default_photo_path = tenant_data_dir.join("default_photo.png");
+            if let Err(e) = tokio::fs::copy(&profile_path, &default_photo_path).await {
+                app_log!(warn, "Failed to copy photo as tenant default: {}", e);
+            } else {
+                app_log!(info, "Updated tenant default photo from profile: {}", normalized_profile);
+            }
+
             // Auto-enable show_photo in cv_params.toml so the photo renders in templates
             let cv_params_path = profile_dir.join("cv_params.toml");
             if cv_params_path.exists() {
@@ -429,16 +437,24 @@ pub async fn get_picture_handler(
         .join(&normalized_profile)
         .join("profile.png");
 
-    if !profile_path.exists() {
-        return Err(Json(StandardErrorResponse::new(
-            "Profile picture not found".to_string(),
-            "NOT_FOUND".to_string(),
-            vec!["Upload a profile picture first".to_string()],
-            None,
-        )));
-    }
+    // Fall back to tenant-level default photo if the profile has no custom one
+    let photo_path = if profile_path.exists() {
+        profile_path
+    } else {
+        let default_path = tenant_data_dir.join("default_photo.png");
+        if default_path.exists() {
+            default_path
+        } else {
+            return Err(Json(StandardErrorResponse::new(
+                "Profile picture not found".to_string(),
+                "NOT_FOUND".to_string(),
+                vec!["Upload a profile picture first".to_string()],
+                None,
+            )));
+        }
+    };
 
-    match NamedFile::open(&profile_path).await {
+    match NamedFile::open(&photo_path).await {
         Ok(file) => Ok(file),
         Err(e) => {
             app_log!(error, "Failed to serve profile picture: {}", e);

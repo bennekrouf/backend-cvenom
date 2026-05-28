@@ -153,7 +153,7 @@
   v(0.5em)
   // Photo centered above name
   let _pic = sys.inputs.at("picture", default: none)
-  let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+  let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
   if _pic != none and show_photo {
     align(center,
       block(clip: true, radius: 50%,

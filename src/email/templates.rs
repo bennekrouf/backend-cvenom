@@ -51,6 +51,23 @@ impl EmailKind {
         }
     }
 
+    /// Whether this email category can be disabled by the user.
+    /// Transactional emails (welcome, payment, account) and admin emails are always sent.
+    pub fn is_optional(&self) -> bool {
+        matches!(
+            self,
+            Self::CvReady { .. }
+                | Self::PortfolioReady { .. }
+                | Self::CoverLetterReady { .. }
+                | Self::CvImported { .. }
+                | Self::TranslationReady { .. }
+                | Self::AtsResults { .. }
+                | Self::Nudge { .. }
+                | Self::WinBack { .. }
+                | Self::NewTemplate { .. }
+        )
+    }
+
     pub fn subject(&self, lang: &str) -> String {
         match self {
             Self::Welcome { .. } => match lang {

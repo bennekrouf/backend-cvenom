@@ -137,6 +137,9 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN preferred_lang TEXT DEFAULT 'en'")
         .execute(pool)
         .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN email_prefs TEXT DEFAULT '{}'")
+        .execute(pool)
+        .await;
 
     // ── Referrals table ──────────────────────────────────────────────────────
     sqlx::query(
@@ -229,6 +232,7 @@ pub struct Tenant {
     pub last_seen_at: Option<DateTime<Utc>>,
     pub referred_by_code: Option<String>,
     pub preferred_lang: Option<String>,
+    pub email_prefs: Option<String>,
 }
 
 impl Tenant {
@@ -330,7 +334,7 @@ impl<'a> TenantRepository<'a> {
 
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs
             FROM tenants
             WHERE is_active = TRUE AND (
                 email = ? OR domain = ?
@@ -377,6 +381,7 @@ impl<'a> TenantRepository<'a> {
             last_seen_at: None,
             referred_by_code: None,
             preferred_lang: Some("en".to_string()),
+            email_prefs: Some("{}".to_string()),
         };
 
         app_log!(
@@ -418,6 +423,7 @@ impl<'a> TenantRepository<'a> {
             last_seen_at: None,
             referred_by_code: None,
             preferred_lang: Some("en".to_string()),
+            email_prefs: Some("{}".to_string()),
         };
 
         app_log!(
@@ -433,7 +439,7 @@ impl<'a> TenantRepository<'a> {
     pub async fn list_active(&self) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs
             FROM tenants
             WHERE is_active = TRUE
             ORDER BY tenant_name ASC, email ASC, domain ASC
@@ -449,6 +455,28 @@ impl<'a> TenantRepository<'a> {
     pub async fn update_preferred_lang(&self, email: &str, lang: &str) -> Result<()> {
         sqlx::query("UPDATE tenants SET preferred_lang = ? WHERE email = ?")
             .bind(lang)
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Get email preferences JSON for a tenant.
+    pub async fn get_email_prefs(&self, email: &str) -> Result<String> {
+        let prefs: Option<String> = sqlx::query_scalar(
+            "SELECT email_prefs FROM tenants WHERE email = ?",
+        )
+        .bind(email)
+        .fetch_optional(self.pool)
+        .await?
+        .flatten();
+        Ok(prefs.unwrap_or_else(|| "{}".to_string()))
+    }
+
+    /// Update email preferences JSON for a tenant.
+    pub async fn update_email_prefs(&self, email: &str, prefs_json: &str) -> Result<()> {
+        sqlx::query("UPDATE tenants SET email_prefs = ? WHERE email = ?")
+            .bind(prefs_json)
             .bind(email)
             .execute(self.pool)
             .await?;
@@ -471,7 +499,7 @@ impl<'a> TenantRepository<'a> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs
             FROM tenants
             WHERE is_active = TRUE
               AND email IS NOT NULL

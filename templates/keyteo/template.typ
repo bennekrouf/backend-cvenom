@@ -391,7 +391,7 @@
 
 /* the main info about the profile (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
-  let show_photo = details.at("styling", default: (:)).at("show_photo", default: false)
+  let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
   // Use sys.inputs directly — no need for a `picture` key in the TOML
   let _pic = sys.inputs.at("picture", default: none)
   if _pic != none and show_photo {

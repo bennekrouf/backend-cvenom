@@ -224,8 +224,11 @@ pub async fn get_tenant_files_handler(
 
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
 
+    // Check if a tenant-level default photo exists
+    let has_default_photo = tenant_data_dir.join("default_photo.png").exists();
+
     // Build file tree for tenant's directory only if it exists
-    match build_file_tree(&tenant_data_dir).await {
+    match build_file_tree(&tenant_data_dir, has_default_photo).await {
         Ok(tree) => {
             let tree_value = serde_json::to_value(tree).unwrap_or_default();
             Ok(Json(tree_value))
@@ -245,6 +248,7 @@ pub async fn get_tenant_files_handler(
 #[async_recursion]
 async fn build_file_tree(
     dir_path: &std::path::Path,
+    has_default_photo: bool,
 ) -> Result<HashMap<String, serde_json::Value>, anyhow::Error> {
     use tokio::fs;
     let mut tree = HashMap::new();
@@ -257,16 +261,19 @@ async fn build_file_tree(
         let name = entry.file_name().to_string_lossy().to_string();
         let metadata = entry.metadata().await?;
         if metadata.is_dir() {
-            let children = build_file_tree(&path).await?;
-            let has_photo = path.join("profile.png").exists()
+            let children = build_file_tree(&path, false).await?;
+            let has_own_photo = path.join("profile.png").exists()
                 || path.join("profile.jpg").exists()
                 || path.join("profile.jpeg").exists();
+            // Photo is available if the profile has its own or a tenant default exists
+            let has_photo = has_own_photo || has_default_photo;
             tree.insert(
                 name,
                 serde_json::json!({
                     "type": "folder",
                     "children": children,
-                    "has_photo": has_photo
+                    "has_photo": has_photo,
+                    "has_own_photo": has_own_photo
                 }),
             );
         } else if name.ends_with(".typ") || name.ends_with(".toml") {
@@ -291,5 +298,6 @@ pub async fn get_tenant_file_tree(
     tenant_data_path: &std::path::PathBuf,
 ) -> Result<HashMap<String, serde_json::Value>, anyhow::Error> {
     let tenant_path = get_tenant_folder_path(email, tenant_data_path);
-    build_file_tree(&tenant_path).await
+    let has_default_photo = tenant_path.join("default_photo.png").exists();
+    build_file_tree(&tenant_path, has_default_photo).await
 }
