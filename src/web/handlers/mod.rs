@@ -8,6 +8,7 @@ pub mod payment_handlers;
 pub mod profile_handlers;
 pub mod referral_handlers;
 pub mod system_handlers;
+pub mod feedback_handlers;
 
 pub use bd_handlers::*;
 pub use model_handlers::{

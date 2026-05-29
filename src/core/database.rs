@@ -214,6 +214,23 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     .execute(pool)
     .await?;
 
+    // ── Feedback table ────────────────────────────────────────────────────
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS feedback (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            email           TEXT NOT NULL,
+            score           INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+            reason          TEXT NOT NULL DEFAULT '',
+            contact_ok      BOOLEAN NOT NULL DEFAULT FALSE,
+            credits_granted BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     app_log!(info, "Database migrations completed successfully");
     Ok(())
 }

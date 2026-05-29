@@ -31,6 +31,11 @@ use crate::web::handlers::payment_handlers::{
     admin_credit_users_handler, admin_user_transactions_handler,
 };
 use crate::web::handlers::referral_handlers::{get_referral_link_handler, ReferralLinkResponse};
+use crate::web::handlers::feedback_handlers::{
+    feedback_eligible_handler, submit_feedback_handler, admin_feedbacks_handler,
+    SubmitFeedbackRequest, SubmitFeedbackResponse, FeedbackEligibleResponse,
+    AdminFeedbackResponse,
+};
 use crate::web::handlers::model_handlers::{
     get_model_config_handler, update_model_config_handler,
     ModelConfigResponse, UpdateModelConfigResponse, UpdateModelConfigRequest,
@@ -675,6 +680,34 @@ pub async fn get_my_referral_link(
     get_referral_link_handler(auth, db_config).await
 }
 
+/// GET /feedback/eligible — check if user can submit feedback today
+#[get("/feedback/eligible")]
+pub async fn feedback_eligible(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<FeedbackEligibleResponse>, Json<StandardErrorResponse>> {
+    feedback_eligible_handler(auth, db_config).await
+}
+
+/// POST /feedback — submit feedback and optionally earn credits
+#[post("/feedback", data = "<request>")]
+pub async fn submit_feedback(
+    request: Json<SubmitFeedbackRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<SubmitFeedbackResponse>, Json<StandardErrorResponse>> {
+    submit_feedback_handler(request, auth, db_config).await
+}
+
+/// GET /admin/feedbacks — list all feedback (admin only)
+#[get("/admin/feedbacks")]
+pub async fn admin_feedbacks(
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+) -> Result<Json<AdminFeedbackResponse>, Json<StandardErrorResponse>> {
+    admin_feedbacks_handler(auth, db_config).await
+}
+
 // Error catchers
 #[rocket::catch(400)]
 pub fn bad_request() -> Json<StandardErrorResponse> {
@@ -952,6 +985,9 @@ pub fn build_rocket(
                 admin_credit_users,
                 admin_credit_user_transactions,
                 admin_announce_template,
+                feedback_eligible,
+                submit_feedback,
+                admin_feedbacks,
                 get_output_file,
                 get_preferences,
                 update_preferences,

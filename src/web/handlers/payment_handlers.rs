@@ -201,7 +201,7 @@ fn api0_internal_secret() -> Result<String, String> {
 ///
 /// Calls: POST {API0_STORE_URL}/api/user/credits
 /// Body:  { "email": "<user email>", "amount": <credits> }
-async fn api0_topup_credits(user_email: &str, credits_to_add: i64, action_type: &str, description: Option<&str>) -> Result<i64, String> {
+pub async fn api0_topup_credits(user_email: &str, credits_to_add: i64, action_type: &str, description: Option<&str>) -> Result<i64, String> {
     let store_url = api0_store_url()?;
     let internal_secret = api0_internal_secret()?;
     let client = reqwest::Client::new();
