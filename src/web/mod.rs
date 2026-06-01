@@ -159,6 +159,16 @@ pub async fn rename_profile_handler(
     handlers::rename_profile_handler(old_name, request, auth, config).await
 }
 
+#[rocket::put("/profiles/<profile_name>/change-language", data = "<request>")]
+pub async fn change_profile_language_handler(
+    profile_name: String,
+    request: Json<StandardRequest<crate::web::types::ChangeLanguageRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    handlers::change_profile_language_handler(profile_name, request, auth, config).await
+}
+
 #[post("/generate", data = "<request>")]
 pub async fn generate_cv(
     request: Json<StandardRequest<GenerateRequest>>,
@@ -954,6 +964,7 @@ pub fn build_rocket(
                 save_tenant_file_content,
                 universal_options_handler,
                 rename_profile_handler,
+                change_profile_language_handler,
                 optimize_cv,
                 optimize_and_generate,
                 save_optimized_cv,

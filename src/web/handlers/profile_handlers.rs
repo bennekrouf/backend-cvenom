@@ -6,6 +6,7 @@ use crate::web::types::{
     ActionResponse, CreateProfileRequest, DeleteProfileRequest, StandardErrorResponse,
     StandardRequest, UploadForm, WithConversationId,
 };
+use crate::web::types::ChangeLanguageRequest;
 use crate::web::RenameProfileRequest;
 use crate::web::ServerConfig;
 use graflog::app_log;
@@ -466,5 +467,160 @@ pub async fn get_picture_handler(
             )))
         }
     }
+}
+
+const SUPPORTED_LANGS: &[&str] = &["en", "fr", "de"];
+
+/// Renames `experiences_<from>.typ` → `experiences_<new_lang>.typ` inside a profile.
+/// Handles the legacy `experiences.typ` (no suffix) by treating it as the single source.
+pub async fn change_profile_language_handler(
+    profile_name: String,
+    request: Json<StandardRequest<ChangeLanguageRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<crate::web::types::ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let user = auth.user();
+    let conversation_id = request.conversation_id();
+    let new_lang = request.data.new_lang.trim().to_lowercase();
+
+    if !SUPPORTED_LANGS.contains(&new_lang.as_str()) {
+        return Err(Json(StandardErrorResponse::new(
+            format!("Unsupported language code: '{}'", new_lang),
+            "INVALID_LANGUAGE".to_string(),
+            vec![format!("Supported: {}", SUPPORTED_LANGS.join(", "))],
+            conversation_id,
+        )));
+    }
+
+    let tenant_data_dir = get_tenant_folder_path(&user.email, &config.data_dir);
+    let profile_dir = tenant_data_dir.join(&profile_name);
+
+    if !profile_dir.exists() {
+        return Err(Json(StandardErrorResponse::new(
+            format!("Profile '{}' not found", profile_name),
+            "PROFILE_NOT_FOUND".to_string(),
+            vec!["Check the profile name spelling".to_string()],
+            conversation_id,
+        )));
+    }
+
+    // Scan for experiences files in the profile directory.
+    let mut experiences_files: Vec<(String, std::path::PathBuf)> = Vec::new();
+    let mut legacy_file: Option<std::path::PathBuf> = None;
+
+    let mut dir_iter = match tokio::fs::read_dir(&profile_dir).await {
+        Ok(d) => d,
+        Err(e) => {
+            app_log!(error, "Failed to read profile dir {}: {}", profile_dir.display(), e);
+            return Err(Json(StandardErrorResponse::new(
+                "Failed to read profile directory".to_string(),
+                "FS_ERROR".to_string(),
+                vec!["Try again or contact support".to_string()],
+                conversation_id,
+            )));
+        }
+    };
+
+    while let Ok(Some(entry)) = dir_iter.next_entry().await {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = name.strip_prefix("experiences_") {
+            if let Some(lang) = rest.strip_suffix(".typ") {
+                if lang.len() == 2 {
+                    experiences_files.push((lang.to_string(), entry.path()));
+                }
+            }
+        } else if name == "experiences.typ" {
+            legacy_file = Some(entry.path());
+        }
+    }
+
+    // Pick which file to rename.
+    let (current_lang, source_path) = match (request.data.from_lang.as_deref(), experiences_files.len()) {
+        (Some(from), _) => {
+            let from_norm = from.trim().to_lowercase();
+            let found = experiences_files.iter().find(|(l, _)| l == &from_norm).cloned();
+            match found {
+                Some(pair) => pair,
+                None => {
+                    return Err(Json(StandardErrorResponse::new(
+                        format!("No experiences_{}.typ file found in profile '{}'", from_norm, profile_name),
+                        "SOURCE_LANG_NOT_FOUND".to_string(),
+                        vec!["Check the from_lang value".to_string()],
+                        conversation_id,
+                    )));
+                }
+            }
+        }
+        (None, 1) => experiences_files.into_iter().next().unwrap(),
+        (None, 0) => {
+            // Try legacy experiences.typ
+            if let Some(path) = legacy_file {
+                ("".to_string(), path)
+            } else {
+                return Err(Json(StandardErrorResponse::new(
+                    format!("No experiences_<lang>.typ file found in profile '{}'", profile_name),
+                    "NO_EXPERIENCES_FILE".to_string(),
+                    vec!["The profile may be corrupted — re-import the CV".to_string()],
+                    conversation_id,
+                )));
+            }
+        }
+        (None, _) => {
+            let langs: Vec<String> = experiences_files.into_iter().map(|(l, _)| l).collect();
+            return Err(Json(StandardErrorResponse::new(
+                format!("Profile has multiple language files ({}). Specify from_lang.", langs.join(", ")),
+                "AMBIGUOUS_SOURCE_LANG".to_string(),
+                vec!["Pass from_lang to indicate which file to rename".to_string()],
+                conversation_id,
+            )));
+        }
+    };
+
+    if current_lang == new_lang {
+        return Ok(Json(ActionResponse::success(
+            format!("Profile '{}' is already in '{}'", profile_name, new_lang),
+            "NO_CHANGE".to_string(),
+            conversation_id,
+        )));
+    }
+
+    let dest_path = profile_dir.join(format!("experiences_{}.typ", new_lang));
+
+    if dest_path.exists() {
+        return Err(Json(StandardErrorResponse::new(
+            format!("experiences_{}.typ already exists in profile '{}'", new_lang, profile_name),
+            "TARGET_LANG_EXISTS".to_string(),
+            vec![
+                format!("Delete experiences_{}.typ first if you want to overwrite it", new_lang),
+                "Or pick a different target language".to_string(),
+            ],
+            conversation_id,
+        )));
+    }
+
+    if let Err(e) = tokio::fs::rename(&source_path, &dest_path).await {
+        app_log!(error, "Failed to rename {} → {}: {}", source_path.display(), dest_path.display(), e);
+        return Err(Json(StandardErrorResponse::new(
+            "Failed to rename experiences file".to_string(),
+            "RENAME_ERROR".to_string(),
+            vec!["Try again or contact support".to_string()],
+            conversation_id,
+        )));
+    }
+
+    app_log!(
+        info,
+        "User {} relabeled profile '{}' experiences {} → {}",
+        user.email,
+        profile_name,
+        if current_lang.is_empty() { "legacy" } else { &current_lang },
+        new_lang
+    );
+
+    Ok(Json(ActionResponse::success(
+        format!("Profile '{}' language set to '{}'", profile_name, new_lang),
+        "LANGUAGE_CHANGED".to_string(),
+        conversation_id,
+    )))
 }
 

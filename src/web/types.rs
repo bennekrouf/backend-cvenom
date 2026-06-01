@@ -89,6 +89,14 @@ pub struct RenameProfileRequest {
     pub new_name: String,
 }
 
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ChangeLanguageRequest {
+    pub new_lang: String,
+    /// Optional. Required only if the profile has more than one experiences_<lang>.typ file.
+    pub from_lang: Option<String>,
+}
+
 // OptimizeCvRequest / SaveOptimizedRequest are defined in cv_handlers and re-exported.
 pub use crate::web::handlers::cv_handlers::OptimizeCvRequest;
 pub use crate::web::handlers::cv_handlers::SaveOptimizedRequest;
