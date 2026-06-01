@@ -18,7 +18,6 @@ pub async fn get_templates_handler(
             let templates: Vec<TemplateInfo> = template_engine
                 .list_templates()
                 .into_iter()
-                .filter(|name| name != "portfolio")
                 .map(|template_name| {
                     let template_info = template_engine.get_template(&template_name);
                     TemplateInfo {
