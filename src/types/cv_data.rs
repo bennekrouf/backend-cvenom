@@ -174,8 +174,6 @@ fn deserialize_certifications<'de, D>(deserializer: D) -> Result<Option<Vec<Cert
 where
     D: serde::Deserializer<'de>,
 {
-    use serde::de;
-
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum CertItem {

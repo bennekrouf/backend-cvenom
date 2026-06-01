@@ -9,7 +9,7 @@ use std::path::Path;
 use crate::types::{
     cv_data::CvJson,
     response::{
-        CvConversionResponse, CvOptimizationResponse, CvTranslationResponse, JobMatchResponse,
+        CvOptimizationResponse, CvTranslationResponse, JobMatchResponse,
     },
 };
 

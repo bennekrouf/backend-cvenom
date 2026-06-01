@@ -901,16 +901,6 @@ pub async fn start_web_server(
     );
     app_log!(info, "Attempting to bind to port: {}", port);
 
-    let config = Config {
-        port,
-        log_level: LogLevel::Off,
-        limits: rocket::data::Limits::default()
-            .limit("file", ByteUnit::Megabyte(10))
-            .limit("data-form", ByteUnit::Megabyte(10))
-            .limit("form", ByteUnit::Megabyte(10)),
-        ..Config::default()
-    };
-
     let _rocket = build_rocket(server_config, auth_config, db_config, cv_service_url, port)
         .launch()
         .await;
