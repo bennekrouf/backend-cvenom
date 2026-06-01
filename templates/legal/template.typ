@@ -141,12 +141,14 @@
         let val_str = if type(values) == array {
           values.filter(v => v != "").join(" · ")
         } else { str(values) }
-        items.push(
-          block(inset: (x: 4pt, y: 3pt))[
-            #text(size: 9pt, weight: "bold", fill: primary, skill_label(cat) + ": ")
-            #text(size: 9pt, fill: secondary, val_str)
-          ]
-        )
+        if val_str != "" {
+          items.push(
+            block(inset: (x: 4pt, y: 3pt))[
+              #text(size: 9pt, weight: "bold", fill: primary, skill_label(cat) + ": ")
+              #text(size: 9pt, fill: secondary, val_str)
+            ]
+          )
+        }
       }
     }
     grid(

@@ -92,15 +92,22 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (cat, items) in skills.pairs() {
       if cat != "" and items != none {
-        text(size: 8.5pt, weight: "bold", fill: secondary, upper(skill_label(cat)))
-        v(0.15em)
-        if type(items) == array and items.len() > 0 {
-          let filtered = items.filter(v => v != "" and v != none)
-          filtered.map(i => { skill_chip(i); h(2pt) }).join()
-        } else if type(items) == str and items != "" {
-          skill_chip(items)
+        let has_content = if type(items) == array {
+          items.filter(v => v != "" and v != none).len() > 0
+        } else if type(items) == str {
+          items != ""
+        } else { false }
+        if has_content {
+          text(size: 8.5pt, weight: "bold", fill: secondary, upper(skill_label(cat)))
+          v(0.15em)
+          if type(items) == array {
+            let filtered = items.filter(v => v != "" and v != none)
+            filtered.map(i => { skill_chip(i); h(2pt) }).join()
+          } else {
+            skill_chip(items)
+          }
+          v(0.4em)
         }
-        v(0.4em)
       }
     }
   }

@@ -91,15 +91,25 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (cat, items) in skills.pairs() {
       if cat != "" and items != none {
-        text(size: 8pt, fill: accent2, weight: "bold", upper(skill_label(cat)))
-        v(0.2em)
-        if type(items) == array and items.len() > 0 {
-          let filtered = items.filter(v => v != "" and v != none)
-          filtered.map(i => skill_pill(i)).join()
-        } else if type(items) == str and items != "" {
-          skill_pill(items)
+        // Compute non-empty items before deciding whether to render the heading
+        let has_content = if type(items) == array {
+          items.filter(v => v != "" and v != none).len() > 0
+        } else if type(items) == str {
+          items != ""
+        } else {
+          false
         }
-        v(0.4em)
+        if has_content {
+          text(size: 8pt, fill: accent2, weight: "bold", upper(skill_label(cat)))
+          v(0.2em)
+          if type(items) == array {
+            let filtered = items.filter(v => v != "" and v != none)
+            filtered.map(i => skill_pill(i)).join()
+          } else {
+            skill_pill(items)
+          }
+          v(0.4em)
+        }
       }
     }
   }
