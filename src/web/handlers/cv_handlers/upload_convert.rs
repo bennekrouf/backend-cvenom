@@ -164,9 +164,43 @@ pub async fn upload_and_convert_cv_handler(
     {
         Ok(data) => data,
         Err(e) => {
-            let _ = tokio::fs::remove_file(&temp_path).await;
             let err_str = e.to_string();
             app_log!(error, "CV conversion failed: {}", err_str);
+
+            // Preserve the failed upload to a debug folder so the admin can retrieve it.
+            let failed_dir = config.data_dir.join("failed_imports");
+            let saved_path_str = match FsOps::ensure_dir_exists(&failed_dir).await {
+                Ok(_) => {
+                    let stamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+                    let safe_name = original_filename.replace('/', "_").replace('\\', "_");
+                    let dest = failed_dir.join(format!(
+                        "{}_{}_{}",
+                        stamp,
+                        uuid::Uuid::new_v4(),
+                        safe_name
+                    ));
+                    match tokio::fs::rename(&temp_path, &dest).await {
+                        Ok(_) => dest.display().to_string(),
+                        Err(rename_err) => {
+                            app_log!(error, "Failed to preserve failed CV upload: {}", rename_err);
+                            let _ = tokio::fs::remove_file(&temp_path).await;
+                            "<not preserved>".to_string()
+                        }
+                    }
+                }
+                Err(dir_err) => {
+                    app_log!(error, "Failed to create failed_imports dir: {}", dir_err);
+                    let _ = tokio::fs::remove_file(&temp_path).await;
+                    "<not preserved>".to_string()
+                }
+            };
+
+            crate::email::notify_admin(crate::email::EmailKind::AdminCvImportFailed {
+                user_email: user.email.clone(),
+                filename: original_filename.clone(),
+                error_summary: err_str.clone(),
+                saved_path: saved_path_str,
+            });
 
             // Detect specific error types for targeted messages
             let (message, suggestions) = if err_str.contains("Connection refused")

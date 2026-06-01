@@ -91,7 +91,40 @@ pub struct Skills {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub soft_skills: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, deserialize_with = "deserialize_skills_other")]
     pub other: Option<HashMap<String, Vec<String>>>,
+}
+
+/// Accept both `{"key": ["a","b"]}` and `{"key": "a"}` (or `null`) for `skills.other`.
+/// AI models sometimes return a plain string instead of a list.
+fn deserialize_skills_other<'de, D>(
+    deserializer: D,
+) -> Result<Option<HashMap<String, Vec<String>>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrList {
+        List(Vec<String>),
+        One(String),
+        Null,
+    }
+
+    let opt: Option<HashMap<String, StringOrList>> = Option::deserialize(deserializer)?;
+    Ok(opt.map(|m| {
+        m.into_iter()
+            .map(|(k, v)| {
+                let list = match v {
+                    StringOrList::List(items) => items,
+                    StringOrList::One(s) if s.is_empty() => Vec::new(),
+                    StringOrList::One(s) => vec![s],
+                    StringOrList::Null => Vec::new(),
+                };
+                (k, list)
+            })
+            .collect()
+    }))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -778,6 +811,26 @@ mod tests {
         let cv: CvJson = serde_json::from_str(json).expect("should parse struct certifications");
         let certs = cv.certifications.unwrap();
         assert_eq!(certs[0].issuer, "Amazon");
+    }
+
+    #[test]
+    fn skills_other_accepts_string_value() {
+        // Real-world payload: cv-import sometimes returns a plain string instead of a list
+        // for entries inside skills.other (e.g. "certifications": "AFGSU2 Obtenu en 2024").
+        let json = r#"{
+            "personal_info": { "name": "Test" },
+            "work_experience": [],
+            "education": [],
+            "skills": {
+                "technical": [],
+                "other": { "certifications": "AFGSU2 Obtenu en 2024" }
+            },
+            "languages": {},
+            "metadata": { "language": "fr" }
+        }"#;
+        let cv: CvJson = serde_json::from_str(json).expect("should parse string value in skills.other");
+        let other = cv.skills.other.unwrap();
+        assert_eq!(other.get("certifications").unwrap(), &vec!["AFGSU2 Obtenu en 2024".to_string()]);
     }
 
     #[test]

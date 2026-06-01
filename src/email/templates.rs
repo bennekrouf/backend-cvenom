@@ -23,6 +23,12 @@ pub enum EmailKind {
     // ── Admin notifications ───────────────────────────────────────────────────
     AdminNewUser { user_email: String, credits_granted: i64 },
     AdminActivity { user_email: String, action: String, detail: String },
+    AdminCvImportFailed {
+        user_email: String,
+        filename: String,
+        error_summary: String,
+        saved_path: String,
+    },
 }
 
 impl EmailKind {
@@ -48,6 +54,7 @@ impl EmailKind {
             Self::NewTemplate { .. } => "new_template",
             Self::AdminNewUser { .. } => "admin_new_user",
             Self::AdminActivity { .. } => "admin_activity",
+            Self::AdminCvImportFailed { .. } => "admin_cv_import_failed",
         }
     }
 
@@ -160,6 +167,9 @@ impl EmailKind {
             // Admin emails — always English
             Self::AdminNewUser { user_email, .. } => format!("[CVenom] New user: {}", user_email),
             Self::AdminActivity { user_email, action, .. } => format!("[CVenom] {} — {}", action, user_email),
+            Self::AdminCvImportFailed { user_email, filename, .. } => {
+                format!("[CVenom] CV import failed — {} ({})", user_email, filename)
+            }
         }
     }
 
@@ -516,6 +526,26 @@ impl EmailKind {
   <tr><td style="padding:6px 0;color:#64748B">Time</td><td style="padding:6px 0">{}</td></tr>
 </table>"#,
                 chrono::Utc::now().format("%Y-%m-%d %H:%M UTC")),
+
+            Self::AdminCvImportFailed { user_email, filename, error_summary, saved_path } => {
+                let escaped_error = error_summary
+                    .replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;");
+                format!(
+                    r#"<h2 style="color:#B91C1C">🚨 CV import failed</h2>
+<p>A user tried to import a CV but the conversion failed. The uploaded file has been preserved on the server for debugging.</p>
+<table style="border-collapse:collapse;width:100%">
+  <tr><td style="padding:6px 0;color:#64748B;width:140px">User</td><td style="padding:6px 0;font-weight:bold">{user_email}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Filename</td><td style="padding:6px 0">{filename}</td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Saved path</td><td style="padding:6px 0"><code>{saved_path}</code></td></tr>
+  <tr><td style="padding:6px 0;color:#64748B">Time</td><td style="padding:6px 0">{}</td></tr>
+</table>
+<h3 style="color:#0F172A;margin-top:24px">Error</h3>
+<pre style="background:#F8FAFC;padding:12px;border-radius:6px;font-size:12px;white-space:pre-wrap;word-break:break-word">{escaped_error}</pre>
+<p style="color:#64748B;font-size:12px;margin-top:16px">SSH into the backend host and retrieve the file from the saved path above to reproduce the issue locally.</p>"#,
+                    chrono::Utc::now().format("%Y-%m-%d %H:%M UTC"))
+            }
         };
 
         wrap_layout(&content, lang)
