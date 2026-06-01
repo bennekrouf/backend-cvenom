@@ -6,6 +6,7 @@
 // don't forget this
 #show: doc => conf(details, doc)
 
+= #get_text("work_experience")
 #get_work_experience()
 
 = #get_text("technical_skills")
