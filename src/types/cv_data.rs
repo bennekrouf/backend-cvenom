@@ -365,16 +365,10 @@ impl CvConverter {
         // Import statement
         typst_content.push_str("#import \"template.typ\": *\n\n");
 
-        // Work experience function
+        // Work experience function — no section heading here.
+        // Each template renders its own section title (via get_text or section())
+        // so it can control style and avoid duplicate headings.
         typst_content.push_str("#let get_work_experience() = [\n");
-
-        // Section title based on language
-        let section_title = match language {
-            "fr" => "= Expérience Professionnelle",
-            "de" => "= Berufserfahrung",
-            _ => "= Work Experience",
-        };
-        typst_content.push_str(&format!("  {}\n\n", section_title));
 
         // Process experiences
         for exp in &cv_data.work_experience {
