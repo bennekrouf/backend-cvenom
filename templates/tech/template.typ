@@ -90,6 +90,10 @@
 // ── Skills block (sidebar) ─────────────────────────────────────────────────────
 #let show_skills_sidebar(skills) = {
   if type(skills) == dictionary and skills.len() > 0 {
+    // Only show per-category sub-labels when there are multiple categories.
+    // With a single category the sidebar section title already describes it,
+    // so printing the label again would duplicate e.g. "COMPÉTENCES TECHNIQUES".
+    let show_labels = skills.len() > 1
     for (cat, items) in skills.pairs() {
       if cat != "" and items != none {
         let has_content = if type(items) == array {
@@ -98,8 +102,10 @@
           items != ""
         } else { false }
         if has_content {
-          text(size: 8.5pt, weight: "bold", fill: secondary, upper(skill_label(cat)))
-          v(0.15em)
+          if show_labels {
+            text(size: 8.5pt, weight: "bold", fill: secondary, upper(skill_label(cat)))
+            v(0.15em)
+          }
           if type(items) == array {
             let filtered = items.filter(v => v != "" and v != none)
             filtered.map(i => { skill_chip(i); h(2pt) }).join()
