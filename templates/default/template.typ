@@ -173,20 +173,15 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        skills_array.push([*#skill_label(key)*])
-        
-        // Handle both string arrays and single strings
-        if type(value) == array and value.len() > 0 {
+        if type(value) == array {
           let filtered_values = value.filter(v => v != "" and v != none)
           if filtered_values.len() > 0 {
+            skills_array.push([*#skill_label(key)*])
             skills_array.push(filtered_values.map(box).join(text(fill: color, separator)))
-          } else {
-            skills_array.push([Not specified])
           }
         } else if type(value) == str and value != "" {
+          skills_array.push([*#skill_label(key)*])
           skills_array.push([#value])
-        } else {
-          skills_array.push([Not specified])
         }
       }
     }

@@ -444,7 +444,7 @@ fn extract_experience_details(block: &str) -> Vec<String> {
 fn generate_experiences_typ(experiences: &[WorkExperienceEntry]) -> String {
     let mut out = String::from("#import \"template.typ\": *\n\n");
     out.push_str("#let get_work_experience() = [\n");
-    out.push_str("  = Work Experience\n\n");
+    out.push_str("  = #get_text(\"work_experience\")\n\n");
 
     for exp in experiences {
         out.push_str(&format!("  == {}\n", exp.company));

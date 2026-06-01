@@ -443,8 +443,8 @@ show_contact = true\n",
         r#"#import "template.typ": *
 
 #let get_work_experience() = [
-  = Work Experience
-  
+  = #get_text("work_experience")
+
   == Current Company
   #dated_experience(
     "Job Title",

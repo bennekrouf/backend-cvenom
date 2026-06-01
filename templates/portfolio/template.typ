@@ -164,13 +164,15 @@
     let items = ()
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        items.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
         if type(value) == array {
-          items.push(value.filter(v => v != "").map(v => tech_badge(v, color: secondary)).join())
-        } else if type(value) == str {
+          let filtered = value.filter(v => v != "" and v != none)
+          if filtered.len() > 0 {
+            items.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
+            items.push(filtered.map(v => tech_badge(v, color: secondary)).join())
+          }
+        } else if type(value) == str and value != "" {
+          items.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
           items.push(text(size: 9pt, value))
-        } else {
-          items.push([—])
         }
       }
     }

@@ -199,14 +199,15 @@
     let skills_array = ()
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        skills_array.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
-        if type(value) == array and value.len() > 0 {
+        if type(value) == array {
           let filtered = value.filter(v => v != "" and v != none)
-          skills_array.push(filtered.map(box).join(text(fill: color, "  ·  ")))
+          if filtered.len() > 0 {
+            skills_array.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
+            skills_array.push(filtered.map(box).join(text(fill: color, "  ·  ")))
+          }
         } else if type(value) == str and value != "" {
+          skills_array.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
           skills_array.push(text(size: 9pt, value))
-        } else {
-          skills_array.push([—])
         }
       }
     }
