@@ -1,7 +1,9 @@
-// global variables
-#let default_primary_color = rgb("#14A4E6")
-#let default_secondary_color = rgb("#757575")
-#let default_link_color = rgb("#14A4E6")
+// global variables — resolve from user customization or fall back to brand defaults
+#let _u_primary = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let default_primary_color   = if _u_primary != none { rgb(_u_primary) } else { rgb("#14A4E6") }
+#let default_secondary_color = if _u_sec     != none { rgb(_u_sec)     } else { rgb("#757575") }
+#let default_link_color = default_primary_color
 #let default_font = "Liberation Sans"
 #let default_math_font = "Times"
 #let default_separator = text(

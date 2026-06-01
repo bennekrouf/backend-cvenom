@@ -2,10 +2,13 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-#let primary   = rgb("#1A1A2E")   // deep navy
-#let accent    = rgb("#C9A84C")   // gold
-#let secondary = rgb("#4A4A6A")   // muted slate
-#let rule_color = rgb("#C9A84C")  // gold rules
+#let primary    = rgb("#1A1A2E")   // deep navy (fixed)
+// User-customizable: primary_color → accent (gold), secondary_color → secondary
+#let _u_accent  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let accent     = if _u_accent != none { rgb(_u_accent) } else { rgb("#C9A84C") }
+#let secondary  = if _u_sec    != none { rgb(_u_sec)    } else { rgb("#4A4A6A") }
+#let rule_color = accent  // rules follow accent color
 
 #let default_font      = "Liberation Sans"
 #let default_math_font = "Times"

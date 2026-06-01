@@ -2,13 +2,16 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-#let primary   = rgb("#0F172A")   // deep slate
-#let accent    = rgb("#6366F1")   // indigo
-#let accent2   = rgb("#EC4899")   // pink — second accent for tags
-#let secondary = rgb("#64748B")   // muted slate
-#let light_bg  = rgb("#F8FAFC")   // near-white page bg
+#let primary   = rgb("#0F172A")   // deep slate (fixed)
+#let light_bg  = rgb("#F8FAFC")   // near-white page bg (fixed)
 #let card_bg   = rgb("#FFFFFF")
 #let rule_clr  = rgb("#E2E8F0")
+// User-customizable: primary_color → accent, secondary_color → secondary
+#let _u_accent  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let accent     = if _u_accent != none { rgb(_u_accent) } else { rgb("#6366F1") }
+#let accent2    = rgb("#EC4899")   // pink — second accent for tags (fixed)
+#let secondary  = if _u_sec    != none { rgb(_u_sec)    } else { rgb("#64748B") }
 
 // ── Language helpers ───────────────────────────────────────────────────────────
 #let get_text(key) = {

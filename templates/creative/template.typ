@@ -2,12 +2,15 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-#let primary    = rgb("#1C1C1E")   // near-black
-#let accent     = rgb("#E85D75")   // vibrant coral/rose
-#let accent2    = rgb("#F4A261")   // warm amber (secondary accent)
-#let secondary  = rgb("#6B7280")   // muted gray
-#let sidebar_bg = rgb("#1C1C1E")   // dark sidebar
-#let sidebar_fg = rgb("#F9FAFB")   // light text on sidebar
+#let primary    = rgb("#1C1C1E")   // near-black (fixed)
+#let sidebar_bg = rgb("#1C1C1E")   // dark sidebar (fixed)
+#let sidebar_fg = rgb("#F9FAFB")   // light text on sidebar (fixed)
+// User-customizable: primary_color → accent, secondary_color → secondary
+#let _u_accent  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let accent     = if _u_accent != none { rgb(_u_accent) } else { rgb("#E85D75") }
+#let accent2    = rgb("#F4A261")   // warm amber (secondary accent, fixed)
+#let secondary  = if _u_sec    != none { rgb(_u_sec)    } else { rgb("#6B7280") }
 
 #let default_font      = "Liberation Sans"
 #let default_math_font = "Times"
@@ -190,10 +193,21 @@
   )[
     // Photo — use sys.inputs directly; no need for a `picture` key in the TOML
     #let _pic = sys.inputs.at("picture", default: none)
-    #if _pic != none and details.at("styling", default: (:)).at("show_photo", default: true) {
+    #let _show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
+    #if _show_photo {
       align(center,
-        block(clip: true, radius: 50%,
-          image(_pic, width: 75pt, height: 75pt, fit: "cover")))
+        if _pic != none {
+          block(clip: true, radius: 50%,
+            image(_pic, width: 75pt, height: 75pt, fit: "cover"))
+        } else {
+          block(
+            width: 75pt, height: 75pt,
+            radius: 50%,
+            fill: sidebar_bg.lighten(10%),
+            stroke: 0.7pt + accent.lighten(40%)
+          )
+        }
+      )
       v(0.6em)
     }
 

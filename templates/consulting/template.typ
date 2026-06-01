@@ -2,10 +2,13 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-#let primary   = rgb("#023E8A")   // deep corporate blue
-#let accent    = rgb("#0096C7")   // ocean teal
-#let secondary = rgb("#6B7280")   // neutral gray
-#let light_bg  = rgb("#EFF6FF")   // very light blue tint
+#let light_bg   = rgb("#EFF6FF")   // very light blue tint (fixed)
+// User-customizable: primary_color → primary+accent, secondary_color → secondary
+#let _u_primary = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let primary    = if _u_primary != none { rgb(_u_primary) } else { rgb("#023E8A") }
+#let accent     = if _u_primary != none { rgb(_u_primary).lighten(20%) } else { rgb("#0096C7") }
+#let secondary  = if _u_sec     != none { rgb(_u_sec)     } else { rgb("#6B7280") }
 
 #let default_font      = "Liberation Sans"
 #let default_math_font = "Times"

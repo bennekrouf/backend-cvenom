@@ -2,11 +2,14 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette (CGI corporate purple) ────────────────────────────────────────────
-#let primary     = rgb("#5236AB")   // CGI signature purple
-#let accent      = rgb("#E31937")   // CGI red for decorative accents
-#let secondary   = rgb("#6B6B8A")   // muted slate
-#let sidebar_bg  = rgb("#F3F0FF")   // light purple tint for sidebar
-#let light_rule  = rgb("#DDD8F5")   // subtle separator
+#let sidebar_bg  = rgb("#F3F0FF")   // light purple tint for sidebar (fixed)
+#let light_rule  = rgb("#DDD8F5")   // subtle separator (fixed)
+// User-customizable: primary_color → primary+sidebar, secondary_color → secondary
+#let _u_primary  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec      = sys.inputs.at("secondary_color",  default: none)
+#let primary     = if _u_primary != none { rgb(_u_primary) } else { rgb("#5236AB") }
+#let accent      = rgb("#E31937")   // CGI red for decorative accents (fixed)
+#let secondary   = if _u_sec     != none { rgb(_u_sec)     } else { rgb("#6B6B8A") }
 
 #let sidebar_width = 6.5cm
 

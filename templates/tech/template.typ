@@ -2,10 +2,13 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-#let primary   = rgb("#2D3748")   // slate dark
-#let accent    = rgb("#4299E1")   // bright blue
-#let secondary = rgb("#718096")   // muted gray
-#let sidebar_bg = rgb("#F7FAFC")  // very light gray sidebar
+#let primary    = rgb("#2D3748")   // slate dark (fixed)
+#let sidebar_bg = rgb("#F7FAFC")   // very light gray sidebar (fixed)
+// User-customizable: primary_color → accent, secondary_color → secondary
+#let _u_accent  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let accent     = if _u_accent != none { rgb(_u_accent) } else { rgb("#4299E1") }
+#let secondary  = if _u_sec    != none { rgb(_u_sec)    } else { rgb("#718096") }
 
 #let default_font      = "Liberation Sans"
 #let default_math_font = "Times"

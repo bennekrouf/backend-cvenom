@@ -2,10 +2,13 @@
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-#let primary   = rgb("#1E3A5F")   // dark academic blue
-#let accent    = rgb("#2E7D32")   // university green
-#let secondary = rgb("#546E7A")   // blue-gray
-#let rule_clr  = rgb("#90A4AE")   // soft separator
+#let rule_clr   = rgb("#90A4AE")   // soft separator (fixed)
+// User-customizable: primary_color → accent, secondary_color → secondary
+#let _u_accent  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let primary    = rgb("#1E3A5F")   // dark academic blue (fixed)
+#let accent     = if _u_accent != none { rgb(_u_accent) } else { rgb("#2E7D32") }
+#let secondary  = if _u_sec    != none { rgb(_u_sec)    } else { rgb("#546E7A") }
 
 #let default_font      = "Liberation Sans"
 #let default_math_font = "Times"

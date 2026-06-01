@@ -160,7 +160,8 @@ pub async fn generate_cv_handler(
         .with_template(template_id.to_string())
         .with_data_dir(tenant_data_dir)
         .with_output_dir(config.output_dir.clone())
-        .with_templates_dir(config.templates_dir.clone());
+        .with_templates_dir(config.templates_dir.clone())
+        .with_custom_colors(request.data.use_custom_colors.unwrap_or(false));
 
     let pdf_gen_span = app_span!("pdf_generation", profile = %normalized_profile);
     let _pdf_enter = pdf_gen_span.enter();

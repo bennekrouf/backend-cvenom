@@ -3,10 +3,13 @@
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 // Conservative: dark navy + burgundy accents — conveys authority and tradition.
-#let primary   = rgb("#1B2A4A")   // dark navy
-#let accent    = rgb("#7A2532")   // burgundy
-#let secondary = rgb("#4A5568")   // slate gray
-#let rule_color = rgb("#1B2A4A")  // navy rules
+// User-customizable: primary_color → accent, secondary_color → secondary
+#let _u_accent  = sys.inputs.at("primary_color",   default: none)
+#let _u_sec     = sys.inputs.at("secondary_color",  default: none)
+#let primary    = rgb("#1B2A4A")   // dark navy (fixed)
+#let accent     = if _u_accent != none { rgb(_u_accent) } else { rgb("#7A2532") }
+#let secondary  = if _u_sec    != none { rgb(_u_sec)    } else { rgb("#4A5568") }
+#let rule_color = primary  // navy rules (follows primary)
 
 #let default_font      = "Liberation Serif"
 #let default_math_font = "Times"

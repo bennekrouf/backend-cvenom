@@ -143,6 +143,9 @@ pub struct GenerateRequest {
     pub profile: String,
     pub lang: Option<String>,
     pub template: Option<String>,
+    /// When true, forward the profile's custom primary/secondary colors to Typst.
+    /// Defaults to false so templates render with their own brand colors.
+    pub use_custom_colors: Option<bool>,
 }
 
 #[derive(Serialize)]

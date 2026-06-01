@@ -53,6 +53,7 @@ pub struct ModelConfig {
     pub claude: Option<ProviderModelConfig>,
     pub cohere: Option<ProviderModelConfig>,
     pub deepseek: Option<ProviderModelConfig>,
+    pub mistral: Option<ProviderModelConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -117,6 +118,9 @@ pub async fn get_model_config_handler(
     if let Some(ref mut c) = config.deepseek {
         c.api_key_masked = mask_key(&raw, "deepseek");
     }
+    if let Some(ref mut c) = config.mistral {
+        c.api_key_masked = mask_key(&raw, "mistral");
+    }
 
     app_log!(info, admin = %auth.email(), "Model config read from {}", path);
     Ok(Json(ModelConfigResponse { success: true, config, config_path: path }))
@@ -142,6 +146,7 @@ pub struct UpdateModelConfigRequest {
     pub claude: Option<UpdateProviderModelConfig>,
     pub cohere: Option<UpdateProviderModelConfig>,
     pub deepseek: Option<UpdateProviderModelConfig>,
+    pub mistral: Option<UpdateProviderModelConfig>,
 }
 
 #[derive(Serialize)]
@@ -158,7 +163,7 @@ pub async fn update_model_config_handler(
 ) -> Result<Json<UpdateModelConfigResponse>, Json<StandardErrorResponse>> {
     admin_only(&auth)?;
 
-    let valid_providers = ["claude", "cohere", "deepseek"];
+    let valid_providers = ["claude", "cohere", "deepseek", "mistral"];
     for (op, prov) in [
         ("cv_import", &body.providers.cv_import),
         ("translation", &body.providers.translation),
@@ -210,8 +215,15 @@ pub async fn update_model_config_handler(
         );
     }
 
-    // Update provider model blocks if supplied
+    // Update provider model blocks if supplied; creates the block if absent.
     let update_provider = |yaml: &mut serde_yaml::Value, name: &str, cfg: &UpdateProviderModelConfig| {
+        // Ensure the top-level block exists (needed for newly-added providers like mistral).
+        if let Some(top) = yaml.as_mapping_mut() {
+            let key = serde_yaml::Value::String(name.to_string());
+            if !top.contains_key(&key) {
+                top.insert(key, serde_yaml::Value::Mapping(Default::default()));
+            }
+        }
         if let Some(block) = yaml.get_mut(name).and_then(|v| v.as_mapping_mut()) {
             block.insert(
                 serde_yaml::Value::String("model".to_string()),
@@ -247,6 +259,9 @@ pub async fn update_model_config_handler(
     }
     if let Some(ref cfg) = body.deepseek {
         update_provider(&mut yaml, "deepseek", cfg);
+    }
+    if let Some(ref cfg) = body.mistral {
+        update_provider(&mut yaml, "mistral", cfg);
     }
 
     let new_content = serde_yaml::to_string(&yaml).map_err(|e| {

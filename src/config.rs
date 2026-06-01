@@ -10,6 +10,8 @@ pub struct CvConfig {
     pub data_dir: PathBuf,
     pub templates_dir: PathBuf,
     pub root_dir: PathBuf,
+    /// Forward the profile's custom colors to Typst; false → use template defaults.
+    pub use_custom_colors: bool,
 }
 
 impl CvConfig {
@@ -31,6 +33,7 @@ impl CvConfig {
             data_dir: PathBuf::from("data"),
             templates_dir: PathBuf::from("templates"),
             root_dir: current_dir,
+            use_custom_colors: false,
         }
     }
 
@@ -51,6 +54,11 @@ impl CvConfig {
 
     pub fn with_templates_dir(mut self, dir: PathBuf) -> Self {
         self.templates_dir = dir;
+        self
+    }
+
+    pub fn with_custom_colors(mut self, enabled: bool) -> Self {
+        self.use_custom_colors = enabled;
         self
     }
 

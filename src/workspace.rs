@@ -265,6 +265,27 @@ impl<'a> WorkspaceManager<'a> {
             app_log!(info, "ℹ️  No profile image in workspace - generating without photo");
         }
 
+        // Forward color customizations from cv_params.toml as Typst --input flags
+        // only when the user explicitly opted in (use_custom_colors = true).
+        if self.config.use_custom_colors {
+            if let Ok(toml_content) = fs::read_to_string("cv_params.toml") {
+                if let Ok(toml::Value::Table(table)) = toml::from_str::<toml::Value>(&toml_content) {
+                    if let Some(styling) = table.get("styling").and_then(|v| v.as_table()) {
+                        if let Some(pc) = styling.get("primary_color").and_then(|v| v.as_str()) {
+                            if !pc.is_empty() {
+                                cmd.arg("--input").arg(format!("primary_color={}", pc));
+                            }
+                        }
+                        if let Some(sc) = styling.get("secondary_color").and_then(|v| v.as_str()) {
+                            if !sc.is_empty() {
+                                cmd.arg("--input").arg(format!("secondary_color={}", sc));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let output = cmd.output().context("Failed to execute typst command")?;
 
         if !output.status.success() {
