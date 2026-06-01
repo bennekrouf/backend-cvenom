@@ -6,6 +6,46 @@
 // ── Language helpers ───────────────────────────────────────────────────────────
 #let get_lang() = { sys.inputs.at("lang", default: "en") }
 
+// ── Skill subsection label translation ─────────────────────────────────────────
+// Translates skill keys (technical, programming_languages, …) used as labels
+// inside the Skills section. Falls back to a humanized version of the key if
+// unknown (replaces underscores with spaces and capitalizes).
+#let skill_label(key) = {
+  let lang = get_lang()
+  let labels = (
+    "en": (
+      "technical": "Technical",
+      "programming_languages": "Programming Languages",
+      "frameworks": "Frameworks",
+      "tools": "Tools",
+      "soft_skills": "Soft Skills",
+      "certifications": "Certifications",
+    ),
+    "fr": (
+      "technical": "Compétences techniques",
+      "programming_languages": "Langages de programmation",
+      "frameworks": "Frameworks",
+      "tools": "Outils",
+      "soft_skills": "Savoir-être",
+      "certifications": "Certifications",
+    ),
+    "de": (
+      "technical": "Technisch",
+      "programming_languages": "Programmiersprachen",
+      "frameworks": "Frameworks",
+      "tools": "Werkzeuge",
+      "soft_skills": "Soft Skills",
+      "certifications": "Zertifizierungen",
+    ),
+  )
+  let dict = labels.at(lang, default: labels.en)
+  dict.at(key, default: {
+    // Humanize unknown keys: snake_case → "Snake Case"
+    let parts = key.split("_")
+    parts.map(p => if p.len() > 0 { upper(p.slice(0, 1)) + p.slice(1) } else { p }).join(" ")
+  })
+}
+
 // ── Dictionary merge ──────────────────────────────────────────────────────────
 #let join_dicts(..args) = {
   let result = (:)

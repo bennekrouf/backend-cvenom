@@ -1,3 +1,6 @@
+
+#import "font_config.typ": font_config, get_icon
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 // global variables
 #let default_primary_color = rgb("#14A4E6")
 #let default_secondary_color = rgb("#757575")
@@ -10,47 +13,6 @@
   font: "Liberation Sans",
   " \u{007c} ",
 )
-
-// Get language from system inputs, fallback to 'en'
-#let get_lang() = {
-  sys.inputs.at("lang", default: "en")
-}
-
-// Localized labels for skill subsections (technical, programming_languages, …)
-#let skill_label(key) = {
-  let lang = get_lang()
-  let labels = (
-    "en": (
-      "technical": "Technical",
-      "programming_languages": "Programming Languages",
-      "frameworks": "Frameworks",
-      "tools": "Tools",
-      "soft_skills": "Soft Skills",
-      "certifications": "Certifications",
-    ),
-    "fr": (
-      "technical": "Compétences techniques",
-      "programming_languages": "Langages de programmation",
-      "frameworks": "Frameworks",
-      "tools": "Outils",
-      "soft_skills": "Savoir-être",
-      "certifications": "Certifications",
-    ),
-    "de": (
-      "technical": "Technisch",
-      "programming_languages": "Programmiersprachen",
-      "frameworks": "Frameworks",
-      "tools": "Werkzeuge",
-      "soft_skills": "Soft Skills",
-      "certifications": "Zertifizierungen",
-    ),
-  )
-  let dict = labels.at(lang, default: labels.en)
-  dict.at(key, default: {
-    let parts = key.split("_")
-    parts.map(p => if p.len() > 0 { upper(p.slice(0, 1)) + p.slice(1) } else { p }).join(" ")
-  })
-}
 
 // Language-specific text content
 #let get_text(key) = {
@@ -111,99 +73,12 @@
   texts.at(lang, default: texts.en).at(key, default: key)
 }
 
-// dictionary of common icons and values
-#let get_default_icons(color: none) = {
-  if color == none {
-    color = default_primary_color
-  }
-  (
-    "github": (
-      "displayname": "GitHub",
-      "logo": get_icon("github", font_type: "brands")
-    ),
-    "linkedin": (
-      "displayname": "LinkedIn",
-      "logo": get_icon("linkedin", font_type: "brands")
-    ),
-    "personal_info": (
-      "displayname": "Personal",
-      "logo": get_icon("personal_info", font_type: "solid")
-    ),
-    "orcid": ("displayname": "ORCID", "logo": box(baseline: 0.2em, circle(
-      radius: 0.5em,
-      fill: color,
-      inset: 0pt,
-      align(center + horizon, text(size: 0.8em, fill: white, "iD")),
-    ))),
-  )
-}
-
-/* join dictionaries (kind of like Python's {**a, **b}) */
-#let join_dicts(..args) = {
-  let result = (:)
-  for arg in args.pos() {
-    for (key, value) in arg.pairs(){
-      result.insert(key, value)
-    }
-  }
-  result
-}
-
 /* function that applies a color to a link */
 #let colorlink(color: none, url, body) = {
   if color == none {
     color = default_link_color
   }
   text(fill: color, link(url)[#body<colorlink>])
-}
-
-/* function that processes links */
-#let process_links(color: none, icons: none, links) = {
-  if icons == none {
-    icons = get_default_icons(color: color)
-  } else {
-    // if the user supplies a custom dictionary, update the default one
-    icons = join_dicts(get_default_icons(color: color), icons)
-  }
-  
-  // Handle both array and dictionary formats for links
-  let link_pairs = ()
-  
-  if type(links) == array {
-    // If links is an array, treat each item as a URL with default icon
-    for link in links {
-      if link != "" and link != none {
-        link_pairs.push(("personal_info", link))
-      }
-    }
-  } else if type(links) == dictionary {
-    // If links is a dictionary, filter out empty/none values
-    for (key, value) in links.pairs() {
-      if value != "" and value != none and type(value) == str {
-        link_pairs.push((key, value))
-      }
-    }
-  }
-  
-  // Only process non-empty links
-  if link_pairs.len() > 0 {
-    link_pairs.map(
-      it => {
-        let key = it.at(0)
-        let url = it.at(1)
-        text(
-          fill: color,
-          link(
-            url,
-            icons.at(key, default: (:)).at("logo", default: "") + " " + icons.at(key, default: (:)).at("displayname", default: key),
-          ),
-        )
-      }
-    )
-  } else {
-    // Return empty array if no valid links
-    ()
-  }
 }
 
 /* the section(s) that are colored and have a line */
@@ -295,7 +170,7 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        skills_array.push([*#skill_label(key)*])
+        skills_array.push([*#key*])
         
         // Handle both string arrays and single strings
         if type(value) == array and value.len() > 0 {
@@ -424,7 +299,6 @@
   ]
 }
 
-
 /* the main info about the profile (including picture) */
 #let show_details(icons: none, separator: none, color: none, details) = {
   let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
@@ -441,7 +315,6 @@
     )
   } else {
     show_details_text(
-      // TODO figure out why the `center + horizon` alignment causes issues
       alignment: center + top,
       icons: icons,
       separator: separator,
@@ -574,7 +447,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
 
     #if context_info != none [
       #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
-        if get_lang() == "fr" { "Contexte" } else { "Context" })
+        if get_lang() == "fr" { "Contexte" } else if get_lang() == "de" { "Kontext" } else { "Context" })
       #v(0.2em)
       
       // Handle context as array of bullet points or single text
@@ -592,7 +465,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
 
     #if responsibilities != none [
       #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
-        if get_lang() == "fr" { "Responsabilités" } else { "Responsibilities" })
+        if get_lang() == "fr" { "Responsabilités" } else if get_lang() == "de" { "Verantwortlichkeiten" } else { "Responsibilities" })
       #v(0.2em)
       
       // Handle responsibilities as dictionary with subsections

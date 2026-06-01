@@ -161,7 +161,7 @@
     let items = ()
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        items.push(text(weight: "bold", size: 9pt, fill: primary, skill_label(key)))
+        items.push(text(weight: "bold", size: 9pt, fill: primary, key))
         if type(value) == array {
           items.push(value.filter(v => v != "").map(v => tech_badge(v, color: secondary)).join())
         } else if type(value) == str {

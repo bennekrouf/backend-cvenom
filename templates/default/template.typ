@@ -1,6 +1,6 @@
 
 #import "font_config.typ": font_config, get_icon
-#import "common.typ": get_lang, join_dicts, get_default_icons, process_links
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 // global variables
 #let default_primary_color = rgb("#14A4E6")
 #let default_secondary_color = rgb("#757575")
@@ -170,7 +170,7 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        skills_array.push([*#key*])
+        skills_array.push([*#skill_label(key)*])
         
         // Handle both string arrays and single strings
         if type(value) == array and value.len() > 0 {

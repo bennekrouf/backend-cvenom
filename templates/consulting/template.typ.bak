@@ -116,7 +116,7 @@
     let skills_array = ()
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        skills_array.push(text(weight: "bold", size: 9.5pt, fill: primary, skill_label(key)))
+        skills_array.push(text(weight: "bold", size: 9.5pt, fill: primary, key))
         if type(value) == array and value.len() > 0 {
           let filtered = value.filter(v => v != "" and v != none)
           skills_array.push(filtered.map(box).join(text(fill: color, "  ·  ")))

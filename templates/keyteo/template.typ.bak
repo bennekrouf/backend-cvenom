@@ -16,42 +16,6 @@
   sys.inputs.at("lang", default: "en")
 }
 
-// Localized labels for skill subsections (technical, programming_languages, …)
-#let skill_label(key) = {
-  let lang = get_lang()
-  let labels = (
-    "en": (
-      "technical": "Technical",
-      "programming_languages": "Programming Languages",
-      "frameworks": "Frameworks",
-      "tools": "Tools",
-      "soft_skills": "Soft Skills",
-      "certifications": "Certifications",
-    ),
-    "fr": (
-      "technical": "Compétences techniques",
-      "programming_languages": "Langages de programmation",
-      "frameworks": "Frameworks",
-      "tools": "Outils",
-      "soft_skills": "Savoir-être",
-      "certifications": "Certifications",
-    ),
-    "de": (
-      "technical": "Technisch",
-      "programming_languages": "Programmiersprachen",
-      "frameworks": "Frameworks",
-      "tools": "Werkzeuge",
-      "soft_skills": "Soft Skills",
-      "certifications": "Zertifizierungen",
-    ),
-  )
-  let dict = labels.at(lang, default: labels.en)
-  dict.at(key, default: {
-    let parts = key.split("_")
-    parts.map(p => if p.len() > 0 { upper(p.slice(0, 1)) + p.slice(1) } else { p }).join(" ")
-  })
-}
-
 // Language-specific text content
 #let get_text(key) = {
   let lang = get_lang()
@@ -295,7 +259,7 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (key, value) in skills.pairs() {
       if key != "" and value != none {
-        skills_array.push([*#skill_label(key)*])
+        skills_array.push([*#key*])
         
         // Handle both string arrays and single strings
         if type(value) == array and value.len() > 0 {

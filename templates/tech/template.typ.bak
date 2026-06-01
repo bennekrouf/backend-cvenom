@@ -89,7 +89,7 @@
   if type(skills) == dictionary and skills.len() > 0 {
     for (cat, items) in skills.pairs() {
       if cat != "" and items != none {
-        text(size: 8.5pt, weight: "bold", fill: secondary, upper(skill_label(cat)))
+        text(size: 8.5pt, weight: "bold", fill: secondary, upper(cat))
         v(0.15em)
         if type(items) == array and items.len() > 0 {
           let filtered = items.filter(v => v != "" and v != none)

@@ -295,24 +295,24 @@ impl CvConverter {
             }
         }
 
-        // Skills section
+        // Skills section — only emit non-empty arrays so the template doesn't render
+        // empty subsections (e.g. PROGRAMMING_LANGUAGES for a nurse).
         toml_content.push_str("\n[skills]\n");
 
-        if let Some(technical) = &cv_data.skills.technical {
-            toml_content.push_str(&format!("technical = {:?}\n", technical));
-        }
+        let write_skill = |buf: &mut String, key: &str, values: &Option<Vec<String>>| {
+            if let Some(items) = values {
+                let cleaned: Vec<&String> = items.iter().filter(|s| !s.trim().is_empty()).collect();
+                if !cleaned.is_empty() {
+                    buf.push_str(&format!("{} = {:?}\n", key, cleaned));
+                }
+            }
+        };
 
-        if let Some(prog_langs) = &cv_data.skills.programming_languages {
-            toml_content.push_str(&format!("programming_languages = {:?}\n", prog_langs));
-        }
-
-        if let Some(frameworks) = &cv_data.skills.frameworks {
-            toml_content.push_str(&format!("frameworks = {:?}\n", frameworks));
-        }
-
-        if let Some(tools) = &cv_data.skills.tools {
-            toml_content.push_str(&format!("tools = {:?}\n", tools));
-        }
+        write_skill(&mut toml_content, "technical", &cv_data.skills.technical);
+        write_skill(&mut toml_content, "programming_languages", &cv_data.skills.programming_languages);
+        write_skill(&mut toml_content, "frameworks", &cv_data.skills.frameworks);
+        write_skill(&mut toml_content, "tools", &cv_data.skills.tools);
+        write_skill(&mut toml_content, "soft_skills", &cv_data.skills.soft_skills);
 
         // Education section
         if !cv_data.education.is_empty() {
