@@ -215,13 +215,25 @@ pub async fn upload_and_convert_cv_handler(
                         "Upload a PDF with selectable/copyable text".to_string(),
                     ],
                 )
-            } else {
-                // Pass through the actual error message from cv-import rather than hiding it
+            } else if err_str.contains("Failed to deserialize cv_data")
+                || err_str.contains("CV service returned non-JSON response")
+            {
                 (
-                    format!("CV conversion failed: {}", err_str),
+                    "We couldn't read the CV structure returned by the import service".to_string(),
+                    vec![
+                        "The CV was parsed but its format didn't match what we expected".to_string(),
+                        "Try uploading the CV as DOCX instead of PDF".to_string(),
+                        "If the problem persists, contact support — our team has been notified".to_string(),
+                    ],
+                )
+            } else {
+                // Generic fallback — do NOT leak raw error text (may contain full JSON payloads)
+                (
+                    "CV conversion failed".to_string(),
                     vec![
                         "Ensure the CV has selectable text (not a scanned image)".to_string(),
                         "Try DOCX format — it works more reliably than PDF".to_string(),
+                        "Contact support if the problem persists".to_string(),
                     ],
                 )
             };
