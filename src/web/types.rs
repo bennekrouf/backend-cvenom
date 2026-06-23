@@ -146,6 +146,10 @@ pub struct GenerateRequest {
     /// When true, forward the profile's custom primary/secondary colors to Typst.
     /// Defaults to false so templates render with their own brand colors.
     pub use_custom_colors: Option<bool>,
+    /// Optional tenant-scoped brand slug. When set, that brand's styling and
+    /// logo override the profile's defaults for this generation. Absent /
+    /// "default" / empty = no brand (current behavior).
+    pub brand_slug: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -177,6 +181,13 @@ pub struct UploadForm<'f> {
 #[derive(FromForm)]
 pub struct CvUploadForm<'f> {
     pub cv_file: TempFile<'f>,
+}
+
+/// Multipart body for `POST /brands/<slug>/logo` — just the file; the slug is
+/// in the URL path so we don't duplicate it here.
+#[derive(FromForm)]
+pub struct BrandLogoUploadForm<'f> {
+    pub file: TempFile<'f>,
 }
 
 #[derive(Serialize)]

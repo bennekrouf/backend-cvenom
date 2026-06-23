@@ -317,15 +317,28 @@ pub async fn optimize_and_generate_handler(
 
     match generator.generate().await {
         Ok(output_path) => {
-            // Build a descriptive ATS filename
-            let safe_company = optimize_resp
-                .company_name
-                .to_lowercase()
-                .replace(' ', "_")
-                .chars()
-                .filter(|c| c.is_alphanumeric() || *c == '_')
-                .collect::<String>();
-            let ats_filename = format!("{}_ats_{}_{}.pdf", profile, safe_company, lang);
+            // Build a descriptive ATS filename: "{company}_{job-title}_{lang}.pdf"
+            // Falls back gracefully when either field is missing.
+            let slug = |s: &str| -> String {
+                s.to_lowercase()
+                    .chars()
+                    .map(|c| if c.is_alphanumeric() { c } else { '-' })
+                    .collect::<String>()
+                    .split('-')
+                    .filter(|p| !p.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("-")
+            };
+            let safe_company = slug(&optimize_resp.company_name);
+            let safe_title   = slug(&optimize_resp.job_title);
+            let base = match (safe_company.is_empty(), safe_title.is_empty()) {
+                (false, false) => format!("{}_{}",   safe_company, safe_title),
+                (false, true)  => format!("{}_{}",   profile,      safe_company),
+                _              => format!("{}_ats",   profile),
+            };
+            // Cap at a reasonable filename length
+            let base = if base.len() > 60 { base[..60].trim_end_matches('-').to_string() } else { base };
+            let ats_filename = format!("{}_{}.pdf", base, lang);
 
             // Rename the output file to the ATS filename in the output directory
             let final_path = config.output_dir.join(&ats_filename);

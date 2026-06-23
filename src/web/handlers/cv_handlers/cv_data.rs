@@ -78,6 +78,25 @@ pub struct StylingData {
     /// Whether to render the uploaded photo on the CV (default: false)
     #[serde(default)]
     pub show_photo: bool,
+
+    // ── Branding knobs (all optional; absent = use vibe preset or hardcoded
+    //    template defaults). Empty string is treated as "not set". ──
+    #[serde(default)] pub vibe:             String,
+    #[serde(default)] pub accent_color:     String,
+    #[serde(default)] pub neutral_color:    String,
+    #[serde(default)] pub background_tone:  String,
+    #[serde(default)] pub font_personality: String,
+    #[serde(default)] pub density:          String,
+    #[serde(default)] pub layout:           String,
+    #[serde(default)] pub divider:          String,
+    #[serde(default)] pub header_style:     String,
+    #[serde(default)] pub photo_shape:      String,
+    #[serde(default)] pub icon_style:       String,
+    #[serde(default)] pub skill_style:      String,
+    #[serde(default)] pub date_style:       String,
+    #[serde(default)] pub lang_style:       String,
+    #[serde(default)] pub label_tone:       String,
+    #[serde(default)] pub paper:            String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -220,10 +239,33 @@ fn parse_toml_cv(content: &str) -> CvFormData {
 
     // ── styling ──
     let styling_raw = table.get("styling").and_then(|v| v.as_table());
+    let str_field = |k: &str| -> String {
+        styling_raw
+            .and_then(|t| t.get(k))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
     let styling = StylingData {
         primary_color:   styling_raw.and_then(|t| t.get("primary_color")).and_then(|v| v.as_str()).unwrap_or("#14A4E6").to_string(),
         secondary_color: styling_raw.and_then(|t| t.get("secondary_color")).and_then(|v| v.as_str()).unwrap_or("#757575").to_string(),
         show_photo:      styling_raw.and_then(|t| t.get("show_photo")).and_then(|v| v.as_bool()).unwrap_or(false),
+        vibe:             str_field("vibe"),
+        accent_color:     str_field("accent_color"),
+        neutral_color:    str_field("neutral_color"),
+        background_tone:  str_field("background_tone"),
+        font_personality: str_field("font_personality"),
+        density:          str_field("density"),
+        layout:           str_field("layout"),
+        divider:          str_field("divider"),
+        header_style:     str_field("header_style"),
+        photo_shape:      str_field("photo_shape"),
+        icon_style:       str_field("icon_style"),
+        skill_style:      str_field("skill_style"),
+        date_style:       str_field("date_style"),
+        lang_style:       str_field("lang_style"),
+        label_tone:       str_field("label_tone"),
+        paper:            str_field("paper"),
     };
 
     CvFormData { personal, links, skills, education, languages, work_experience: vec![], styling }
@@ -285,6 +327,29 @@ fn generate_toml(data: &CvFormData) -> String {
     out.push_str(&format!("primary_color = \"{}\"\n",   escape_toml(&data.styling.primary_color)));
     out.push_str(&format!("secondary_color = \"{}\"\n", escape_toml(&data.styling.secondary_color)));
     out.push_str(&format!("show_photo = {}\n",          data.styling.show_photo));
+    // Optional branding knobs — only written when set, to keep legacy TOML
+    // byte-identical for profiles that don't use them.
+    let mut write_opt = |k: &str, v: &str| {
+        if !v.is_empty() {
+            out.push_str(&format!("{} = \"{}\"\n", k, escape_toml(v)));
+        }
+    };
+    write_opt("vibe",             &data.styling.vibe);
+    write_opt("accent_color",     &data.styling.accent_color);
+    write_opt("neutral_color",    &data.styling.neutral_color);
+    write_opt("background_tone",  &data.styling.background_tone);
+    write_opt("font_personality", &data.styling.font_personality);
+    write_opt("density",          &data.styling.density);
+    write_opt("layout",           &data.styling.layout);
+    write_opt("divider",          &data.styling.divider);
+    write_opt("header_style",     &data.styling.header_style);
+    write_opt("photo_shape",      &data.styling.photo_shape);
+    write_opt("icon_style",       &data.styling.icon_style);
+    write_opt("skill_style",      &data.styling.skill_style);
+    write_opt("date_style",       &data.styling.date_style);
+    write_opt("lang_style",       &data.styling.lang_style);
+    write_opt("label_tone",       &data.styling.label_tone);
+    write_opt("paper",            &data.styling.paper);
     out.push('\n');
 
     out

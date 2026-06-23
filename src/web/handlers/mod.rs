@@ -1,6 +1,7 @@
 // src/web/handlers/mod.rs - Fixed to include upload_picture_handler
 
 pub mod bd_handlers;
+pub mod brand_handlers;
 pub mod model_handlers;
 pub mod cv_handlers;
 pub mod linkedin_handlers;

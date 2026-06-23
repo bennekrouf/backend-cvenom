@@ -1,14 +1,18 @@
 #import "font_config.typ": font_config, get_icon
 #import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
 
-// ── Palette (CGI corporate purple) ────────────────────────────────────────────
+// ── Palette ───────────────────────────────────────────────────────────────────
+// User-customizable via `sys.inputs` (see core/branding.rs). Every default
+// here matches the literal value this template used historically — keys that
+// the resolver doesn't forward fall through to these defaults, so legacy
+// profiles render unchanged.
 #let sidebar_bg  = rgb("#F3F0FF")   // light purple tint for sidebar (fixed)
 #let light_rule  = rgb("#DDD8F5")   // subtle separator (fixed)
-// User-customizable: primary_color → primary+sidebar, secondary_color → secondary
 #let _u_primary  = sys.inputs.at("primary_color",   default: none)
-#let _u_sec      = sys.inputs.at("secondary_color",  default: none)
+#let _u_sec      = sys.inputs.at("secondary_color", default: none)
+#let _u_accent   = sys.inputs.at("accent_color",    default: none)
 #let primary     = if _u_primary != none { rgb(_u_primary) } else { rgb("#5236AB") }
-#let accent      = rgb("#E31937")   // CGI red for decorative accents (fixed)
+#let accent      = if _u_accent  != none { rgb(_u_accent)  } else { rgb("#E31937") }
 #let secondary   = if _u_sec     != none { rgb(_u_sec)     } else { rgb("#6B6B8A") }
 
 #let sidebar_width = 6.5cm

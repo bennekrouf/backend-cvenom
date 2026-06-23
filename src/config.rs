@@ -12,6 +12,13 @@ pub struct CvConfig {
     pub root_dir: PathBuf,
     /// Forward the profile's custom colors to Typst; false → use template defaults.
     pub use_custom_colors: bool,
+    /// Optional tenant brand selected for this generation. When `Some`, its
+    /// styling overrides the profile's `[styling]` block and (if present) its
+    /// logo overrides the profile/tenant `company_logo.png`.
+    pub brand: Option<crate::core::brand_store::Brand>,
+    /// Absolute path to the selected brand's directory inside the tenant data
+    /// dir (used to find `logo.png`). `None` when no brand is selected.
+    pub brand_dir: Option<PathBuf>,
 }
 
 impl CvConfig {
@@ -34,6 +41,8 @@ impl CvConfig {
             templates_dir: PathBuf::from("templates"),
             root_dir: current_dir,
             use_custom_colors: false,
+            brand: None,
+            brand_dir: None,
         }
     }
 
@@ -59,6 +68,19 @@ impl CvConfig {
 
     pub fn with_custom_colors(mut self, enabled: bool) -> Self {
         self.use_custom_colors = enabled;
+        self
+    }
+
+    /// Attach a tenant brand. Picking a brand implicitly enables custom-colors
+    /// forwarding — otherwise the user picks "CGI" and sees no visual change.
+    pub fn with_brand(
+        mut self,
+        brand: crate::core::brand_store::Brand,
+        brand_dir: PathBuf,
+    ) -> Self {
+        self.brand = Some(brand);
+        self.brand_dir = Some(brand_dir);
+        self.use_custom_colors = true;
         self
     }
 

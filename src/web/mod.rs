@@ -314,6 +314,79 @@ pub async fn save_tenant_file_content(
     file_handlers::save_tenant_file_content_handler(request, auth, config, db_config).await
 }
 
+// ── Brand library routes ──────────────────────────────────────────────────────
+
+/// GET /brands → tenant's named brands (summary list).
+#[get("/brands")]
+pub async fn list_brands(
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<Vec<crate::core::brand_store::BrandSummary>>, Json<StandardErrorResponse>> {
+    crate::web::handlers::brand_handlers::list_brands_handler(auth, config).await
+}
+
+/// GET /brands/<slug> → full brand (name, description, styling).
+#[get("/brands/<slug>")]
+pub async fn get_brand(
+    slug: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<crate::core::brand_store::Brand>, Json<StandardErrorResponse>> {
+    crate::web::handlers::brand_handlers::get_brand_handler(slug, auth, config).await
+}
+
+/// PUT /brands/<slug> → create or replace.
+#[put("/brands/<slug>", data = "<body>")]
+pub async fn put_brand(
+    slug: String,
+    body: Json<crate::web::handlers::brand_handlers::PutBrandRequest>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<crate::core::brand_store::Brand>, Json<StandardErrorResponse>> {
+    crate::web::handlers::brand_handlers::put_brand_handler(slug, body, auth, config).await
+}
+
+/// DELETE /brands/<slug> → remove.
+#[delete("/brands/<slug>")]
+pub async fn delete_brand(
+    slug: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    crate::web::handlers::brand_handlers::delete_brand_handler(slug, auth, config).await
+}
+
+/// POST /brands/<slug>/logo → multipart upload, field name `file`.
+#[post("/brands/<slug>/logo", data = "<upload>")]
+pub async fn upload_brand_logo(
+    slug: String,
+    upload: rocket::form::Form<crate::web::types::BrandLogoUploadForm<'_>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    crate::web::handlers::brand_handlers::upload_brand_logo_handler(slug, upload, auth, config).await
+}
+
+/// GET /brands/<slug>/logo → serves the stored logo bytes for previewing.
+#[get("/brands/<slug>/logo")]
+pub async fn get_brand_logo(
+    slug: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<NamedFile, rocket::http::Status> {
+    crate::web::handlers::brand_handlers::get_brand_logo_handler(slug, auth, config).await
+}
+
+/// DELETE /brands/<slug>/logo → remove the logo only (keeps the brand).
+#[delete("/brands/<slug>/logo")]
+pub async fn delete_brand_logo(
+    slug: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    crate::web::handlers::brand_handlers::delete_brand_logo_handler(slug, auth, config).await
+}
+
 // ── CV form-data routes ───────────────────────────────────────────────────────
 
 /// GET /profiles/:name/cv-data?lang=en
@@ -967,6 +1040,13 @@ pub fn build_rocket(
                 payment_transactions,
                 get_cv_data,
                 put_cv_data,
+                list_brands,
+                get_brand,
+                put_brand,
+                delete_brand,
+                upload_brand_logo,
+                get_brand_logo,
+                delete_brand_logo,
                 delete_me,
                 generate_portfolio,
                 get_my_referral_link,

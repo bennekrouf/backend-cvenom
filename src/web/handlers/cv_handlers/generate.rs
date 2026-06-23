@@ -156,12 +156,36 @@ pub async fn generate_cv_handler(
         normalized_profile, lang, template_id, tenant_data_dir.display(), config.output_dir.display(), config.templates_dir.display()
     );
 
-    let cv_config = CvConfig::new(&normalized_profile, &lang)
+    let mut cv_config = CvConfig::new(&normalized_profile, &lang)
         .with_template(template_id.to_string())
-        .with_data_dir(tenant_data_dir)
+        .with_data_dir(tenant_data_dir.clone())
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone())
         .with_custom_colors(request.data.use_custom_colors.unwrap_or(false));
+
+    // Optional brand selection: load it from the tenant brand library and
+    // attach. Unknown / empty slug = no brand (current behavior).
+    if let Some(slug) = request.data.brand_slug.as_deref() {
+        let slug = slug.trim();
+        if !slug.is_empty() && slug != "default" {
+            match crate::core::brand_store::load_brand(&tenant_data_dir, slug) {
+                Ok(brand) => {
+                    let brand_dir = tenant_data_dir.join("brands").join(slug);
+                    app_log!(info, "Applying brand '{}' for this generation", brand.name);
+                    cv_config = cv_config.with_brand(brand, brand_dir);
+                }
+                Err(e) => {
+                    app_log!(warn, "Requested brand '{}' not found: {}", slug, e);
+                    return Err(Json(StandardErrorResponse::new(
+                        format!("Brand '{}' not found", slug),
+                        "BRAND_NOT_FOUND".to_string(),
+                        vec!["Pick an existing brand or remove the selection".to_string()],
+                        conversation_id,
+                    )));
+                }
+            }
+        }
+    }
 
     let pdf_gen_span = app_span!("pdf_generation", profile = %normalized_profile);
     let _pdf_enter = pdf_gen_span.enter();

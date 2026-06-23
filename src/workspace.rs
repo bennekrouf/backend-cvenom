@@ -162,9 +162,19 @@ impl<'a> WorkspaceManager<'a> {
     fn copy_logo_files(&self) -> Result<()> {
         let tenant_logo_source = self.config.data_dir_absolute().join("company_logo.png");
         let profile_logo_source = self.config.profile_data_dir().join("company_logo.png");
+        let brand_logo_source = self
+            .config
+            .brand_dir
+            .as_ref()
+            .map(|p| p.join("logo.png"));
         let logo_dest = PathBuf::from("company_logo.png");
 
-        if profile_logo_source.exists() {
+        // Precedence: brand > profile > tenant. A brand was explicitly chosen
+        // for this generation, so its logo should win.
+        if let Some(brand_logo) = brand_logo_source.as_ref().filter(|p| p.exists()) {
+            fs::copy(brand_logo, &logo_dest)?;
+            app_log!(info, "Brand logo copied successfully");
+        } else if profile_logo_source.exists() {
             fs::copy(&profile_logo_source, &logo_dest)?;
             app_log!(info, "Profile logo copied successfully");
         } else if tenant_logo_source.exists() {
@@ -265,23 +275,69 @@ impl<'a> WorkspaceManager<'a> {
             app_log!(info, "ℹ️  No profile image in workspace - generating without photo");
         }
 
-        // Forward color customizations from cv_params.toml as Typst --input flags
-        // only when the user explicitly opted in (use_custom_colors = true).
+        // Forward branding to Typst as `--input k=v` flags. The resolver emits
+        // only explicit overrides (and vibe-preset values); keys it omits fall
+        // through to each template's literal defaults, so legacy profiles that
+        // only set primary/secondary render unchanged.
+        //
+        // Source precedence:
+        //   1. Selected brand's styling (when self.config.brand is Some)
+        //   2. The profile's [styling] block in cv_params.toml
+        // A brand is only attached when the caller explicitly picked one, so
+        // there's no risk of silently switching styling on legacy callers.
         if self.config.use_custom_colors {
-            if let Ok(toml_content) = fs::read_to_string("cv_params.toml") {
-                if let Ok(toml::Value::Table(table)) = toml::from_str::<toml::Value>(&toml_content) {
-                    if let Some(styling) = table.get("styling").and_then(|v| v.as_table()) {
-                        if let Some(pc) = styling.get("primary_color").and_then(|v| v.as_str()) {
-                            if !pc.is_empty() {
-                                cmd.arg("--input").arg(format!("primary_color={}", pc));
-                            }
+            let styling: Option<crate::web::handlers::cv_handlers::cv_data::StylingData> =
+                if let Some(brand) = &self.config.brand {
+                    Some(brand.styling.clone())
+                } else if let Ok(toml_content) = fs::read_to_string("cv_params.toml") {
+                    if let Ok(toml::Value::Table(table)) =
+                        toml::from_str::<toml::Value>(&toml_content)
+                    {
+                        if let Some(styling_tbl) = table.get("styling").and_then(|v| v.as_table()) {
+                            let str_at = |k: &str| -> String {
+                                styling_tbl
+                                    .get(k)
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("")
+                                    .to_string()
+                            };
+                            Some(crate::web::handlers::cv_handlers::cv_data::StylingData {
+                                primary_color:    str_at("primary_color"),
+                                secondary_color: str_at("secondary_color"),
+                                show_photo: styling_tbl
+                                    .get("show_photo")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false),
+                                vibe:             str_at("vibe"),
+                                accent_color:     str_at("accent_color"),
+                                neutral_color:    str_at("neutral_color"),
+                                background_tone:  str_at("background_tone"),
+                                font_personality: str_at("font_personality"),
+                                density:          str_at("density"),
+                                layout:           str_at("layout"),
+                                divider:          str_at("divider"),
+                                header_style:     str_at("header_style"),
+                                photo_shape:      str_at("photo_shape"),
+                                icon_style:       str_at("icon_style"),
+                                skill_style:      str_at("skill_style"),
+                                date_style:       str_at("date_style"),
+                                lang_style:       str_at("lang_style"),
+                                label_tone:       str_at("label_tone"),
+                                paper:            str_at("paper"),
+                            })
+                        } else {
+                            None
                         }
-                        if let Some(sc) = styling.get("secondary_color").and_then(|v| v.as_str()) {
-                            if !sc.is_empty() {
-                                cmd.arg("--input").arg(format!("secondary_color={}", sc));
-                            }
-                        }
+                    } else {
+                        None
                     }
+                } else {
+                    None
+                };
+
+            if let Some(styling) = styling {
+                for (k, v) in crate::core::branding::resolve(&styling) {
+                    cmd.arg("--input").arg(format!("{}={}", k, v));
                 }
             }
         }

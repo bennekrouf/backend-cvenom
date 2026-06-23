@@ -387,8 +387,20 @@ impl CvConverter {
             typst_content.push_str(&format!("    \"{}\",\n", escape_typst(&exp.title)));
             typst_content.push_str(&format!("    date: \"{}\",\n", escape_typst(&date_range)));
 
+            // Only emit description when it adds new information — drop it if it
+            // duplicates a responsibility (a common artifact of LLM-assisted imports),
+            // otherwise the same text shows twice and pushes the job title out of view.
             if let Some(desc) = &exp.description {
-                typst_content.push_str(&format!("    description: \"{}\",\n", escape_typst(desc)));
+                let norm = desc.trim().to_lowercase();
+                let duplicates_resp = !norm.is_empty()
+                    && exp
+                        .responsibilities
+                        .iter()
+                        .any(|r| r.trim().to_lowercase() == norm);
+                if !norm.is_empty() && !duplicates_resp {
+                    typst_content
+                        .push_str(&format!("    description: \"{}\",\n", escape_typst(desc)));
+                }
             }
 
             typst_content.push_str("    content: [\n");

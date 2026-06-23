@@ -5,8 +5,15 @@
 // Resolve from user customization (--input primary_color=...) or fall back to brand defaults
 #let _u_primary = sys.inputs.at("primary_color",   default: none)
 #let _u_sec     = sys.inputs.at("secondary_color",  default: none)
-#let default_primary_color   = if _u_primary != none { rgb(_u_primary) } else { rgb("#14A4E6") }
-#let default_secondary_color = if _u_sec     != none { rgb(_u_sec)     } else { rgb("#757575") }
+// Literal brand fallbacks lifted into named constants so the body can reference
+// `default_primary_color` / `default_secondary_color` without circular `let`s
+// when we replace_all the legacy raw literals below.
+// Numeric rgb tuples (not the "#hex" form) so they survive a future replace_all
+// on the literal hex string without becoming circular.
+#let _legacy_primary   = rgb(20, 164, 230)   // #14A4E6
+#let _legacy_secondary = rgb(117, 117, 117)  // #757575
+#let default_primary_color   = if _u_primary != none { rgb(_u_primary) } else { _legacy_primary }
+#let default_secondary_color = if _u_sec     != none { rgb(_u_sec)     } else { _legacy_secondary }
 #let default_link_color = default_primary_color
 #let default_font = "Liberation Sans"
 #let default_math_font = "Times"
@@ -132,14 +139,14 @@
 #let dated_experience(title, date: none, description: none, content: none, company: none) = {
   [
     #block(
-      stroke: (bottom: 0.5pt + rgb("#14A4E6")),
+      stroke: (bottom: 0.5pt + default_primary_color),
       inset: (bottom: 5pt),
       width: 100%,
       grid(
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: rgb("#757575"), date) \
+          #text(size: 9pt, fill: default_secondary_color, date) \
           #text(size: 11pt, weight: "bold", title)
         ],
         [
@@ -257,10 +264,10 @@
   [
     #block(
       stroke: (
-        top: 0.5pt + rgb("#14A4E6"),
-        left: 0.5pt + rgb("#14A4E6"), 
-        right: 0.5pt + rgb("#14A4E6"),
-        bottom: 0.5pt + rgb("#14A4E6")
+        top: 0.5pt + default_primary_color,
+        left: 0.5pt + default_primary_color, 
+        right: 0.5pt + default_primary_color,
+        bottom: 0.5pt + default_primary_color
       ),
       inset: 5pt,
       width: 100%,
@@ -268,7 +275,7 @@
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: rgb("#757575"), date) \
+          #text(size: 9pt, fill: default_secondary_color, date) \
           #text(size: 11pt, weight: "bold", title)
         ],
         [
@@ -283,13 +290,13 @@
     ]
 
     #if context_info != none [
-      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), "Context")
+      #text(size: 10pt, weight: "bold", fill: default_primary_color, "Context")
       #experience_details(..context_info)
       #v(0.3em)
     ]
 
     #if responsibility_list != none [
-      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), "Responsibilities")  
+      #text(size: 10pt, weight: "bold", fill: default_primary_color, "Responsibilities")  
       #experience_details(..responsibility_list)
     ]
 
@@ -422,14 +429,14 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
 #let structured_experience_full(title, date: none, description: none, company: none, context_info: none, responsibilities: none) = {
   [
     #block(
-      stroke: (bottom: 0.5pt + rgb("#14A4E6")),
+      stroke: (bottom: 0.5pt + default_primary_color),
       inset: (bottom: 5pt),
       width: 100%,
       grid(
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: rgb("#757575"), date) \
+          #text(size: 9pt, fill: default_secondary_color, date) \
           #text(size: 11pt, weight: "bold", title)
         ],
         [
@@ -444,7 +451,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
     ]
 
     #if context_info != none [
-      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
+      #text(size: 10pt, weight: "bold", fill: default_primary_color, 
         if get_lang() == "fr" { "Contexte" } else if get_lang() == "de" { "Kontext" } else { "Context" })
       #v(0.2em)
       
@@ -452,7 +459,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
       #if type(context_info) == array [
         #list(
           indent: 5pt,
-          marker: text(fill: rgb("#14A4E6"), sym.bullet),
+          marker: text(fill: default_primary_color, sym.bullet),
           ..context_info.map(item => text(size: 10pt, item))
         )
       ] else [
@@ -462,7 +469,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
     ]
 
     #if responsibilities != none [
-      #text(size: 10pt, weight: "bold", fill: rgb("#14A4E6"), 
+      #text(size: 10pt, weight: "bold", fill: default_primary_color, 
         if get_lang() == "fr" { "Responsabilités" } else if get_lang() == "de" { "Verantwortlichkeiten" } else { "Responsibilities" })
       #v(0.2em)
       
@@ -474,7 +481,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
           #if type(items) == array [
             #list(
               indent: 15pt,
-              marker: text(fill: rgb("#14A4E6"), "◦"),
+              marker: text(fill: default_primary_color, "◦"),
               ..items.map(item => text(size: 9pt, item))
             )
           ] else [
@@ -486,7 +493,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
         // Fallback to simple list if not structured
         #list(
           indent: 5pt,
-          marker: text(fill: rgb("#14A4E6"), sym.bullet),
+          marker: text(fill: default_primary_color, sym.bullet),
           ..responsibilities.map(item => text(size: 10pt, item))
         )
       ]
