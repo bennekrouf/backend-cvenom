@@ -140,6 +140,18 @@ pub async fn upload_brand_logo_handler(
         }
     };
 
+    // Brand logos must be PNG: templates that show the logo all embed a literal
+    // `company_logo.png` filename in `image()`, so typst picks the PNG decoder
+    // by extension. A JPEG sneaking in under the .png name would fail with
+    // "Invalid PNG signature" at compile time — reject it up-front instead.
+    const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    if bytes.len() < PNG_SIGNATURE.len() || !bytes.starts_with(PNG_SIGNATURE) {
+        return Err(err(
+            "INVALID_IMAGE",
+            "Brand logo must be a PNG image. Convert your file to PNG and try again.",
+        ));
+    }
+
     let written = match brand_store::write_logo(&dir, &slug, &bytes) {
         Ok(p) => p,
         Err(e) => {
@@ -148,14 +160,14 @@ pub async fn upload_brand_logo_handler(
         }
     };
 
-    // Validate the image after writing; on failure, remove the file so we
-    // don't leave a half-bad logo on disk.
+    // Belt-and-suspenders: also run the shared image validator so corrupted
+    // PNGs (truncated, fake header) are caught and cleaned up.
     if let Err(e) = crate::core::FsOps::validate_image(&written).await {
         let _ = tokio::fs::remove_file(&written).await;
         app_log!(warn, "uploaded brand logo failed validation: {}", e);
         return Err(err(
             "INVALID_IMAGE",
-            "Uploaded file is not a valid PNG/JPEG image",
+            "Uploaded file is not a valid PNG image",
         ));
     }
 
