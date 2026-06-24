@@ -228,15 +228,10 @@
       v(0.6em)
     }
 
-    // Name + title on sidebar (mobile-card feel)
-    #align(center)[
-      #text(size: 13pt, weight: "bold", fill: sidebar_fg,
-        details.at("name", default: ""))
-      #linebreak()
-      #text(size: 9pt, fill: accent,
-        details.at("job_title", default:
-          details.at("title", default: "")))
-    ]
+    // Name + job title intentionally NOT rendered here — the main column
+    // already shows them in a large accent-bordered header. Duplicating in
+    // the sidebar reads as a typo to the reader. The avatar above plus the
+    // contact info below carry enough identity.
     #v(0.3em)
     #line(length: 100%, stroke: 0.5pt + accent.lighten(50%))
 

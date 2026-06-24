@@ -508,12 +508,6 @@ fn extract_experience_details(block: &str) -> Vec<String> {
 
 fn generate_experiences_typ(experiences: &[WorkExperienceEntry]) -> String {
     let mut out = String::from("#import \"template.typ\": *\n\n");
-    // Stub `get_key_insights` so `keyteo` / `keyteo_full`'s
-    // `#import "experiences.typ": get_work_experience, get_key_insights`
-    // resolves even when this generator (which doesn't model key insights)
-    // produced the file. Returns an empty tuple — call sites in those
-    // templates check `.len() > 0` before rendering.
-    out.push_str("#let get_key_insights() = ()\n\n");
     // No section heading inside the function body — each template renders its
     // own (`= #get_text("work_experience")` in default, `#section(...)` in
     // keyteo/enterprise2, etc.). Emitting one here produced a duplicate

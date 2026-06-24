@@ -272,7 +272,7 @@
           #text(size: 9pt, fill: default_secondary_color, date)
           // Skip the role line entirely when title is empty/none so we don't
           // leave a blank line where the function/role would be.
-          #if title != none and not (type(title) == str and title == "") [\ #text(size: 11pt, weight: "bold", title)]
+          #if title != none and not (type(title) == str and title.trim() == "") [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
@@ -282,7 +282,7 @@
 
     // Skip description when there's no role — otherwise it visually slots
     // where the title should be (and is often a duplicate of the first bullet).
-    #if description != none and title != none and not (type(title) == str and title == "") [
+    #if description != none and title != none and not (type(title) == str and title.trim() == "") [
       #text(weight: "regular", size: 10pt, description)
     ]
 
@@ -405,7 +405,7 @@
           #text(size: 9pt, fill: default_secondary_color, date)
           // Skip the role line entirely when title is empty/none so we don't
           // leave a blank line where the function/role would be.
-          #if title != none and not (type(title) == str and title == "") [\ #text(size: 11pt, weight: "bold", title)]
+          #if title != none and not (type(title) == str and title.trim() == "") [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
@@ -570,7 +570,7 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
           #text(size: 9pt, fill: default_secondary_color, date)
           // Skip the role line entirely when title is empty/none so we don't
           // leave a blank line where the function/role would be.
-          #if title != none and not (type(title) == str and title == "") [\ #text(size: 11pt, weight: "bold", title)]
+          #if title != none and not (type(title) == str and title.trim() == "") [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)

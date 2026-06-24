@@ -1,5 +1,8 @@
 #import "template.typ": conf, date, dated_experience, experience_details, section, show_skills, get_text, structured_experience
-#import "experiences.typ": get_work_experience, get_key_insights
+// `get_key_insights` removed from the import: legacy hand-written experiences
+// files exported it, but no generator (form-save or AI-import) produces one, so
+// the import failed on most profiles. The Key Insights section is dropped too.
+#import "experiences.typ": get_work_experience
 
 #let details = toml("cv_params.toml")
 
@@ -101,14 +104,7 @@
 
 #v(0.5em)
 
-// Only render the Key insights section when the experiences file actually
-// provided some — the form-save generator emits an empty `get_key_insights()`
-// stub so the import resolves, and we don't want an empty heading on that path.
-#let _key_insights = get_key_insights()
-#if _key_insights.len() > 0 {
-  section(get_text("key_insights"))
-  experience_details(.._key_insights)
-}
+// Key Insights section removed — see the import comment at the top of the file.
 
 #section(get_text("technical_skills"))
 #if "skills" in details {

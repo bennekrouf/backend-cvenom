@@ -365,12 +365,6 @@ impl CvConverter {
         // Import statement
         typst_content.push_str("#import \"template.typ\": *\n\n");
 
-        // Stub `get_key_insights` so the `keyteo` / `keyteo_full` import
-        // (`get_work_experience, get_key_insights`) resolves even though
-        // this generator doesn't model key insights. Empty tuple — call
-        // sites in those templates check `.len() > 0` before rendering.
-        typst_content.push_str("#let get_key_insights() = ()\n\n");
-
         // Work experience function — no section heading here.
         // Each template renders its own section title (via get_text or section())
         // so it can control style and avoid duplicate headings.
