@@ -444,6 +444,7 @@ dependencies = [
  "docx-rs",
  "futures",
  "graflog",
+ "image",
  "jsonwebtoken",
  "percent-encoding",
  "rand",

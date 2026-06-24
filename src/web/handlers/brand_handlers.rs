@@ -140,19 +140,54 @@ pub async fn upload_brand_logo_handler(
         }
     };
 
-    // Brand logos must be PNG: templates that show the logo all embed a literal
-    // `company_logo.png` filename in `image()`, so typst picks the PNG decoder
-    // by extension. A JPEG sneaking in under the .png name would fail with
-    // "Invalid PNG signature" at compile time — reject it up-front instead.
-    const PNG_SIGNATURE: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
-    if bytes.len() < PNG_SIGNATURE.len() || !bytes.starts_with(PNG_SIGNATURE) {
+    // Templates that show the logo all embed a literal `company_logo.png`
+    // filename in `image()`, so typst picks the PNG decoder by extension.
+    // Accept PNG bytes as-is; transcode JPEG → PNG so the file on disk
+    // matches the extension. Anything else → reject with a clear message.
+    const PNG_SIGNATURE:  &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    const JPEG_SIGNATURE: &[u8] = &[0xFF, 0xD8, 0xFF];
+
+    let png_bytes: Vec<u8> = if bytes.starts_with(PNG_SIGNATURE) {
+        bytes
+    } else if bytes.starts_with(JPEG_SIGNATURE) {
+        // Decode JPEG → re-encode as PNG. Done synchronously on a blocking
+        // thread because `image` is CPU-bound (and not async-aware).
+        let bytes_for_task = bytes;
+        match tokio::task::spawn_blocking(move || -> Result<Vec<u8>, image::ImageError> {
+            let img = image::load_from_memory_with_format(
+                &bytes_for_task,
+                image::ImageFormat::Jpeg,
+            )?;
+            let mut out: Vec<u8> = Vec::new();
+            img.write_to(
+                &mut std::io::Cursor::new(&mut out),
+                image::ImageFormat::Png,
+            )?;
+            Ok(out)
+        })
+        .await
+        {
+            Ok(Ok(png)) => png,
+            Ok(Err(e)) => {
+                app_log!(warn, "JPEG → PNG conversion failed for brand '{}': {}", slug, e);
+                return Err(err(
+                    "INVALID_IMAGE",
+                    "JPEG file could not be decoded — try a different image",
+                ));
+            }
+            Err(e) => {
+                app_log!(error, "blocking task panicked converting brand logo: {}", e);
+                return Err(err("SAVE_ERROR", "Failed to process logo"));
+            }
+        }
+    } else {
         return Err(err(
             "INVALID_IMAGE",
-            "Brand logo must be a PNG image. Convert your file to PNG and try again.",
+            "Brand logo must be a PNG or JPEG image",
         ));
-    }
+    };
 
-    let written = match brand_store::write_logo(&dir, &slug, &bytes) {
+    let written = match brand_store::write_logo(&dir, &slug, &png_bytes) {
         Ok(p) => p,
         Err(e) => {
             app_log!(error, "write_logo({}) failed: {}", slug, e);
@@ -160,14 +195,14 @@ pub async fn upload_brand_logo_handler(
         }
     };
 
-    // Belt-and-suspenders: also run the shared image validator so corrupted
-    // PNGs (truncated, fake header) are caught and cleaned up.
+    // Belt-and-suspenders: also run the shared image validator so any
+    // surprising bytes that slipped through are caught and cleaned up.
     if let Err(e) = crate::core::FsOps::validate_image(&written).await {
         let _ = tokio::fs::remove_file(&written).await;
-        app_log!(warn, "uploaded brand logo failed validation: {}", e);
+        app_log!(warn, "stored brand logo failed validation: {}", e);
         return Err(err(
             "INVALID_IMAGE",
-            "Uploaded file is not a valid PNG image",
+            "Stored logo failed validation",
         ));
     }
 
