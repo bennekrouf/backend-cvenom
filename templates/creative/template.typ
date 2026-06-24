@@ -1,5 +1,5 @@
 #import "font_config.typ": font_config, get_icon
-#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label, nonempty
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 #let primary    = rgb("#1C1C1E")   // near-black (fixed)
@@ -158,9 +158,12 @@
     columns: (1fr, auto),
     align: (left + top, right + top),
     [
-      #text(size: 11pt, weight: "bold", fill: primary, title)
+      #if nonempty(title) [
+        #text(size: 11pt, weight: "bold", fill: primary, title)
+      ]
       #if company != none [
-        #text(size: 9pt, fill: accent, " · " + company)
+        // " · " separator only when there's a title to separate from.
+        #text(size: 9pt, fill: accent, if nonempty(title) { " · " } else { "" } + company)
       ]
     ],
     box(

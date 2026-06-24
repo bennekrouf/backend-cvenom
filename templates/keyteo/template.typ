@@ -269,8 +269,10 @@
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: default_secondary_color, date) \
-          #text(size: 11pt, weight: "bold", title)
+          #text(size: 9pt, fill: default_secondary_color, date)
+          // Skip the role line entirely when title is empty/none so we don't
+          // leave a blank line where the function/role would be.
+          #if title != none and not (type(title) == str and title == "") [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
@@ -398,8 +400,10 @@
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: default_secondary_color, date) \
-          #text(size: 11pt, weight: "bold", title)
+          #text(size: 9pt, fill: default_secondary_color, date)
+          // Skip the role line entirely when title is empty/none so we don't
+          // leave a blank line where the function/role would be.
+          #if title != none and not (type(title) == str and title == "") [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
@@ -561,8 +565,10 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: default_secondary_color, date) \
-          #text(size: 11pt, weight: "bold", title)
+          #text(size: 9pt, fill: default_secondary_color, date)
+          // Skip the role line entirely when title is empty/none so we don't
+          // leave a blank line where the function/role would be.
+          #if title != none and not (type(title) == str and title == "") [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)

@@ -6,6 +6,14 @@
 // ── Language helpers ───────────────────────────────────────────────────────────
 #let get_lang() = { sys.inputs.at("lang", default: "en") }
 
+// ── Value helper ───────────────────────────────────────────────────────────────
+// True when the value is something we should render (not `none`, not an empty
+// string). Used by templates' `dated_experience` to skip empty roles / dates /
+// companies cleanly instead of leaving a blank line where the field would be.
+#let nonempty(v) = {
+  v != none and not (type(v) == str and v == "")
+}
+
 // ── Skill subsection label translation ─────────────────────────────────────────
 // Translates skill keys (technical, programming_languages, …) used as labels
 // inside the Skills section. Falls back to a humanized version of the key if

@@ -1,5 +1,5 @@
 #import "font_config.typ": font_config, get_icon
-#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label, nonempty
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 #let light_bg   = rgb("#EFF6FF")   // very light blue tint (fixed)
@@ -172,9 +172,11 @@
       columns: (1fr, auto),
       align: (left + top, right + top),
       [
-        #text(size: 11pt, weight: "bold", fill: primary, title)
+        #if nonempty(title) [
+          #text(size: 11pt, weight: "bold", fill: primary, title)
+        ]
         #if company != none [
-          #linebreak()
+          #if nonempty(title) { linebreak() }
           #text(size: 9.5pt, fill: accent, company)
         ]
       ],

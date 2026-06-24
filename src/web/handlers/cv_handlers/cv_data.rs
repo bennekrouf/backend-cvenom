@@ -508,8 +508,12 @@ fn extract_experience_details(block: &str) -> Vec<String> {
 
 fn generate_experiences_typ(experiences: &[WorkExperienceEntry]) -> String {
     let mut out = String::from("#import \"template.typ\": *\n\n");
+    // No section heading inside the function body — each template renders its
+    // own (`= #get_text("work_experience")` in default, `#section(...)` in
+    // keyteo/enterprise2, etc.). Emitting one here produced a duplicate
+    // heading on every PDF. Matches the convention in
+    // `types/cv_data.rs::generate_experiences_typst`.
     out.push_str("#let get_work_experience() = [\n");
-    out.push_str("  = #get_text(\"work_experience\")\n\n");
 
     for exp in experiences {
         out.push_str(&format!("  == {}\n", exp.company));

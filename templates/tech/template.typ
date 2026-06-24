@@ -1,5 +1,5 @@
 #import "font_config.typ": font_config, get_icon
-#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label, nonempty
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 #let primary    = rgb("#2D3748")   // slate dark (fixed)
@@ -149,8 +149,13 @@
     columns: (1fr, auto),
     align: (left, right),
     [
-      #text(size: 11pt, weight: "bold", fill: primary, title)
-      #if company != none [ #text(size: 9.5pt, fill: accent, " @ " + company) ]
+      #if nonempty(title) [
+        #text(size: 11pt, weight: "bold", fill: primary, title)
+      ]
+      #if company != none [
+        // " @ " separator only when there's a title to separate from.
+        #text(size: 9.5pt, fill: accent, if nonempty(title) { " @ " } else { "" } + company)
+      ]
     ],
     text(size: 8.5pt, fill: secondary, date)
   )

@@ -1,6 +1,6 @@
 
 #import "font_config.typ": font_config, get_icon
-#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label
+#import "common.typ": get_lang, join_dicts, get_default_icons, process_links, skill_label, nonempty
 // global variables
 // Resolve from user customization (--input primary_color=...) or fall back to brand defaults
 #let _u_primary = sys.inputs.at("primary_color",   default: none)
@@ -146,8 +146,8 @@
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: default_secondary_color, date) \
-          #text(size: 11pt, weight: "bold", title)
+          #text(size: 9pt, fill: default_secondary_color, date)
+          #if nonempty(title) [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
@@ -275,8 +275,8 @@
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: default_secondary_color, date) \
-          #text(size: 11pt, weight: "bold", title)
+          #text(size: 9pt, fill: default_secondary_color, date)
+          #if nonempty(title) [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
@@ -436,8 +436,8 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
         columns: (1fr, auto),
         align: (left, right),
         [
-          #text(size: 9pt, fill: default_secondary_color, date) \
-          #text(size: 11pt, weight: "bold", title)
+          #text(size: 9pt, fill: default_secondary_color, date)
+          #if nonempty(title) [\ #text(size: 11pt, weight: "bold", title)]
         ],
         [
           #text(size: 11pt, weight: "bold", company)
