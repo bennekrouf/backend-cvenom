@@ -169,15 +169,41 @@ impl<'a> WorkspaceManager<'a> {
             .map(|p| p.join("logo.png"));
         let logo_dest = PathBuf::from("company_logo.png");
 
+        // Sniff the PNG magic bytes so a corrupted or wrong-format logo never
+        // takes the whole compilation down — templates pin the filename to
+        // `company_logo.png`, so typst aborts hard on a bad PNG. If the brand
+        // logo is broken, fall through to profile / tenant / no-logo instead.
+        let is_valid_png = |p: &std::path::Path| -> bool {
+            const PNG_SIG: &[u8] = &[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+            match std::fs::File::open(p) {
+                Ok(mut f) => {
+                    use std::io::Read;
+                    let mut buf = [0u8; 8];
+                    matches!(f.read_exact(&mut buf), Ok(())) && buf == PNG_SIG
+                }
+                Err(_) => false,
+            }
+        };
+
         // Precedence: brand > profile > tenant. A brand was explicitly chosen
-        // for this generation, so its logo should win.
+        // for this generation, so its logo should win when valid.
         if let Some(brand_logo) = brand_logo_source.as_ref().filter(|p| p.exists()) {
-            fs::copy(brand_logo, &logo_dest)?;
-            app_log!(info, "Brand logo copied successfully");
-        } else if profile_logo_source.exists() {
+            if is_valid_png(brand_logo) {
+                fs::copy(brand_logo, &logo_dest)?;
+                app_log!(info, "Brand logo copied successfully");
+                return Ok(());
+            } else {
+                app_log!(
+                    warn,
+                    "Brand logo at {:?} is not a valid PNG — skipping and falling back to profile/tenant logo",
+                    brand_logo
+                );
+            }
+        }
+        if profile_logo_source.exists() && is_valid_png(&profile_logo_source) {
             fs::copy(&profile_logo_source, &logo_dest)?;
             app_log!(info, "Profile logo copied successfully");
-        } else if tenant_logo_source.exists() {
+        } else if tenant_logo_source.exists() && is_valid_png(&tenant_logo_source) {
             fs::copy(&tenant_logo_source, &logo_dest)?;
             app_log!(info, "Tenant logo copied successfully");
         }
