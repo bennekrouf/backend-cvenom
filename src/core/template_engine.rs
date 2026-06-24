@@ -29,6 +29,8 @@ pub struct TemplateManifest {
     pub features: Option<Vec<String>>,
     pub languages: Option<Vec<String>>,
     pub photo_recommended: Option<bool>,
+    /// Whether this template renders `company_logo.png` (brand logo) in its layout.
+    pub shows_logo: Option<bool>,
 }
 
 // ===== Main Template Engine =====
@@ -117,6 +119,7 @@ impl TemplateEngine {
                 features: None,
                 languages: None,
                 photo_recommended: None,
+                shows_logo: None,
             }
         };
 

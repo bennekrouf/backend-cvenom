@@ -31,6 +31,9 @@ pub async fn get_templates_handler(
                         photo_recommended: template_info
                             .and_then(|t| t.manifest.photo_recommended)
                             .unwrap_or(false),
+                        shows_logo: template_info
+                            .and_then(|t| t.manifest.shows_logo)
+                            .unwrap_or(false),
                     }
                 })
                 .collect();

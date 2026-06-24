@@ -225,6 +225,7 @@ pub struct TemplateInfo {
     pub name: String,
     pub description: String,
     pub photo_recommended: bool,
+    pub shows_logo: bool,
 }
 
 #[derive(Serialize)]

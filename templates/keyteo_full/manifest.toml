@@ -5,3 +5,4 @@ dependencies = ["template.typ"]
 features = ["header_logo", "branded_footer", "structured_experience"]
 languages = ["en", "fr", "de"]
 version = "1.0.0"
+shows_logo = true

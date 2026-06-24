@@ -270,17 +270,33 @@
         }
       ],
       [
-        #let _pic = sys.inputs.at("picture", default: none)
+        #let _pic  = sys.inputs.at("picture", default: none)
+        #let _logo = sys.inputs.at("company_logo.png", default: none)
         #let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
-        #if _pic != none and show_photo {
-          align(center,
+        // Vertical stack: brand logo on top, profile photo below. Either
+        // (or both) may be absent — `stack` collapses around `none` blocks
+        // so a logo-only or photo-only header still looks balanced.
+        #stack(
+          spacing: 8pt,
+          if _logo != none {
+            // White rounded pill so logos with any color (including a red
+            // CGI mark) read cleanly on the primary-colored header band.
+            block(
+              fill: white,
+              radius: 4pt,
+              inset: (x: 8pt, y: 5pt),
+              image(_logo, width: 95pt, height: 28pt, fit: "contain"),
+            )
+          },
+          if _pic != none and show_photo {
             block(
               clip: true,
               radius: 50%,
               stroke: 2pt + white,
-              image(_pic, width: 75pt, height: 75pt, fit: "cover")
-            ))
-        }
+              image(_pic, width: 75pt, height: 75pt, fit: "cover"),
+            )
+          },
+        )
       ]
     )
   ]
