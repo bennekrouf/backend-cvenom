@@ -155,7 +155,9 @@
       )
     )
 
-    #if description != none [
+    // Skip description when there's no role — without it, the description
+    // block reads as a fake role beneath the company name.
+    #if description != none and nonempty(title) [
       #text(weight: "regular", size: 10pt, description)
     ]
 
@@ -284,7 +286,9 @@
       )
     )
 
-    #if description != none [
+    // Skip description when there's no role — without it, the description
+    // block reads as a fake role beneath the company name.
+    #if description != none and nonempty(title) [
       #text(weight: "regular", size: 10pt, description)
       #v(0.3em)
     ]
@@ -445,7 +449,9 @@ set text(font: ("Arial", "Helvetica", "DejaVu Sans"), ligatures: false)
       )
     )
 
-    #if description != none [
+    // Skip description when there's no role — without it, the description
+    // block reads as a fake role beneath the company name.
+    #if description != none and nonempty(title) [
       #text(weight: "regular", size: 10pt, description)
       #v(0.3em)
     ]

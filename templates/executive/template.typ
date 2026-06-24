@@ -94,7 +94,9 @@
     ],
     text(size: 9pt, fill: secondary, date)
   )
-  if description != none {
+  // Skip description when there's no role — without it, the description block
+  // reads as a fake role beneath the company name.
+  if description != none and nonempty(title) {
     v(0.2em)
     text(size: 9.5pt, style: "italic", fill: secondary, description)
   }

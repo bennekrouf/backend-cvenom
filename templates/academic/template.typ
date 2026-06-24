@@ -102,7 +102,9 @@
     ],
     text(size: 9pt, fill: secondary, date)
   )
-  if description != none {
+  // Skip description when there's no role — without it, the description block
+  // visually slots where the title should be and reads as a fake role.
+  if description != none and nonempty(title) {
     v(0.1em)
     text(size: 9.5pt, fill: secondary, description)
   }

@@ -508,6 +508,12 @@ fn extract_experience_details(block: &str) -> Vec<String> {
 
 fn generate_experiences_typ(experiences: &[WorkExperienceEntry]) -> String {
     let mut out = String::from("#import \"template.typ\": *\n\n");
+    // Stub `get_key_insights` so `keyteo` / `keyteo_full`'s
+    // `#import "experiences.typ": get_work_experience, get_key_insights`
+    // resolves even when this generator (which doesn't model key insights)
+    // produced the file. Returns an empty tuple — call sites in those
+    // templates check `.len() > 0` before rendering.
+    out.push_str("#let get_key_insights() = ()\n\n");
     // No section heading inside the function body — each template renders its
     // own (`= #get_text("work_experience")` in default, `#section(...)` in
     // keyteo/enterprise2, etc.). Emitting one here produced a duplicate
@@ -520,7 +526,14 @@ fn generate_experiences_typ(experiences: &[WorkExperienceEntry]) -> String {
         out.push_str("  #dated_experience(\n");
         out.push_str(&format!("    \"{}\",\n", escape_typ(&exp.title)));
         out.push_str(&format!("    date: \"{}\",\n", escape_typ(&exp.date)));
-        if !exp.description.is_empty() {
+        // Skip description when it duplicates one of the responsibilities —
+        // a common artifact of LLM-assisted imports that otherwise renders
+        // the same text twice (description block + first bullet). Mirrors
+        // the dedup at `types/cv_data.rs::generate_experiences_typst`.
+        let desc_norm = exp.description.trim().to_lowercase();
+        let duplicates_resp = !desc_norm.is_empty()
+            && exp.responsibilities.iter().any(|r| r.trim().to_lowercase() == desc_norm);
+        if !desc_norm.is_empty() && !duplicates_resp {
             out.push_str(&format!("    description: \"{}\",\n", escape_typ(&exp.description)));
         }
         out.push_str("    content: [\n");

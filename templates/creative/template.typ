@@ -173,7 +173,11 @@
       text(size: 8pt, fill: accent, date)
     )
   )
-  if description != none {
+  // Skip description when there's no title — without a role to anchor it,
+  // the description block visually slots where the title should be (and is
+  // often a duplicate of the first bullet anyway). Reader convention: hide
+  // it instead of letting it impersonate the missing role.
+  if description != none and nonempty(title) {
     v(0.1em)
     text(size: 9.5pt, style: "italic", fill: secondary, description)
   }

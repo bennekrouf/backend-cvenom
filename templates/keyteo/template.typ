@@ -280,7 +280,9 @@
       )
     )
 
-    #if description != none [
+    // Skip description when there's no role — otherwise it visually slots
+    // where the title should be (and is often a duplicate of the first bullet).
+    #if description != none and title != none and not (type(title) == str and title == "") [
       #text(weight: "regular", size: 10pt, description)
     ]
 

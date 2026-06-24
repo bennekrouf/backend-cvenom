@@ -101,8 +101,14 @@
 
 #v(0.5em)
 
-#section(get_text("key_insights"))
-#experience_details(..get_key_insights())
+// Only render the Key insights section when the experiences file actually
+// provided some — the form-save generator emits an empty `get_key_insights()`
+// stub so the import resolves, and we don't want an empty heading on that path.
+#let _key_insights = get_key_insights()
+#if _key_insights.len() > 0 {
+  section(get_text("key_insights"))
+  experience_details(.._key_insights)
+}
 
 #section(get_text("technical_skills"))
 #if "skills" in details {
