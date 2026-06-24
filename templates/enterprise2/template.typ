@@ -277,19 +277,23 @@
         #let _pic  = sys.inputs.at("picture", default: none)
         #let _logo = sys.inputs.at("company_logo.png", default: none)
         #let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
-        // Vertical stack: brand logo on top, profile photo below. Either
-        // (or both) may be absent — `stack` collapses around `none` blocks
-        // so a logo-only or photo-only header still looks balanced.
+        // Horizontal layout: logo to the left of the photo, both vertically
+        // centered. A stacked (top/bottom) arrangement reads as two siblings
+        // competing for the same slot; side-by-side keeps each at its own
+        // visual role — corporate mark + person. Either may be absent; the
+        // horizontal stack collapses around a missing element.
         #stack(
-          spacing: 8pt,
+          dir: ltr,
+          spacing: 14pt,
           if _logo != none {
-            // White rounded pill so logos with any color (including a red
-            // CGI mark) read cleanly on the primary-colored header band.
-            block(
-              fill: white,
-              radius: 4pt,
-              inset: (x: 8pt, y: 5pt),
-              image(_logo, width: 95pt, height: 28pt, fit: "contain"),
+            // No background — the logo sits directly on the primary header
+            // band so a transparent-PNG mark blends with the rest of the
+            // header. Sized smaller than the photo so the photo remains the
+            // dominant element (people read faces faster than marks).
+            box(
+              height: 70pt,
+              align(center + horizon,
+                image(_logo, width: 70pt, height: 40pt, fit: "contain")),
             )
           },
           if _pic != none and show_photo {
@@ -297,7 +301,7 @@
               clip: true,
               radius: 50%,
               stroke: 2pt + white,
-              image(_pic, width: 75pt, height: 75pt, fit: "cover"),
+              image(_pic, width: 70pt, height: 70pt, fit: "cover"),
             )
           },
         )

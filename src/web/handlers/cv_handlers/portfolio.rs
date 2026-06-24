@@ -26,6 +26,9 @@ pub struct GeneratePortfolioRequest {
     pub lang: Option<String>,
     /// Override the template; defaults to "portfolio"
     pub template: Option<String>,
+    /// Optional tenant brand slug — mirrors `/generate`. When set, the brand's
+    /// styling and logo override the profile's defaults for this render.
+    pub brand_slug: Option<String>,
 }
 
 pub async fn generate_portfolio_handler(
@@ -146,11 +149,34 @@ pub async fn generate_portfolio_handler(
     }
 
     // ── 4. Compile portfolio PDF ──────────────────────────────────────────────
-    let cv_config = CvConfig::new(&normalized_profile, &lang)
+    let mut cv_config = CvConfig::new(&normalized_profile, &lang)
         .with_template(template_id)
-        .with_data_dir(tenant_data_dir)
+        .with_data_dir(tenant_data_dir.clone())
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
+
+    // Optional brand selection — same shape as `/generate`. Unknown / empty /
+    // "default" slug = no brand (current behavior).
+    if let Some(slug) = request.data.brand_slug.as_deref() {
+        let slug = slug.trim();
+        if !slug.is_empty() && slug != "default" {
+            match crate::core::brand_store::load_brand(&tenant_data_dir, slug) {
+                Ok(brand) => {
+                    let brand_dir = tenant_data_dir.join("brands").join(slug);
+                    app_log!(info, "Applying brand '{}' to portfolio", brand.name);
+                    cv_config = cv_config.with_brand(brand, brand_dir);
+                }
+                Err(e) => {
+                    app_log!(warn, "Requested brand '{}' not found: {}", slug, e);
+                    return Err(err(
+                        "BRAND_NOT_FOUND",
+                        format!("Brand '{}' not found", slug),
+                        conversation_id,
+                    ));
+                }
+            }
+        }
+    }
 
     match CvGenerator::new(cv_config) {
         Ok(generator) => match generator.generate().await {

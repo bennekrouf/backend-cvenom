@@ -227,14 +227,32 @@
           if processed.len() > 0 { linebreak(); processed.join("  ·  ") }
         }
       ],
-      // Photo
+      // Brand logo + photo — same horizontal arrangement as enterprise2 so a
+      // user generating a CV + portfolio pair sees consistent header framing.
       [
-        #let _pic = sys.inputs.at("picture", default: none)
+        #let _pic  = sys.inputs.at("picture", default: none)
+        #let _logo = sys.inputs.at("company_logo.png", default: none)
         #let show_photo = details.at("styling", default: (:)).at("show_photo", default: true)
-        #if _pic != none and show_photo {
-          block(clip: true, radius: 50%, stroke: 2pt + accent.lighten(40%),
-            image(_pic, width: 80pt, height: 80pt, fit: "cover"))
-        }
+        #stack(
+          dir: ltr,
+          spacing: 14pt,
+          if _logo != none {
+            // No background — relies on a transparent-PNG logo to blend with
+            // the dark slate header. If the logo's color matches the header,
+            // upload a contrasting / white variant.
+            box(
+              height: 80pt,
+              align(center + horizon,
+                image(_logo, width: 80pt, height: 45pt, fit: "contain")),
+            )
+          },
+          if _pic != none and show_photo {
+            block(
+              clip: true, radius: 50%, stroke: 2pt + accent.lighten(40%),
+              image(_pic, width: 80pt, height: 80pt, fit: "cover"),
+            )
+          },
+        )
       ]
     )
   ]

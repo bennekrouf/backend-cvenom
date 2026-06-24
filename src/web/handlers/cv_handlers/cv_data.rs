@@ -447,10 +447,16 @@ fn parse_experiences_typ(content: &str) -> Vec<WorkExperienceEntry> {
 }
 
 /// Return the first "quoted string" found in text (handles escaped quotes).
+/// Tolerates whitespace/newlines between the opening `(` and the `"` — the
+/// generator emits the title on its own line, so an `find("(\"")` would
+/// silently miss the title and produce `title=""` on every round-trip.
 fn extract_first_quoted(text: &str) -> Option<String> {
-    // Find the first " after the opening paren
-    let start = text.find("(\"")?.saturating_add(2);
-    collect_quoted(&text[start..])
+    let paren = text.find('(')?;
+    let after = text[paren + 1..].trim_start();
+    if !after.starts_with('"') {
+        return None;
+    }
+    collect_quoted(&after[1..])
 }
 
 /// Return the value of a named argument like `date: "..."` or `description: "..."`.
@@ -645,4 +651,50 @@ pub async fn put_cv_data_handler(
     );
 
     Ok(Json(serde_json::json!({ "success": true, "message": "CV data saved" })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_first_quoted_handles_multiline_format() {
+        // The generator emits `(\n    "title",\n` — `find("(\"")` would
+        // silently miss this. Locked in as a regression guard.
+        let block = "#dated_experience(\n    \"Technical Lead\",\n    date: \"November 2022\",\n";
+        assert_eq!(extract_first_quoted(block).as_deref(), Some("Technical Lead"));
+    }
+
+    #[test]
+    fn extract_first_quoted_still_handles_inline_format() {
+        // Legacy files that have title on the same line as the paren should still parse.
+        let block = "#dated_experience(\"Senior Dev\", date: \"2020\",\n";
+        assert_eq!(extract_first_quoted(block).as_deref(), Some("Senior Dev"));
+    }
+
+    #[test]
+    fn extract_first_quoted_returns_none_when_no_string() {
+        assert_eq!(extract_first_quoted("nothing here").as_deref(), None);
+        assert_eq!(extract_first_quoted("foo(bar)").as_deref(), None);
+    }
+
+    #[test]
+    fn experiences_roundtrip_preserves_title() {
+        // Most important: what the generator writes, the parser reads back identically.
+        let entries = vec![WorkExperienceEntry {
+            company: "Test Co".into(),
+            title: "Senior Engineer".into(),
+            date: "2024 - Today".into(),
+            description: String::new(),
+            responsibilities: vec!["did the thing".into()],
+            technologies: vec![],
+        }];
+        let written = generate_experiences_typ(&entries);
+        let parsed = parse_experiences_typ(&written);
+        assert_eq!(parsed.len(), 1);
+        assert_eq!(parsed[0].company, "Test Co");
+        assert_eq!(parsed[0].title, "Senior Engineer", "title lost across roundtrip");
+        assert_eq!(parsed[0].date, "2024 - Today");
+        assert_eq!(parsed[0].responsibilities, vec!["did the thing".to_string()]);
+    }
 }

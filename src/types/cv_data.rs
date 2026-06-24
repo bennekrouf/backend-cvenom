@@ -725,8 +725,15 @@ fn parse_typst_experiences(content: &str) -> Vec<Experience> {
 }
 
 fn typ_extract_first_quoted(text: &str) -> Option<String> {
-    let start = text.find("(\"")?.saturating_add(2);
-    typ_collect_quoted(&text[start..])
+    // Tolerate whitespace/newlines between the opening `(` and the `"` — the
+    // generator emits the title on its own line, so a naive `find("(\"")`
+    // would silently miss the title and produce `title=""` on every round-trip.
+    let paren = text.find('(')?;
+    let after = text[paren + 1..].trim_start();
+    if !after.starts_with('"') {
+        return None;
+    }
+    typ_collect_quoted(&after[1..])
 }
 
 fn typ_extract_named_arg(text: &str, key: &str) -> Option<String> {

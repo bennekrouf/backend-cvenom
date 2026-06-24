@@ -5,3 +5,4 @@ dependencies = ["template.typ"]
 features = ["projects", "tech_badges", "highlights", "cover_page"]
 languages = ["en", "fr", "de"]
 version = "1.0.0"
+shows_logo = true
