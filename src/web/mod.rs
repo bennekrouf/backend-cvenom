@@ -1,4 +1,5 @@
 // src/web/mod.rs
+pub mod downloads;
 pub mod file_handlers;
 pub mod handlers;
 pub mod types;
@@ -133,9 +134,13 @@ impl Fairing for Cors {
     }
 }
 
+/// Generated documents, by download link only: `dl/<random>/<name>`, for one
+/// hour (see `downloads`). A file's own name — guessable from the profile —
+/// is never served.
 #[get("/outputs/<file..>")]
 pub async fn get_output_file(file: PathBuf, config: &State<ServerConfig>) -> Option<NamedFile> {
-    NamedFile::open(config.output_dir.join(file)).await.ok()
+    let path = downloads::resolve(&config.output_dir, &file)?;
+    NamedFile::open(path).await.ok()
 }
 
 #[post("/analyze-job-fit", data = "<request>")]

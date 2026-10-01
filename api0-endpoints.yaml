@@ -1,0 +1,242 @@
+# cvenom endpoints for the api0 "cvenom" tenant — replaces cvenom-mcp.
+#
+#   Upload in the api0 dashboard (API section), signed in as the tenant owner.
+#
+# Each endpoint becomes an MCP tool named slug("<group> <text>"), e.g.
+# "cvenom" + "list profiles" → `cvenom-list-profiles`.
+#
+# ── Paths ─────────────────────────────────────────────────────────────────────
+# The backend mounts every route at the root (no /api prefix since fd457c8,
+# Nov 2025).
+#
+# ── How api0 sends a call ─────────────────────────────────────────────────────
+# • POST/PUT: the tool arguments are the JSON body, verbatim. Every handler takes
+#   StandardRequest<T>, which flattens T, so a flat body is exactly right.
+# • GET: {placeholders} fill the path; every other argument becomes a query
+#   parameter (?lang=…, ?path=…).
+# • Every parameter is a JSON Schema "string"; `alternatives` becomes an `enum`
+#   — the only values allowed — so it is used for fixed choices, never synonyms.
+#
+# ── Identity ──────────────────────────────────────────────────────────────────
+# forward_identity stays on (the default): cvenom acts as the person in
+# X-User-Email, and api0's identity token proves the call came from api0.
+#
+# ── Deliberately not exposed ──────────────────────────────────────────────────
+# Payments (intent/confirm), DELETE /me (account deletion), admin and BD routes,
+# brands, preferences, feedback, multipart uploads (picture, CV file — MCP cannot
+# send a file), raw file save and structured cv-data writes, health, /outputs.
+
+api_groups:
+
+  - name: "cvenom"
+    description: "Your cvenom CV profiles: read them, generate PDFs, translate, tailor to a job, write cover letters"
+    base: "https://api.cvenom.com"
+    endpoints:
+
+      # ── Account ────────────────────────────────────────────────────────────
+
+      - text: "get my account"
+        description: "The signed-in cvenom user: email and display name."
+        verb: "GET"
+        path: "/me"
+
+      - text: "get credit balance"
+        description: "My cvenom credit balance. Generating, optimizing and translating cost credits."
+        verb: "GET"
+        path: "/payment/balance"
+
+      - text: "list credit transactions"
+        description: "My credit history: purchases and what each generation cost."
+        verb: "GET"
+        path: "/payment/transactions"
+
+      # ── Profiles ───────────────────────────────────────────────────────────
+
+      - text: "list profiles"
+        description: >-
+          My CV profiles and their files, as a tree. Each top-level folder is a
+          profile (e.g. john-doe); its files show which languages exist. Start here
+          to find the profile name every other tool needs.
+        verb: "GET"
+        path: "/files/tree"
+
+      - text: "get cv"
+        description: "The full content of one profile's CV in one language: personal info, experiences, education, skills."
+        verb: "GET"
+        path: "/profiles/{profile}/cv-data"
+        parameters:
+          - name: "profile"
+            description: "Profile name, from list profiles (e.g. john-doe)"
+            required: "true"
+          - name: "lang"
+            description: "CV language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+
+      - text: "read profile file"
+        description: "The raw content of one file in a profile, by its path from list profiles."
+        verb: "GET"
+        path: "/files/content"
+        parameters:
+          - name: "path"
+            description: "File path as shown by list profiles, e.g. john-doe/cv_params.toml"
+            required: "true"
+
+      - text: "list templates"
+        description: "Available CV templates, with their ids for generate cv."
+        verb: "GET"
+        path: "/templates"
+
+      - text: "create profile"
+        description: "Create a new, empty CV profile."
+        verb: "POST"
+        path: "/create"
+        parameters:
+          - name: "profile"
+            description: "New profile name, lowercase with dashes (e.g. john-doe)"
+            required: "true"
+
+      - text: "import cv from text"
+        description: >-
+          Create a profile from a CV pasted as plain text — all sections: name,
+          experience, skills, education. AI structures it into a cvenom profile.
+        verb: "POST"
+        path: "/cv/import-text"
+        parameters:
+          - name: "cv_text"
+            description: "The whole CV as plain text"
+            required: "true"
+          - name: "profile_name"
+            description: "Profile name to create (e.g. john-doe). Derived from the CV when omitted."
+            required: "false"
+
+      - text: "delete profile"
+        description: "Permanently delete a CV profile and all its files. Confirm with the user first."
+        verb: "POST"
+        path: "/delete-profile"
+        parameters:
+          - name: "profile"
+            description: "Profile name to delete"
+            required: "true"
+
+      # ── Documents ──────────────────────────────────────────────────────────
+
+      - text: "generate cv"
+        description: >-
+          Generate a PDF CV for a profile. Returns a download_url — always give the
+          user the full URL, unchanged.
+        verb: "POST"
+        path: "/generate"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "lang"
+            description: "CV language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+          - name: "template"
+            description: "Template id from list templates. Omit for the default."
+            required: "false"
+
+      - text: "generate portfolio"
+        description: "Generate a project portfolio PDF from a profile. Returns a download_url to give the user unchanged."
+        verb: "POST"
+        path: "/portfolio/generate"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "lang"
+            description: "Language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+          - name: "template"
+            description: "Template id. Omit for the default."
+            required: "false"
+
+      - text: "translate profile"
+        description: "Translate a profile's CV into another language, creating that language version."
+        verb: "POST"
+        path: "/translate"
+        parameters:
+          - name: "profile_name"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "target_lang"
+            description: "Language to translate into"
+            required: "true"
+            alternatives: ["en", "fr", "de"]
+
+      - text: "write cover letter"
+        description: "Write a cover letter from a profile for a given job posting."
+        verb: "POST"
+        path: "/cover-letter"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "job_description"
+            description: "The full job posting text"
+            required: "true"
+          - name: "lang"
+            description: "Letter language"
+            required: "true"
+            alternatives: ["en", "fr", "de"]
+
+      # ── Job fit ────────────────────────────────────────────────────────────
+
+      - text: "analyze job fit"
+        description: "How well a profile fits a job posting, with strengths and gaps."
+        verb: "POST"
+        path: "/analyze-job-fit"
+        parameters:
+          - name: "job_url"
+            description: "URL of the job posting (e.g. a LinkedIn job)"
+            required: "true"
+          - name: "profile_name"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+
+      - text: "optimize cv for job"
+        description: >-
+          Tailor a profile's CV to a job posting and return the optimized CV. Does
+          not change the saved profile. Use "optimize and generate" for a PDF.
+        verb: "POST"
+        path: "/optimize"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "job_url"
+            description: "URL of the job posting"
+            required: "true"
+          - name: "job_description"
+            description: "The posting's text, when the URL cannot be read"
+            required: "false"
+          - name: "lang"
+            description: "CV language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+
+      - text: "optimize and generate"
+        description: "Tailor a profile's CV to a job posting and generate the PDF. Returns a download_url to give the user unchanged."
+        verb: "POST"
+        path: "/optimize-and-generate"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "job_url"
+            description: "URL of the job posting"
+            required: "true"
+          - name: "job_description"
+            description: "The posting's text, when the URL cannot be read"
+            required: "false"
+          - name: "lang"
+            description: "CV language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+          - name: "template"
+            description: "Template id from list templates. Omit for the default."
+            required: "false"

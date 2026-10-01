@@ -192,7 +192,18 @@ pub async fn generate_portfolio_handler(
 
                 app_log!(info, "Portfolio generated: {}", filename);
 
-                let download_url = format!("{}/outputs/{}", base_url, filename);
+                let download_url = match crate::web::downloads::publish(&config.output_dir, &filename, &base_url) {
+                    Ok(url) => url,
+                    Err(e) => {
+                        app_log!(error, "Could not publish a download link for {}: {}", filename, e);
+                        return Err(Json(StandardErrorResponse::new(
+                            "The portfolio was generated but its download link could not be created".to_string(),
+                            "DOWNLOAD_LINK_FAILED".to_string(),
+                            vec![],
+                            None,
+                        )));
+                    }
+                };
                 crate::email::send_email_with_prefs(
                     &auth.user().email,
                     crate::email::EmailKind::PortfolioReady {

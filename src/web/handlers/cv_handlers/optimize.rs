@@ -354,7 +354,18 @@ pub async fn optimize_and_generate_handler(
 
             let base_url = env::var("PUBLIC_BASE_URL")
                 .unwrap_or_else(|_| "https://api.cvenom.com".to_string());
-            let pdf_url = format!("{}/outputs/{}", base_url, ats_filename);
+            let pdf_url = match crate::web::downloads::publish(&config.output_dir, &ats_filename, &base_url) {
+                Ok(url) => url,
+                Err(e) => {
+                    app_log!(error, "Could not publish a download link for {}: {}", ats_filename, e);
+                    return Err(Json(StandardErrorResponse::new(
+                        "The CV was generated but its download link could not be created".to_string(),
+                        "DOWNLOAD_LINK_FAILED".to_string(),
+                        vec![],
+                        None,
+                    )));
+                }
+            };
 
             // Persist user's preferred language
             if let Ok(pool) = db_config.pool() {
