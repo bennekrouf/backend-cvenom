@@ -56,20 +56,61 @@ pub struct AuthConfig {
     pub oidc_jwks: Arc<RwLock<Option<jsonwebtoken::jwk::JwkSet>>>,
     /// Expected `aud` claim in OIDC tokens (e.g. "https://api.cvenom.com").
     /// Read from CVENOM_OIDC_AUDIENCE env var; None → OIDC path disabled.
+    /// Comma-separated to accept several during a migration.
     pub oidc_audience: Option<String>,
+    /// Service accounts allowed to sign those tokens, from
+    /// CVENOM_OIDC_SERVICE_ACCOUNT (comma-separated, for key rotation).
+    ///
+    /// Required whenever the OIDC path is on: any Google service account can
+    /// mint a token for any audience, so the audience alone proves nothing.
+    /// Empty → every api0 token is refused.
+    pub oidc_service_accounts: Vec<String>,
+}
+
+/// Split a comma-separated env value into trimmed, non-empty items, verbatim.
+/// Audiences go through this: a JWT `aud` must match exactly.
+fn parse_list(value: &str) -> Vec<String> {
+    value
+        .split(',')
+        .map(|item| item.trim().to_string())
+        .filter(|item| !item.is_empty())
+        .collect()
+}
+
+/// Same, lowercased — for email addresses, which compare case-insensitively.
+fn parse_email_list(value: &str) -> Vec<String> {
+    parse_list(value).into_iter().map(|e| e.to_lowercase()).collect()
+}
+
+/// Is `email` one of the pinned signers? Never true for an empty list.
+fn signer_allowed(email: &str, allowed: &[String]) -> bool {
+    let email = email.trim().to_lowercase();
+    !email.is_empty() && allowed.iter().any(|a| *a == email)
 }
 
 impl AuthConfig {
     pub fn new(project_id: String) -> Self {
         let oidc_audience = std::env::var("CVENOM_OIDC_AUDIENCE").ok();
+        let oidc_service_accounts = std::env::var("CVENOM_OIDC_SERVICE_ACCOUNT")
+            .map(|v| parse_email_list(&v))
+            .unwrap_or_default();
         if let Some(ref aud) = oidc_audience {
             app_log!(info, "OIDC downstream auth enabled — audience: {}", aud);
+            if oidc_service_accounts.is_empty() {
+                app_log!(
+                    error,
+                    "CVENOM_OIDC_SERVICE_ACCOUNT is not set — every api0 (OIDC) request will be refused"
+                );
+            } else {
+                app_log!(info, "OIDC signers allowed: {}", oidc_service_accounts.join(", "));
+            }
         }
         Self {
             project_id,
             firebase_keys: Arc::new(RwLock::new(HashMap::new())),
             oidc_jwks: Arc::new(RwLock::new(None)),
             oidc_audience,
+            oidc_service_accounts,
         }
     }
 
@@ -133,10 +174,22 @@ fn peek_token_issuer(token: &str) -> Option<String> {
 /// Validate a Google OIDC identity token issued by the api0 gateway's service account.
 /// Returns the service account email on success.
 async fn verify_google_oidc_token(token: &str, auth_config: &AuthConfig) -> Result<String> {
-    let audience = auth_config
-        .oidc_audience
-        .as_deref()
-        .ok_or_else(|| anyhow::anyhow!("OIDC audience not configured (set CVENOM_OIDC_AUDIENCE)"))?;
+    let audiences = parse_list(
+        auth_config
+            .oidc_audience
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("OIDC audience not configured (set CVENOM_OIDC_AUDIENCE)"))?,
+    );
+    if audiences.is_empty() {
+        return Err(anyhow::anyhow!("CVENOM_OIDC_AUDIENCE is empty"));
+    }
+    // Checked before any signature work: with no pinned signer there is nothing
+    // a token could prove.
+    if auth_config.oidc_service_accounts.is_empty() {
+        return Err(anyhow::anyhow!(
+            "No OIDC signer pinned (set CVENOM_OIDC_SERVICE_ACCOUNT) — refusing"
+        ));
+    }
 
     let header = jsonwebtoken::decode_header(token)?;
     let kid = header
@@ -167,7 +220,7 @@ async fn verify_google_oidc_token(token: &str, auth_config: &AuthConfig) -> Resu
 
     let decoding_key = DecodingKey::from_jwk(&jwk)?;
     let mut validation = Validation::new(Algorithm::RS256);
-    validation.set_audience(&[audience]);
+    validation.set_audience(&audiences);
     validation.set_issuer(&["accounts.google.com", "https://accounts.google.com"]);
 
     let token_data =
@@ -177,6 +230,15 @@ async fn verify_google_oidc_token(token: &str, auth_config: &AuthConfig) -> Resu
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("Missing email claim in OIDC token"))?
         .to_string();
+
+    // The signature proves Google issued it; this proves api0 asked for it.
+    let verified = token_data.claims["email_verified"].as_bool().unwrap_or(false);
+    if !verified || !signer_allowed(&sa_email, &auth_config.oidc_service_accounts) {
+        return Err(anyhow::anyhow!(
+            "OIDC token signed by '{}', which is not a pinned api0 signer",
+            sa_email
+        ));
+    }
 
     Ok(sa_email)
 }
@@ -605,5 +667,34 @@ impl<'r> FromRequest<'r> for FirebaseAuth {
             Outcome::Error(e) => Outcome::Error(e),
             Outcome::Forward(f) => Outcome::Forward(f),
         }
+    }
+}
+
+#[cfg(test)]
+mod oidc_signer_tests {
+    use super::{parse_email_list, parse_list, signer_allowed};
+
+    #[test]
+    fn audiences_are_trimmed_but_kept_verbatim() {
+        // A JWT `aud` matches exactly, so case must survive.
+        assert_eq!(
+            parse_list(" https://api.cvenom.com , ,https://api.cvenom.com/api0/tenant/T "),
+            vec!["https://api.cvenom.com", "https://api.cvenom.com/api0/tenant/T"]
+        );
+        assert!(parse_list("").is_empty());
+    }
+
+    #[test]
+    fn only_a_pinned_signer_is_allowed() {
+        let allowed = parse_email_list("api0@p.iam.gserviceaccount.com, Next@p.iam.gserviceaccount.com");
+        assert!(signer_allowed("api0@p.iam.gserviceaccount.com", &allowed));
+        assert!(signer_allowed("NEXT@p.iam.gserviceaccount.com", &allowed));
+        assert!(!signer_allowed("attacker@evil.iam.gserviceaccount.com", &allowed));
+        assert!(!signer_allowed("", &allowed));
+    }
+
+    #[test]
+    fn nobody_is_allowed_when_nothing_is_pinned() {
+        assert!(!signer_allowed("api0@p.iam.gserviceaccount.com", &[]));
     }
 }

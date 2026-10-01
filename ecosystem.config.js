@@ -29,9 +29,17 @@ module.exports = {
       CVENOM_GOOGLE_PROJECT_ID: 'your-firebase-project-id',
 
       // OIDC audience for api0.ai gateway service-account tokens.
-      // Set to the public base URL of this backend so Google can validate the `aud` claim.
       // Leave unset to disable the OIDC path (browser Firebase auth still works).
-      CVENOM_OIDC_AUDIENCE: 'https://api.cvenom.com',
+      // api0 signs as itself, with an audience scoped to the cvenom tenant.
+      // On the VPS the live value is in /opt/cvenom/backend-cvenom.env (run-backend.sh
+      // loads it and it overrides this file).
+      CVENOM_OIDC_AUDIENCE: 'https://api.cvenom.com/api0/tenant/c752f139-9fad-47c9-b10b-9983dcce8333',
+
+      // Who may sign those tokens — api0's service account. Required whenever
+      // CVENOM_OIDC_AUDIENCE is set: any Google service account can mint a token
+      // for any audience, so without this every api0 request is refused.
+      // Comma-separate two during a key rotation.
+      CVENOM_OIDC_SERVICE_ACCOUNT: 'firebase-adminsdk-fbsvc@cvenom-de582.iam.gserviceaccount.com',
 
       // === OPTIONAL VARIABLES (used by start.sh) ===
       DEFAULT_DOMAIN: 'keyteo.ch',
