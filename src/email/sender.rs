@@ -6,13 +6,13 @@ use super::templates::EmailKind;
 pub async fn deliver(to: &str, kind: &EmailKind, lang: &str) -> Result<()> {
     let store_url = std::env::var("API0_STORE_URL")
         .unwrap_or_else(|_| "http://127.0.0.1:5007".into());
-    let internal_secret = std::env::var("API0_INTERNAL_SECRET")
-        .context("API0_INTERNAL_SECRET not set")?;
+    let service_key = std::env::var("API0_STORE_SERVICE_KEY")
+        .context("API0_STORE_SERVICE_KEY not set")?;
 
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/api/internal/email/send", store_url))
-        .header("X-Internal-Secret", &internal_secret)
+        .header("X-Service-Key", &service_key)
         .json(&serde_json::json!({
             "to":        to,
             "subject":   kind.subject(lang),
