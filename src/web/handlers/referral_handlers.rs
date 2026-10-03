@@ -105,7 +105,7 @@ pub async fn credit_referral(
     ref_code: String,
     pool: SqlitePool,
     store_url: String,
-    secret: String,
+    service_key: String,
 ) {
     // 1. Look up referrer by tenant_name
     let referrer_email: Option<String> = sqlx::query_scalar(
@@ -177,10 +177,11 @@ pub async fn credit_referral(
     match client
         .post(format!("{}/api/user/credits", store_url))
         .header("Content-Type", "application/json")
-        .header("X-Internal-Secret", &secret)
+        .header("X-Service-Key", &service_key)
         .json(&referrer_body)
         .send()
         .await
+        .and_then(|r| r.error_for_status())
     {
         Ok(_) => app_log!(
             info,
@@ -204,10 +205,11 @@ pub async fn credit_referral(
     match client
         .post(format!("{}/api/user/credits", store_url))
         .header("Content-Type", "application/json")
-        .header("X-Internal-Secret", &secret)
+        .header("X-Service-Key", &service_key)
         .json(&referred_body)
         .send()
         .await
+        .and_then(|r| r.error_for_status())
     {
         Ok(_) => app_log!(
             info,

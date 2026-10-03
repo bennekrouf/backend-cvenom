@@ -374,59 +374,20 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                 }
             }
         } else {
-            // ── Firebase / Static Token path ─────────────────────────────
-            let user = match verify_firebase_token(token, auth_config).await {
+            // ── Firebase path ─────────────────────────────────────────────────
+            //
+            // The token is the only proof. There used to be two ways around it:
+            // an unverifiable token was accepted, and a valid one could be
+            // swapped for any other user, whenever the request also carried
+            // X-Internal-Secret and X-User-Email. api0 no longer sends that
+            // secret to backends — its calls arrive on the OIDC path above — so
+            // those branches served only whoever else held the value.
+            match verify_firebase_token(token, auth_config).await {
                 Ok(u) => u,
                 Err(e) => {
-                    // If token verification fails, we still allow the request IF it's a 
-                    // trusted internal call from the gateway with a valid secret.
-                    // This supports "Static Bearer" tokens that aren't Firebase JWTs.
-                    if let (Some(secret), Some(forwarded_email)) = (
-                        req.headers().get_one("X-Internal-Secret"),
-                        req.headers().get_one("X-User-Email")
-                    ) {
-                        let internal_secret = std::env::var("API0_INTERNAL_SECRET").unwrap_or_default();
-                        if !internal_secret.is_empty() && secret == internal_secret {
-                            app_log!(info, "Trusted internal request with unknown token — acting as user: {}", forwarded_email);
-                            FirebaseUser {
-                                uid: forwarded_email.to_string(),
-                                email: forwarded_email.to_string(),
-                                name: None,
-                                picture: None,
-                                email_verified: true,
-                            }
-                        } else {
-                            app_log!(error, "Token verification failed and internal secret is invalid: {}", e);
-                            return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
-                        }
-                    } else {
-                        app_log!(error, "Token verification failed: {}", e);
-                        return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
-                    }
+                    app_log!(error, "Token verification failed: {}", e);
+                    return Outcome::Error((Status::Unauthorized, AuthError::TokenVerificationFailed));
                 }
-            };
-
-            // Even if the token was valid (e.g. Admin's Firebase token), the gateway 
-            // may be asking us to act as a different user (the MCP-connected user).
-            if let (Some(secret), Some(forwarded_email)) = (
-                req.headers().get_one("X-Internal-Secret"),
-                req.headers().get_one("X-User-Email")
-            ) {
-                let internal_secret = std::env::var("API0_INTERNAL_SECRET").unwrap_or_default();
-                if !internal_secret.is_empty() && secret == internal_secret && user.email != forwarded_email {
-                    app_log!(info, "Identity override — Token: {}, X-User-Email: {}", user.email, forwarded_email);
-                    FirebaseUser {
-                        uid: forwarded_email.to_string(),
-                        email: forwarded_email.to_string(),
-                        name: user.name,
-                        picture: user.picture,
-                        email_verified: true,
-                    }
-                } else {
-                    user
-                }
-            } else {
-                user
             }
         };
 
@@ -462,7 +423,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
             const WELCOME_CREDITS: i64 = 100;
             if let (Ok(store_url), Ok(secret)) = (
                 std::env::var("API0_STORE_URL"),
-                std::env::var("API0_INTERNAL_SECRET"),
+                std::env::var("API0_STORE_SERVICE_KEY"),
             ) {
                 let client = reqwest::Client::new();
                 let body = serde_json::json!({
@@ -472,10 +433,11 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                 });
                 match client
                     .post(format!("{}/api/user/credits", store_url))
-                    .header("X-Internal-Secret", &secret)
+                    .header("X-Service-Key", &secret)
                     .json(&body)
                     .send()
                     .await
+                    .and_then(|r| r.error_for_status())
                 {
                     Ok(_) => {
                         app_log!(
@@ -522,7 +484,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                     tokio::spawn(async move {
                         if let (Ok(store_url), Ok(secret)) = (
                             std::env::var("API0_STORE_URL"),
-                            std::env::var("API0_INTERNAL_SECRET"),
+                            std::env::var("API0_STORE_SERVICE_KEY"),
                         ) {
                             credit_referral(referred_email, ref_code, pool, store_url, secret)
                                 .await;

@@ -14,7 +14,8 @@
 //   STRIPE_SECRET_KEY       – cvenom's own Stripe secret key (sk_live_… / sk_test_…)
 //   STRIPE_PUBLISHABLE_KEY  – cvenom's own Stripe publishable key (pk_live_… / pk_test_…)
 //   API0_STORE_URL          – base URL of the api0 Store service  (e.g. http://localhost:5007)
-//   API0_INTERNAL_SECRET    – a shared secret accepted by api0 Store for internal credit top-up
+//   API0_STORE_SERVICE_KEY  – cvenom's api0 Store key (scopes credits.read, credits.write,
+//                             email.send); never the platform-wide API0_INTERNAL_SECRET
 
 use graflog::app_log;
 use percent_encoding::{utf8_percent_encode, NON_ALPHANUMERIC};
@@ -192,9 +193,9 @@ fn api0_store_url() -> Result<String, String> {
         .map_err(|_| "API0_STORE_URL environment variable not set".to_string())
 }
 
-fn api0_internal_secret() -> Result<String, String> {
-    std::env::var("API0_INTERNAL_SECRET")
-        .map_err(|_| "API0_INTERNAL_SECRET environment variable not set".to_string())
+fn api0_service_key() -> Result<String, String> {
+    std::env::var("API0_STORE_SERVICE_KEY")
+        .map_err(|_| "API0_STORE_SERVICE_KEY environment variable not set".to_string())
 }
 
 /// Top up a user's credit balance in api0 Store.
@@ -203,7 +204,7 @@ fn api0_internal_secret() -> Result<String, String> {
 /// Body:  { "email": "<user email>", "amount": <credits> }
 pub async fn api0_topup_credits(user_email: &str, credits_to_add: i64, action_type: &str, description: Option<&str>) -> Result<i64, String> {
     let store_url = api0_store_url()?;
-    let internal_secret = api0_internal_secret()?;
+    let service_key = api0_service_key()?;
     let client = reqwest::Client::new();
 
     let body = serde_json::json!({
@@ -216,7 +217,7 @@ pub async fn api0_topup_credits(user_email: &str, credits_to_add: i64, action_ty
     let res = client
         .post(format!("{store_url}/api/user/credits"))
         .header("Content-Type", "application/json")
-        .header("X-Internal-Secret", &internal_secret)
+        .header("X-Service-Key", &service_key)
         .json(&body)
         .send()
         .await
@@ -239,12 +240,12 @@ pub async fn api0_topup_credits(user_email: &str, credits_to_add: i64, action_ty
 /// Calls: GET {API0_STORE_URL}/api/user/credits/{email}
 pub async fn api0_get_balance(user_email: &str) -> Result<i64, String> {
     let store_url = api0_store_url()?;
-    let internal_secret = api0_internal_secret()?;
+    let service_key = api0_service_key()?;
     let client = reqwest::Client::new();
 
     let res = client
         .get(format!("{store_url}/api/user/credits/{}", utf8_percent_encode(user_email, NON_ALPHANUMERIC)))
-        .header("X-Internal-Secret", &internal_secret)
+        .header("X-Service-Key", &service_key)
         .send()
         .await
         .map_err(|e| format!("api0 store request failed: {e}"))?;

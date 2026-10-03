@@ -154,6 +154,26 @@ assert_requires_auth!(admin_bds_requires_auth,     get,  "/admin/bd");
 assert_requires_auth!(admin_commissions_requires_auth, get, "/admin/commissions");
 assert_requires_auth!(admin_models_requires_auth,  get,  "/admin/models");
 
+// ── The api0 internal secret is not a credential here ─────────────────────────
+//
+// A request carrying X-Internal-Secret and X-User-Email used to be accepted as
+// that user even with a token that failed verification. Only a verified token
+// gets in now; api0's own calls use its OIDC identity token.
+
+#[tokio::test]
+async fn the_internal_secret_does_not_stand_in_for_a_token() {
+    std::env::set_var("API0_INTERNAL_SECRET", "test-internal-secret");
+    let client = test_client().await;
+    let response = client
+        .get("/files/tree")
+        .header(rocket::http::Header::new("Authorization", "Bearer not-a-firebase-token"))
+        .header(rocket::http::Header::new("X-Internal-Secret", "test-internal-secret"))
+        .header(rocket::http::Header::new("X-User-Email", "victim@example.com"))
+        .dispatch()
+        .await;
+    assert_eq!(response.status(), Status::Unauthorized);
+}
+
 // ── Request format validation ─────────────────────────────────────────────────
 
 #[tokio::test]
