@@ -52,6 +52,10 @@ pub struct CreateIntentResponse {
 #[serde(crate = "rocket::serde")]
 pub struct ConfirmPaymentRequest {
     pub payment_intent_id: String,
+    /// When the buyer ticked "start delivery now and waive the 14-day withdrawal right"
+    /// (ISO-8601, client clock). Recorded on the PaymentIntent as proof of consent.
+    #[serde(default)]
+    pub withdrawal_waiver_accepted_at: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -184,6 +188,34 @@ async fn stripe_verify_payment_intent(
         .ok_or("Stripe response missing 'amount'")?;
 
     Ok(amount_cents as u32)
+}
+
+/// Record the buyer's withdrawal-right waiver on the PaymentIntent's metadata, so the
+/// proof of consent lives next to the charge in Stripe.
+async fn stripe_record_withdrawal_waiver(
+    secret_key: &str,
+    payment_intent_id: &str,
+    accepted_at: &str,
+) -> Result<(), String> {
+    // Client-supplied value: keep it short and printable before storing it.
+    let accepted_at: String = accepted_at.chars().filter(|c| c.is_ascii_graphic()).take(40).collect();
+    let params = [
+        ("metadata[withdrawal_waiver]", "accepted".to_string()),
+        ("metadata[withdrawal_waiver_accepted_at]", accepted_at),
+        ("metadata[withdrawal_waiver_recorded_at]", chrono::Utc::now().to_rfc3339()),
+    ];
+    let res = reqwest::Client::new()
+        .post(format!("https://api.stripe.com/v1/payment_intents/{payment_intent_id}"))
+        .basic_auth(secret_key, Some(""))
+        .form(&params)
+        .send()
+        .await
+        .map_err(|e| format!("Stripe request failed: {e}"))?;
+    if !res.status().is_success() {
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("Stripe error: {body}"));
+    }
+    Ok(())
 }
 
 // ── api0 Store helpers ────────────────────────────────────────────────────────
@@ -453,6 +485,19 @@ pub async fn confirm_payment_handler(
             )));
         }
     };
+
+    // Proof of the withdrawal-right waiver. Best-effort: the charge already succeeded,
+    // so a failure here must not stop the credits from being added.
+    match request.withdrawal_waiver_accepted_at.as_deref() {
+        Some(accepted_at) => {
+            if let Err(e) = stripe_record_withdrawal_waiver(&secret_key, payment_intent_id, accepted_at).await {
+                app_log!(error, user = %user_email, intent = %payment_intent_id, error = %e,
+                    "Failed to record withdrawal waiver on PaymentIntent");
+            }
+        }
+        None => app_log!(warn, user = %user_email, intent = %payment_intent_id,
+            "Payment confirmed without a withdrawal waiver (outdated client?)"),
+    }
 
     // 2. Compute credits to add (1 dollar = 4 credits; $5 = 20 credits = 20 CV generations)
     let amount_dollars = (amount_cents / 100) as i64;

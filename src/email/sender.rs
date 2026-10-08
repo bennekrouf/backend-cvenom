@@ -9,14 +9,22 @@ pub async fn deliver(to: &str, kind: &EmailKind, lang: &str) -> Result<()> {
     let service_key = std::env::var("API0_STORE_SERVICE_KEY")
         .context("API0_STORE_SERVICE_KEY not set")?;
 
+    let unsubscribe_url = if kind.is_optional() { super::unsubscribe::url(to) } else { None };
+    if kind.is_marketing() && (unsubscribe_url.is_none() || super::unsubscribe::postal_address().is_none()) {
+        anyhow::bail!("marketing email needs CVENOM_UNSUBSCRIBE_SECRET and CVENOM_POSTAL_ADDRESS to be set");
+    }
+
     let client = reqwest::Client::new();
     let resp = client
         .post(format!("{}/api/internal/email/send", store_url))
         .header("X-Service-Key", &service_key)
         .json(&serde_json::json!({
             "to":        to,
+            "from_name": "CVenom",
             "subject":   kind.subject(lang),
-            "html_body": kind.html_body(lang),
+            "html_body": kind.html_body(lang, unsubscribe_url.as_deref()),
+            // RFC 2369 / RFC 8058 one-click unsubscribe headers, for the relay to set.
+            "list_unsubscribe": unsubscribe_url,
         }))
         .send()
         .await
