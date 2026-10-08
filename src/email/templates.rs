@@ -1,3 +1,16 @@
+/// `EmailKind::name()` of every category the user can switch off.
+pub const OPTIONAL_KINDS: &[&str] = &[
+    "cv_ready",
+    "portfolio_ready",
+    "cover_letter_ready",
+    "cv_imported",
+    "translation_ready",
+    "ats_results",
+    "nudge",
+    "win_back",
+    "new_template",
+];
+
 pub enum EmailKind {
     // ── Tier 1 ───────────────────────────────────────────────────────────────
     Welcome { name: String, credits: i64 },
@@ -61,18 +74,13 @@ impl EmailKind {
     /// Whether this email category can be disabled by the user.
     /// Transactional emails (welcome, payment, account) and admin emails are always sent.
     pub fn is_optional(&self) -> bool {
-        matches!(
-            self,
-            Self::CvReady { .. }
-                | Self::PortfolioReady { .. }
-                | Self::CoverLetterReady { .. }
-                | Self::CvImported { .. }
-                | Self::TranslationReady { .. }
-                | Self::AtsResults { .. }
-                | Self::Nudge { .. }
-                | Self::WinBack { .. }
-                | Self::NewTemplate { .. }
-        )
+        OPTIONAL_KINDS.contains(&self.name())
+    }
+
+    /// Promotional emails (not triggered by a user action). These legally need an
+    /// unsubscribe link and the sender's postal address, so they are never sent without them.
+    pub fn is_marketing(&self) -> bool {
+        matches!(self, Self::Nudge { .. } | Self::WinBack { .. } | Self::NewTemplate { .. })
     }
 
     pub fn subject(&self, lang: &str) -> String {
@@ -173,7 +181,8 @@ impl EmailKind {
         }
     }
 
-    pub fn html_body(&self, lang: &str) -> String {
+    /// `unsubscribe_url` is set for optional emails; it adds an unsubscribe link and the postal address to the footer.
+    pub fn html_body(&self, lang: &str, unsubscribe_url: Option<&str>) -> String {
         let btn = |url: &str, label: &str| -> String {
             format!(r#"<a href="{url}" style="display:inline-block;padding:10px 20px;background:#6366F1;color:white;text-decoration:none;border-radius:6px">{label}</a>"#)
         };
@@ -548,15 +557,32 @@ impl EmailKind {
             }
         };
 
-        wrap_layout(&content, lang)
+        wrap_layout(&content, lang, unsubscribe_url)
     }
 }
 
-fn wrap_layout(content: &str, lang: &str) -> String {
+fn wrap_layout(content: &str, lang: &str, unsubscribe_url: Option<&str>) -> String {
     let tagline = match lang {
         "fr" => "CVenom — Générateur de CV professionnel",
         "de" => "CVenom — Professioneller CV-Generator",
         _ => "CVenom — Professional CV Generator",
+    };
+    let unsubscribe = match unsubscribe_url {
+        Some(url) => {
+            let (why, label) = match lang {
+                "fr" => ("Vous recevez cet e-mail car vous avez un compte CVenom.", "Se désabonner"),
+                "de" => ("Sie erhalten diese E-Mail, weil Sie ein CVenom-Konto haben.", "Abmelden"),
+                _ => ("You are receiving this email because you have a CVenom account.", "Unsubscribe"),
+            };
+            let address = super::unsubscribe::postal_address()
+                .map(|a| format!("<br>{}", html_escape(&a)))
+                .unwrap_or_default();
+            format!(
+                r#"<br><br>{why} <a href="{url}" style="color:#64748B">{label}</a>{address}"#,
+                url = html_escape(url),
+            )
+        }
+        None => String::new(),
     };
     format!(
         r#"<!DOCTYPE html>
@@ -570,10 +596,14 @@ fn wrap_layout(content: &str, lang: &str) -> String {
   <div style="padding:32px">{content}</div>
   <div style="padding:16px 32px;background:#F8FAFC;color:#64748B;font-size:12px;text-align:center">
     {tagline}<br>
-    <a href="https://cvenom.com" style="color:#6366F1">cvenom.com</a>
+    <a href="https://cvenom.com" style="color:#6366F1">cvenom.com</a>{unsubscribe}
   </div>
 </div>
 </body>
 </html>"#
     )
+}
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
 }

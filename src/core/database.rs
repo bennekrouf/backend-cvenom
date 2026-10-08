@@ -237,6 +237,21 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
 
 // ===== Tenant Models =====
 
+/// Recipient of a bulk/engagement email, with what's needed to honour their preferences.
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct EmailRecipient {
+    pub email: String,
+    pub tenant_name: String,
+    pub preferred_lang: Option<String>,
+    pub email_prefs: Option<String>,
+}
+
+impl EmailRecipient {
+    pub fn lang(&self) -> &str {
+        self.preferred_lang.as_deref().unwrap_or("en")
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Tenant {
     pub id: i64,
@@ -545,11 +560,11 @@ impl<'a> TenantRepository<'a> {
     }
 
     /// Email tenants that signed up > 7 days ago, never generated a CV, and haven't been nudged yet.
-    pub async fn find_nudge_candidates(&self) -> Result<Vec<(i64, String, String)>> {
+    pub async fn find_nudge_candidates(&self) -> Result<Vec<EmailRecipient>> {
         let cutoff = Utc::now() - chrono::Duration::days(7);
-        let rows = sqlx::query_as::<_, (i64, String, String)>(
+        let rows = sqlx::query_as::<_, EmailRecipient>(
             r#"
-            SELECT id, email, tenant_name
+            SELECT email, tenant_name, preferred_lang, email_prefs
             FROM tenants
             WHERE is_active = TRUE
               AND email IS NOT NULL
@@ -575,11 +590,11 @@ impl<'a> TenantRepository<'a> {
     }
 
     /// Email tenants inactive for > 30 days that haven't received a win-back email yet.
-    pub async fn find_winback_candidates(&self) -> Result<Vec<(i64, String, String)>> {
+    pub async fn find_winback_candidates(&self) -> Result<Vec<EmailRecipient>> {
         let cutoff = Utc::now() - chrono::Duration::days(30);
-        let rows = sqlx::query_as::<_, (i64, String, String)>(
+        let rows = sqlx::query_as::<_, EmailRecipient>(
             r#"
-            SELECT id, email, tenant_name
+            SELECT email, tenant_name, preferred_lang, email_prefs
             FROM tenants
             WHERE is_active = TRUE
               AND email IS NOT NULL
@@ -603,11 +618,11 @@ impl<'a> TenantRepository<'a> {
         Ok(())
     }
 
-    /// Return (id, email, tenant_name) for all active email tenants — used for broadcasts.
-    pub async fn list_active_email_tenants(&self) -> Result<Vec<(i64, String, String)>> {
-        let rows = sqlx::query_as::<_, (i64, String, String)>(
+    /// All active email tenants — used for broadcasts.
+    pub async fn list_active_email_tenants(&self) -> Result<Vec<EmailRecipient>> {
+        let rows = sqlx::query_as::<_, EmailRecipient>(
             r#"
-            SELECT id, email, tenant_name
+            SELECT email, tenant_name, preferred_lang, email_prefs
             FROM tenants
             WHERE is_active = TRUE AND email IS NOT NULL AND domain IS NULL
             "#,

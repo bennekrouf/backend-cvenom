@@ -2,6 +2,7 @@ use graflog::app_log;
 
 mod sender;
 mod templates;
+pub mod unsubscribe;
 
 pub use templates::EmailKind;
 

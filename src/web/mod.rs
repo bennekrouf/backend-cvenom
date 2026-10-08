@@ -294,6 +294,62 @@ pub async fn update_preferences(
     Ok(Json(serde_json::json!({ "success": true })))
 }
 
+fn unsubscribe_page(title: &str, body: &str) -> rocket::response::content::RawHtml<String> {
+    rocket::response::content::RawHtml(format!(
+        r#"<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title></head>
+<body style="margin:0;padding:48px 16px;background:#F8FAFC;font-family:Arial,Helvetica,sans-serif;color:#0F172A">
+<div style="max-width:480px;margin:0 auto;background:#fff;border-radius:8px;padding:32px;box-shadow:0 1px 3px rgba(0,0,0,0.1)">
+<h2 style="margin-top:0">{title}</h2>{body}</div></body></html>"#
+    ))
+}
+
+/// GET /email/unsubscribe?token=… — confirmation page (public, no login).
+/// Unsubscribing happens on POST so link scanners that prefetch URLs don't trigger it.
+#[get("/email/unsubscribe?<token>")]
+pub async fn email_unsubscribe_page(token: &str) -> rocket::response::content::RawHtml<String> {
+    if crate::email::unsubscribe::verify(token).is_none() {
+        return unsubscribe_page("Invalid link", "<p>This unsubscribe link is invalid. You can manage your emails from Preferences in <a href=\"https://studio.cvenom.com\">CVenom Studio</a>.</p>");
+    }
+    unsubscribe_page(
+        "Unsubscribe from CVenom emails",
+        &format!(
+            r#"<p>You will stop receiving optional emails (product news, reminders and "your file is ready" notifications). Receipts and account emails are still sent.</p>
+<form method="post" action="/email/unsubscribe?token={token}">
+<button type="submit" style="padding:10px 20px;background:#6366F1;color:#fff;border:0;border-radius:6px;font-size:15px;cursor:pointer">Unsubscribe</button>
+</form>"#,
+            token = sanitize_token(token)
+        ),
+    )
+}
+
+/// POST /email/unsubscribe?token=… — performs the unsubscribe. Also the RFC 8058
+/// one-click target (mail clients POST `List-Unsubscribe=One-Click`; the body is ignored).
+#[post("/email/unsubscribe?<token>")]
+pub async fn email_unsubscribe(
+    token: &str,
+    db_config: &State<DatabaseConfig>,
+) -> Result<rocket::response::content::RawHtml<String>, Status> {
+    let email = crate::email::unsubscribe::verify(token).ok_or(Status::BadRequest)?;
+    let pool = db_config.pool().map_err(|_| Status::InternalServerError)?;
+    let repo = TenantRepository::new(pool);
+    let current = repo.get_email_prefs(&email).await.map_err(|_| Status::InternalServerError)?;
+    let updated = crate::email::unsubscribe::disable_all_optional(&current);
+    repo.update_email_prefs(&email, &updated).await.map_err(|e| {
+        app_log!(error, "[unsubscribe] failed to update prefs for {}: {}", email, e);
+        Status::InternalServerError
+    })?;
+    app_log!(info, "[unsubscribe] {} unsubscribed from optional emails", email);
+    Ok(unsubscribe_page(
+        "You're unsubscribed",
+        "<p>You won't receive optional emails from CVenom anymore. You can turn them back on any time from Preferences in <a href=\"https://studio.cvenom.com\">CVenom Studio</a>.</p>",
+    ))
+}
+
+/// Tokens are base64url JWTs; keep only those characters so the value is safe to echo into HTML.
+fn sanitize_token(token: &str) -> String {
+    token.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')).collect()
+}
+
 #[get("/health")]
 pub async fn health(auth: OptionalAuth) -> Json<TextResponse> {
     handlers::health_handler(auth).await
@@ -598,11 +654,12 @@ pub async fn admin_announce_template(
 
     let count = tenants.len();
     let template_name = body.template_name.clone();
-    for (_id, email, _name) in tenants {
-        crate::email::send_email(
-            &email,
+    for r in tenants {
+        crate::email::send_email_with_prefs(
+            &r.email,
             crate::email::EmailKind::NewTemplate { template_name: template_name.clone() },
-            "en",
+            r.lang(),
+            r.email_prefs.as_deref(),
         );
     }
 
@@ -928,8 +985,9 @@ pub async fn start_web_server(
                 match repo.find_nudge_candidates().await {
                     Ok(candidates) => {
                         app_log!(info, "[engagement] Nudge candidates: {}", candidates.len());
-                        for (_id, email, name) in candidates {
-                            let credits = match crate::web::handlers::payment_handlers::api0_get_balance(&email).await {
+                        for r in candidates {
+                            let email = &r.email;
+                            let credits = match crate::web::handlers::payment_handlers::api0_get_balance(email).await {
                                 Ok(b) => b,
                                 Err(e) => {
                                     app_log!(warn, "[engagement] balance fetch failed for {}: {}", email, e);
@@ -937,12 +995,13 @@ pub async fn start_web_server(
                                 }
                             };
                             app_log!(info, "[engagement] Nudge {} credits={}", email, credits);
-                            crate::email::send_email(
-                                &email,
-                                crate::email::EmailKind::Nudge { name, credits },
-                                "en",
+                            crate::email::send_email_with_prefs(
+                                email,
+                                crate::email::EmailKind::Nudge { name: r.tenant_name.clone(), credits },
+                                r.lang(),
+                                r.email_prefs.as_deref(),
                             );
-                            if let Err(e) = repo.mark_nudge_sent(&email).await {
+                            if let Err(e) = repo.mark_nudge_sent(email).await {
                                 app_log!(error, "[engagement] mark_nudge_sent failed for {}: {}", email, e);
                             }
                         }
@@ -954,14 +1013,15 @@ pub async fn start_web_server(
                 match repo.find_winback_candidates().await {
                     Ok(candidates) => {
                         app_log!(info, "[engagement] Win-back candidates: {}", candidates.len());
-                        for (_id, email, name) in candidates {
-                            crate::email::send_email(
-                                &email,
-                                crate::email::EmailKind::WinBack { name },
-                                "en",
+                        for r in candidates {
+                            crate::email::send_email_with_prefs(
+                                &r.email,
+                                crate::email::EmailKind::WinBack { name: r.tenant_name.clone() },
+                                r.lang(),
+                                r.email_prefs.as_deref(),
                             );
-                            if let Err(e) = repo.mark_winback_sent(&email).await {
-                                app_log!(error, "[engagement] mark_winback_sent failed for {}: {}", email, e);
+                            if let Err(e) = repo.mark_winback_sent(&r.email).await {
+                                app_log!(error, "[engagement] mark_winback_sent failed for {}: {}", r.email, e);
                             }
                         }
                     }
@@ -1077,6 +1137,8 @@ pub fn build_rocket(
                 get_output_file,
                 get_preferences,
                 update_preferences,
+                email_unsubscribe_page,
+                email_unsubscribe,
             ],
         )
 }
