@@ -24,7 +24,7 @@ use rocket::State;
 pub struct CoverLetterRequest {
     /// Profile name to read CV data from.
     pub profile: String,
-    /// Language for the cover letter ("en" or "fr").
+    /// Language for the cover letter: one of [`SUPPORTED_LANGS`].
     pub lang: String,
     /// LinkedIn or other job posting description pasted by the user.
     pub job_description: String,
@@ -37,6 +37,10 @@ pub struct CoverLetterResult {
     pub lang: String,
     pub profile: String,
 }
+
+/// Languages the cover letter service writes in. Anything else used to come
+/// back in English, after the credits were spent.
+const SUPPORTED_LANGS: [&str; 3] = ["en", "fr", "de"];
 
 // ── Handler ───────────────────────────────────────────────────────────────────
 
@@ -51,6 +55,15 @@ pub async fn cover_letter_handler(
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
     let data = &request.data;
+
+    if !SUPPORTED_LANGS.contains(&data.lang.as_str()) {
+        return Err(Json(StandardErrorResponse::new(
+            format!("Unsupported cover letter language '{}'", data.lang),
+            "UNSUPPORTED_LANGUAGE".to_string(),
+            vec![format!("Use one of: {}", SUPPORTED_LANGS.join(", "))],
+            conversation_id,
+        )));
+    }
 
     // Cover letter uses LLM — 20 credits (same as CV generation)
     check_and_deduct_credits(&user.email, 20, conversation_id.clone(), "cover_letter").await?;
