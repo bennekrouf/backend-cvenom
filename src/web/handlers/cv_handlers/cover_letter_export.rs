@@ -20,7 +20,7 @@ pub struct CoverLetterExportRequest {
     pub cover_letter: String,
     /// Candidate name — used in the filename.
     pub name: String,
-    /// Language code ("en" or "fr").
+    /// Language code ("en", "fr" or "de").
     pub lang: String,
 }
 

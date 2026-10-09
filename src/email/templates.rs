@@ -299,6 +299,10 @@ impl EmailKind {
                     r#"<h1>Lettre de motivation prête</h1>
 <p>Votre lettre de motivation pour <strong>{profile}</strong> a été générée.</p>
 <p>Vous pouvez la consulter et la télécharger depuis l'éditeur CVenom.</p>"#),
+                "de" => format!(
+                    r#"<h1>Anschreiben fertig</h1>
+<p>Ihr Anschreiben für <strong>{profile}</strong> wurde erstellt.</p>
+<p>Sie können es im CVenom-Editor ansehen und herunterladen.</p>"#),
                 _ => format!(
                     r#"<h1>Cover Letter Ready</h1>
 <p>Your cover letter for <strong>{profile}</strong> has been generated.</p>
