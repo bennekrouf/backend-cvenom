@@ -59,6 +59,9 @@ pub struct CvOptimizationResponse {
     pub before_score: Option<u8>,
     /// ATS match percentage after optimization (0-100)
     pub after_score: Option<u8>,
+    /// Source-profile problems the optimizer leaves alone (absent on older service versions)
+    #[serde(default)]
+    pub warnings: Vec<String>,
     pub status: String,
 }
 
@@ -75,6 +78,9 @@ pub struct OptimizeResponse {
     pub before_score: Option<u8>,
     /// ATS match percentage after optimization (0-100)
     pub after_score: Option<u8>,
+    /// Problems in the source profile to fix by hand (placeholder titles, foreign dates…)
+    #[serde(default)]
+    pub warnings: Vec<String>,
     /// Whether the optimized profile was saved back to disk
     pub saved: bool,
     pub status: String,

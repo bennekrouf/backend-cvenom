@@ -21,6 +21,10 @@ use crate::web::handlers::{
 };
 use crate::web::handlers::cv_handlers::GeneratePortfolioRequest;
 use crate::web::handlers::cv_handlers::ImportTextRequest;
+use crate::web::handlers::cv_handlers::{
+    duplicate_profile_handler, list_profile_versions_handler, restore_profile_version_handler,
+    DuplicateProfileRequest, RestoreProfileRequest,
+};
 use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
 use crate::core::FsOps;
@@ -518,6 +522,36 @@ pub async fn save_optimized_cv(
     config: &State<ServerConfig>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
     save_optimized_handler(request, auth, config).await
+}
+
+/// POST /profiles/duplicate — copy a profile (files, pictures) to a new name.
+#[post("/profiles/duplicate", data = "<request>")]
+pub async fn duplicate_profile(
+    request: Json<StandardRequest<DuplicateProfileRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    duplicate_profile_handler(request, auth, config).await
+}
+
+/// GET /profiles/:name/versions — saved versions of a profile's CV files, newest first.
+#[get("/profiles/<name>/versions")]
+pub async fn list_profile_versions(
+    name: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<DataResponse<Vec<String>>>, Json<StandardErrorResponse>> {
+    list_profile_versions_handler(name, auth, config).await
+}
+
+/// POST /profiles/restore — restore a saved version (newest when `version` is omitted).
+#[post("/profiles/restore", data = "<request>")]
+pub async fn restore_profile_version(
+    request: Json<StandardRequest<RestoreProfileRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    restore_profile_version_handler(request, auth, config).await
 }
 
 #[post("/translate", data = "<request>")]
@@ -1096,6 +1130,9 @@ pub fn build_rocket(
                 optimize_cv,
                 optimize_and_generate,
                 save_optimized_cv,
+                duplicate_profile,
+                list_profile_versions,
+                restore_profile_version,
                 translate_cv,
                 generate_cover_letter,
                 export_cover_letter,

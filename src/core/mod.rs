@@ -6,6 +6,7 @@ pub mod branding;
 pub mod config_manager;
 pub mod database;
 pub mod fs_ops;
+pub mod profile_store;
 pub mod service_client;
 pub mod template_engine;
 

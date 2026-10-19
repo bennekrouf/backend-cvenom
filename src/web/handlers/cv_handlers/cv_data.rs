@@ -617,6 +617,13 @@ pub async fn put_cv_data_handler(
         )));
     }
 
+    // Keep the previous version restorable
+    if let (Some(tenant_dir), Some(name)) = (profile_dir.parent(), profile_dir.file_name()) {
+        if let Err(e) = crate::core::profile_store::snapshot(tenant_dir, &name.to_string_lossy()).await {
+            app_log!(warn, "Could not snapshot profile before save: {}", e);
+        }
+    }
+
     // Write cv_params.toml
     let toml_content = generate_toml(&data);
     let toml_path = profile_dir.join("cv_params.toml");

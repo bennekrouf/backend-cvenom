@@ -248,114 +248,116 @@ fn escape_typst(s: &str) -> String {
 pub struct CvConverter;
 
 impl CvConverter {
-    /// Convert CvJson to TOML configuration
+    /// Convert CvJson to TOML configuration.
+    ///
+    /// Built as a `toml::Table` and serialized by the `toml` crate so every value
+    /// is escaped correctly. The old hand-written `format!("summary = \"{}\"")`
+    /// wrote raw newlines and quotes into basic strings, producing a
+    /// cv_params.toml that Typst could not parse.
     pub fn to_toml(cv_data: &CvJson) -> Result<String> {
-        let mut toml_content = String::new();
+        use toml::{Table, Value};
 
+        let str_val = |v: &Option<String>| Value::String(v.clone().unwrap_or_default());
+        let str_list = |items: &[String]| {
+            Value::Array(items.iter().map(|s| Value::String(s.clone())).collect())
+        };
+
+        let p = &cv_data.personal_info;
+        let mut root = Table::new();
         // Personal info - FLAT structure (no [personal] section)
-        toml_content.push_str(&format!("name = \"{}\"\n", cv_data.personal_info.name));
-
-        if let Some(title) = &cv_data.personal_info.title {
-            toml_content.push_str(&format!("title = \"{}\"\n", title));
-        } else {
-            toml_content.push_str("title = \"\"\n");
-        }
-
-        if let Some(email) = &cv_data.personal_info.email {
-            toml_content.push_str(&format!("email = \"{}\"\n", email));
-        } else {
-            toml_content.push_str("email = \"\"\n");
-        }
-
-        if let Some(phone) = &cv_data.personal_info.phone {
-            toml_content.push_str(&format!("phonenumber = \"{}\"\n", phone));
-        } else {
-            toml_content.push_str("phonenumber = \"\"\n");
-        }
-
-        if let Some(address) = &cv_data.personal_info.address {
-            toml_content.push_str(&format!("address = \"{}\"\n", address));
-        } else {
-            toml_content.push_str("address = \"\"\n");
-        }
-
-        if let Some(summary) = &cv_data.personal_info.summary {
-            toml_content.push_str(&format!("summary = \"{}\"\n", summary));
-        } else {
-            toml_content.push_str("summary = \"\"\n");
+        root.insert("name".into(), Value::String(p.name.clone()));
+        root.insert("title".into(), str_val(&p.title));
+        root.insert("email".into(), str_val(&p.email));
+        root.insert("phonenumber".into(), str_val(&p.phone));
+        root.insert("address".into(), str_val(&p.address));
+        root.insert("summary".into(), str_val(&p.summary));
+        // from_files reads these back; dropping them lost them on every save.
+        for (key, value) in [("linkedin", &p.linkedin), ("website", &p.website)] {
+            if let Some(v) = value.as_ref().filter(|v| !v.trim().is_empty()) {
+                root.insert(key.into(), Value::String(v.clone()));
+            }
         }
 
         // Links - FLAT structure (no [personal.links] section)
-        if let Some(links) = &cv_data.personal_info.links {
-            toml_content.push_str("\n[links]\n");
-            for (key, value) in links {
-                toml_content.push_str(&format!("{} = \"{}\"\n", key, value));
-            }
+        if let Some(links) = &p.links {
+            let table: Table = links
+                .iter()
+                .map(|(k, v)| (k.clone(), Value::String(v.clone())))
+                .collect();
+            root.insert("links".into(), Value::Table(table));
         }
 
         // Skills section — only emit non-empty arrays so the template doesn't render
         // empty subsections (e.g. PROGRAMMING_LANGUAGES for a nurse).
-        toml_content.push_str("\n[skills]\n");
-
-        let write_skill = |buf: &mut String, key: &str, values: &Option<Vec<String>>| {
+        let mut skills = Table::new();
+        let sk = &cv_data.skills;
+        for (key, values) in [
+            ("technical", &sk.technical),
+            ("programming_languages", &sk.programming_languages),
+            ("frameworks", &sk.frameworks),
+            ("tools", &sk.tools),
+            ("soft_skills", &sk.soft_skills),
+        ] {
             if let Some(items) = values {
-                let cleaned: Vec<&String> = items.iter().filter(|s| !s.trim().is_empty()).collect();
+                let cleaned: Vec<String> =
+                    items.iter().filter(|s| !s.trim().is_empty()).cloned().collect();
                 if !cleaned.is_empty() {
-                    buf.push_str(&format!("{} = {:?}\n", key, cleaned));
+                    skills.insert(key.into(), str_list(&cleaned));
                 }
             }
-        };
-
-        write_skill(&mut toml_content, "technical", &cv_data.skills.technical);
-        write_skill(&mut toml_content, "programming_languages", &cv_data.skills.programming_languages);
-        write_skill(&mut toml_content, "frameworks", &cv_data.skills.frameworks);
-        write_skill(&mut toml_content, "tools", &cv_data.skills.tools);
-        write_skill(&mut toml_content, "soft_skills", &cv_data.skills.soft_skills);
+        }
+        root.insert("skills".into(), Value::Table(skills));
 
         // Education section
         if !cv_data.education.is_empty() {
-            for edu in &cv_data.education {
-                toml_content.push_str("\n[[education]]\n");
-                toml_content.push_str(&format!(
-                    "title = \"{} - {}\"\n",
-                    edu.degree, edu.institution
-                ));
-                toml_content.push_str(&format!(
-                    "date = \"{}\"\n",
-                    if let Some(end) = &edu.end_date {
-                        format!("{} - {}", edu.start_date, end)
-                    } else {
-                        format!("{} - Present", edu.start_date)
+            let entries = cv_data
+                .education
+                .iter()
+                .map(|edu| {
+                    let mut t = Table::new();
+                    t.insert(
+                        "title".into(),
+                        Value::String(format!("{} - {}", edu.degree, edu.institution)),
+                    );
+                    let date = match &edu.end_date {
+                        Some(end) => format!("{} - {}", edu.start_date, end),
+                        None => format!("{} - Present", edu.start_date),
+                    };
+                    t.insert("date".into(), Value::String(date));
+                    if let Some(location) = &edu.location {
+                        t.insert("location".into(), Value::String(location.clone()));
                     }
-                ));
-                if let Some(location) = &edu.location {
-                    toml_content.push_str(&format!("location = \"{}\"\n", location));
-                }
-                toml_content.push_str("\n");
-            }
+                    Value::Table(t)
+                })
+                .collect();
+            root.insert("education".into(), Value::Array(entries));
         }
 
         // Languages section
-        toml_content.push_str("[languages]\n");
-        if let Some(native) = &cv_data.languages.native {
-            toml_content.push_str(&format!("native = {:?}\n", native));
+        let mut languages = Table::new();
+        let l = &cv_data.languages;
+        for (key, values) in [
+            ("native", &l.native),
+            ("fluent", &l.fluent),
+            ("intermediate", &l.intermediate),
+            ("basic", &l.basic),
+        ] {
+            if let Some(items) = values {
+                languages.insert(key.into(), str_list(items));
+            }
         }
-        if let Some(fluent) = &cv_data.languages.fluent {
-            toml_content.push_str(&format!("fluent = {:?}\n", fluent));
-        }
-        if let Some(intermediate) = &cv_data.languages.intermediate {
-            toml_content.push_str(&format!("intermediate = {:?}\n", intermediate));
-        }
-        if let Some(basic) = &cv_data.languages.basic {
-            toml_content.push_str(&format!("basic = {:?}\n", basic));
-        }
+        root.insert("languages".into(), Value::Table(languages));
 
         // Styling section
-        toml_content.push_str("\n[styling]\n");
-        toml_content.push_str("primary_color = \"#14A4E6\"\n");
-        toml_content.push_str("secondary_color = \"#757575\"\n");
+        let mut styling = Table::new();
+        styling.insert("primary_color".into(), Value::String("#14A4E6".into()));
+        styling.insert("secondary_color".into(), Value::String("#757575".into()));
+        root.insert("styling".into(), Value::Table(styling));
 
-        Ok(toml_content)
+        let out = toml::to_string(&root).context("Failed to serialize cv_params.toml")?;
+        // Belt and braces: never hand back TOML we cannot read ourselves.
+        toml::from_str::<toml::Table>(&out).context("Generated cv_params.toml does not parse")?;
+        Ok(out)
     }
 
     /// Convert CvJson to Typst experiences content
@@ -784,6 +786,54 @@ fn typ_extract_details(block: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn cv_with_summary(summary: &str) -> CvJson {
+        serde_json::from_value(serde_json::json!({
+            "personal_info": {
+                "name": "Jane \"JD\" Doe",
+                "summary": summary,
+                "linkedin": "https://linkedin.com/in/jane",
+                "links": { "my site": "https://x.y" }
+            },
+            "work_experience": [],
+            "education": [{ "institution": "EPFL", "degree": "MSc \\ CS", "start_date": "2010" }],
+            "skills": { "technical": ["Rust", "C\"++"] },
+            "languages": { "native": ["French"] },
+            "metadata": { "language": "en" }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn to_toml_escapes_newlines_quotes_and_emoji() {
+        // Regression: a multi-line AI summary was written as raw newlines inside
+        // "…", giving "failed to parse TOML (invalid basic string)" in Typst.
+        let summary = "Staff Software Engineer and Founder.\n🔹 Building api0.ai: \"MCP\" gateway\n\tC:\\path";
+        let out = CvConverter::to_toml(&cv_with_summary(summary)).unwrap();
+        let parsed: toml::Table = toml::from_str(&out).unwrap();
+
+        assert_eq!(parsed["summary"].as_str().unwrap(), summary);
+        assert_eq!(parsed["name"].as_str().unwrap(), "Jane \"JD\" Doe");
+        assert_eq!(parsed["linkedin"].as_str().unwrap(), "https://linkedin.com/in/jane");
+        assert_eq!(parsed["links"]["my site"].as_str().unwrap(), "https://x.y");
+        assert_eq!(parsed["skills"]["technical"][1].as_str().unwrap(), "C\"++");
+        assert_eq!(parsed["education"][0]["title"].as_str().unwrap(), "MSc \\ CS - EPFL");
+    }
+
+    #[test]
+    fn to_toml_round_trips_through_from_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let summary = "Line one.\nLine two.";
+        let cv = cv_with_summary(summary);
+        let toml_path = dir.path().join("cv_params.toml");
+        let typ_path = dir.path().join("experiences_en.typ");
+        std::fs::write(&toml_path, CvConverter::to_toml(&cv).unwrap()).unwrap();
+        std::fs::write(&typ_path, CvConverter::to_typst(&cv, "en").unwrap()).unwrap();
+
+        let back = CvConverter::from_files(&toml_path, &typ_path).unwrap();
+        assert_eq!(back.personal_info.summary.as_deref(), Some(summary));
+        assert_eq!(back.personal_info.linkedin.as_deref(), Some("https://linkedin.com/in/jane"));
+    }
 
     #[test]
     fn certifications_as_strings() {
