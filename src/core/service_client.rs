@@ -14,6 +14,7 @@ use crate::types::{
 };
 
 const UPLOAD_CV_ENDPOINT: &str = "/upload-cv";
+const UPLOAD_CV_TEXT_ENDPOINT: &str = "/upload-cv/text";
 const JOBS_MATCH_ENDPOINT: &str = "/jobs-match";
 const TRANSLATE_ENDPOINT: &str = "/translate";
 const PORTFOLIO_ENDPOINT: &str = "/portfolio";
@@ -391,26 +392,26 @@ impl ServiceClient {
         }
     }
 
-    /// Upload raw CV text — writes it to a temp .txt file and sends as multipart.
-    /// The cv-import service should handle plain-text the same way it handles extracted PDF/DOCX text.
+    /// Send raw CV text to cv-import as JSON (`POST /upload-cv/text`).
+    ///
+    /// Not as a multipart `.txt` upload: cv-import's multipart parser can drop
+    /// the only chunk of a small upload before it reads the temp file, which
+    /// surfaced as "CV text is empty" for perfectly normal 3–4 KB CVs.
     pub async fn import_text_cv(&self, cv_text: &str, profile_name: &str) -> Result<CvJson> {
-        let url = format!("{}{}", self.base_url, UPLOAD_CV_ENDPOINT);
+        let url = format!("{}{}", self.base_url, UPLOAD_CV_TEXT_ENDPOINT);
 
-        let file_name = format!("{}.txt", profile_name);
-        let form = Form::new().part(
-            "cv_file",
-            Part::bytes(cv_text.as_bytes().to_vec())
-                .file_name(file_name)
-                .mime_str("text/plain")
-                .context("Failed to create multipart")?,
+        app_log!(
+            info,
+            "Calling CV conversion service (text import, {} chars) for {}: {}",
+            cv_text.len(),
+            profile_name,
+            url
         );
-
-        app_log!(info, "Calling CV conversion service (text import): {}", url);
 
         let response = self
             .client
             .post(&url)
-            .multipart(form)
+            .json(&serde_json::json!({ "cv_text": cv_text }))
             .send()
             .await
             .context("HTTP request failed")?;
