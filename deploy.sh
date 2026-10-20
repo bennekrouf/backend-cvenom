@@ -75,13 +75,35 @@ step "3/3 — Restart cvenom-backend"
 # =============================================================================
 
 PM2=$(which pm2)
+pm2_as_user() { sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" "$PM2" "$@"; }
 
-# Ensure cv-import config path is available to the backend
-sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" \
-  $PM2 set cvenom-backend CV_IMPORT_CONFIG_PATH "$APP_DIR/cv-import/config.yaml" 2>/dev/null || true
+# CV_IMPORT_CONFIG_PATH comes from $APP_DIR/backend-cvenom.env (sourced by
+# run-backend.sh). `pm2 set` is module config, not app env: it never set it.
 
-sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" $PM2 restart cvenom-backend
-sudo -u "$DEPLOY_USER" HOME="/home/$DEPLOY_USER" $PM2 save
+# Start time of the running process, to tell a real restart from a stale one.
+pm2_started_at() {
+  pm2_as_user jlist 2>/dev/null | python3 -c '
+import json, sys
+for p in json.load(sys.stdin):
+    if p["name"] == "cvenom-backend" and p["pm2_env"]["status"] == "online":
+        print(p["pm2_env"]["pm_uptime"])' || true
+}
+
+before=$(pm2_started_at)
+# PM2 6 can restart the process and still exit non-zero ("Process N not
+# found" / "process already online"), which used to abort the whole
+# deploy-cvenom chain before frontend and cv-import. Trust the process
+# state, not the CLI's exit code.
+if ! pm2_as_user restart cvenom-backend; then
+  sleep 2
+  after=$(pm2_started_at)
+  if [ -n "$after" ] && [ "$after" != "$before" ]; then
+    warn "pm2 restart exited non-zero, but cvenom-backend restarted and is online — continuing"
+  else
+    err "cvenom-backend did not restart (pm2 restart failed and the process was not restarted)"
+  fi
+fi
+pm2_as_user save
 
 log "cvenom-backend restarted"
 echo ""
