@@ -3,7 +3,7 @@
 
 use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
-use crate::core::{FsOps, ServiceClient, TemplateEngine};
+use crate::core::{profile_store, FsOps, ServiceClient, TemplateEngine};
 use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use crate::types::cv_data::{CvConverter, CvJson};
 use crate::types::response::OptimizeResponse;
@@ -38,6 +38,10 @@ pub struct OptimizeCvRequest {
     pub lang: Option<String>,
     /// CV template for PDF generation (defaults to "default").
     pub template: Option<String>,
+    /// optimize-and-generate only: name of the new profile that receives the
+    /// tailored CV. Defaults to `<profile>-<company>-<job-title>`. The base
+    /// profile is never modified.
+    pub save_as: Option<String>,
 }
 
 // ── Shared optimization pipeline ──────────────────────────────────────────────
@@ -102,20 +106,44 @@ async fn run_optimization(
     // Serialise the optimized CvJson so the frontend can pass it to /save-optimized
     let optimized_cv_json_str = serde_json::to_string(&optimized_cv_json).ok();
 
+    // Older cv-import versions leave these empty when a job_description is passed;
+    // the keyword pass has them.
+    let ka = optimization_response.keyword_analysis.as_ref();
+    let job_title = non_empty_or(optimization_response.job_title, ka.map(|k| &k.job_title));
+    let company_name = non_empty_or(optimization_response.company_name, ka.map(|k| &k.company));
+
     let response = OptimizeResponse {
         optimized_typst,
         optimized_cv_json: optimized_cv_json_str,
-        job_title: optimization_response.job_title,
-        company_name: optimization_response.company_name,
+        job_title,
+        company_name,
         optimizations: optimization_response.optimizations,
         keyword_analysis: optimization_response.keyword_analysis,
         before_score: optimization_response.before_score,
         after_score: optimization_response.after_score,
+        warnings: optimization_response.warnings,
         saved: false,
         status: optimization_response.status,
     };
 
     Ok((response, optimized_cv_json))
+}
+
+fn non_empty_or(value: String, fallback: Option<&String>) -> String {
+    if value.trim().is_empty() {
+        fallback.map(|f| f.trim().to_string()).unwrap_or_default()
+    } else {
+        value
+    }
+}
+
+fn optimized_message(job_title: &str, company: &str) -> String {
+    match (job_title.trim(), company.trim()) {
+        ("", "") => "CV optimized for the job posting".to_string(),
+        (t, "") => format!("CV optimized for \"{}\"", t),
+        ("", c) => format!("CV optimized for a role at {}", c),
+        (t, c) => format!("CV optimized for \"{}\" at {}", t, c),
+    }
 }
 
 // ── POST /optimize ─────────────────────────────────────────────────────────────
@@ -193,10 +221,7 @@ pub async fn optimize_cv_handler(
     }
 
     Ok(Json(DataResponse::success(
-        format!(
-            "CV optimized for \"{}\" at {}",
-            response.job_title, response.company_name
-        ),
+        optimized_message(&response.job_title, &response.company_name),
         response,
         conversation_id,
     )))
@@ -251,28 +276,71 @@ pub async fn optimize_and_generate_handler(
     )
     .await?;
 
-    // ── Step 1b: Persist optimized files so the PDF generator can read them ──
-    if let Err(e) = save_profile_cv_data(&profile, &tenant_data_dir, &optimized_cv_data, &lang).await {
-        app_log!(error, "Failed to save optimized CV for profile {}: {}", profile, e);
+    // ── Step 1b: Save the tailored CV as a NEW profile ───────────────────────
+    // The base profile stays untouched: copy it (pictures, logos, other
+    // languages, styling), then write the tailored files into the copy.
+    let base_profile = profile;
+    let profile = match request.data.save_as.as_deref().map(normalize_profile_name) {
+        Some(name) if !name.trim().is_empty() => {
+            if tenant_data_dir.join(&name).exists() {
+                return Err(Json(StandardErrorResponse::new(
+                    format!("Profile '{}' already exists", name),
+                    "PROFILE_EXISTS".to_string(),
+                    vec!["Choose another save_as name, or omit it to get one derived from the job".to_string()],
+                    conversation_id,
+                )));
+            }
+            name
+        }
+        _ => profile_store::tailored_profile_name(
+            &tenant_data_dir,
+            &base_profile,
+            &optimize_resp.company_name,
+            &optimize_resp.job_title,
+        ),
+    };
+
+    if let Err(e) = profile_store::duplicate(&tenant_data_dir, &base_profile, &profile).await {
         return Err(Json(StandardErrorResponse::new(
-            format!("Failed to save optimized CV: {}", e),
+            format!("Failed to create tailored profile '{}': {}", profile, e),
             "SAVE_FAILED".to_string(),
-            vec!["Check disk space and permissions".to_string()],
+            vec![],
             conversation_id,
         )));
     }
-    app_log!(info, "Optimized CV saved for PDF generation — profile: {}, lang: {}", profile, lang);
+    // From here on, any failure removes the half-made profile.
+    let discard = |reason: StandardErrorResponse| {
+        let dir = tenant_data_dir.join(&profile);
+        async move {
+            if let Err(e) = FsOps::remove_dir_all(&dir).await {
+                app_log!(warn, "Could not remove failed tailored profile {}: {}", dir.display(), e);
+            }
+            Json(reason)
+        }
+    };
+
+    if let Err(e) = save_profile_cv_data(&profile, &tenant_data_dir, &optimized_cv_data, &lang).await {
+        app_log!(error, "Failed to save optimized CV for profile {}: {}", profile, e);
+        return Err(discard(StandardErrorResponse::new(
+            format!("Failed to save optimized CV: {}", e),
+            "SAVE_FAILED".to_string(),
+            vec![],
+            conversation_id,
+        ))
+        .await);
+    }
+    app_log!(info, "Tailored CV saved as new profile {} (base {}, lang {})", profile, base_profile, lang);
 
     // ── Step 2: Generate PDF from freshly-saved profile ───────────────────────
     let template_manager = match TemplateEngine::new(config.templates_dir.clone()) {
         Ok(m) => m,
         Err(e) => {
-            return Err(Json(StandardErrorResponse::new(
+            return Err(discard(StandardErrorResponse::new(
                 format!("Template system error: {}", e),
                 "TEMPLATE_INIT_ERROR".to_string(),
                 vec!["Contact system administrator".to_string()],
                 conversation_id,
-            )));
+            )).await);
         }
     };
 
@@ -280,38 +348,38 @@ pub async fn optimize_and_generate_handler(
 
     let profile_dir = tenant_data_dir.join(&profile);
     if !profile_dir.exists() {
-        return Err(Json(StandardErrorResponse::new(
+        return Err(discard(StandardErrorResponse::new(
             format!("Profile directory not found after save: {}", profile),
             "PROFILE_DIR_MISSING".to_string(),
             vec!["Internal error — contact support".to_string()],
             conversation_id,
-        )));
+        )).await);
     }
 
     if let Err(e) = FsOps::ensure_dir_exists(&config.output_dir).await {
-        return Err(Json(StandardErrorResponse::new(
+        return Err(discard(StandardErrorResponse::new(
             format!("Output directory error: {}", e),
             "OUTPUT_DIR_ERROR".to_string(),
             vec!["Contact system administrator".to_string()],
             conversation_id,
-        )));
+        )).await);
     }
 
     let cv_config = CvConfig::new(&profile, &lang)
         .with_template(template_id)
-        .with_data_dir(tenant_data_dir)
+        .with_data_dir(tenant_data_dir.clone())
         .with_output_dir(config.output_dir.clone())
         .with_templates_dir(config.templates_dir.clone());
 
     let generator = match CvGenerator::new(cv_config) {
         Ok(g) => g,
         Err(e) => {
-            return Err(Json(StandardErrorResponse::new(
+            return Err(discard(StandardErrorResponse::new(
                 format!("CV generator init failed: {}", e),
                 "CONFIG_ERROR".to_string(),
                 vec!["Verify the profile exists".to_string()],
                 conversation_id,
-            )));
+            )).await);
         }
     };
 
@@ -358,12 +426,12 @@ pub async fn optimize_and_generate_handler(
                 Ok(url) => url,
                 Err(e) => {
                     app_log!(error, "Could not publish a download link for {}: {}", ats_filename, e);
-                    return Err(Json(StandardErrorResponse::new(
+                    return Err(discard(StandardErrorResponse::new(
                         "The CV was generated but its download link could not be created".to_string(),
                         "DOWNLOAD_LINK_FAILED".to_string(),
                         vec![],
                         None,
-                    )));
+                    )).await);
                 }
             };
 
@@ -383,14 +451,17 @@ pub async fn optimize_and_generate_handler(
             Ok(Json(GeneratePdfResponse {
                 response_type: ResponseType::File,
                 success: true,
-                message: "CV optimized and generated successfully".to_string(),
+                message: format!(
+                    "Tailored CV saved as new profile '{}' (base '{}' unchanged) and generated",
+                    profile, base_profile
+                ),
                 download_url: pdf_url,
                 filename: ats_filename,
                 profile,
                 conversation_id,
             }))
         }
-        Err(e) => Err(Json(StandardErrorResponse::new(
+        Err(e) => Err(discard(StandardErrorResponse::new(
             format!("PDF generation failed: {}", e),
             "GENERATION_ERROR".to_string(),
             vec![
@@ -398,6 +469,29 @@ pub async fn optimize_and_generate_handler(
                 "Check the error details above".to_string(),
             ],
             conversation_id,
-        ))),
+        ))
+        .await),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn message_never_has_empty_quotes_or_dangling_at() {
+        // Regression: was `CV optimized for "" at ` with a pasted job description.
+        assert_eq!(optimized_message("", ""), "CV optimized for the job posting");
+        assert_eq!(optimized_message("Rust Engineer", ""), "CV optimized for \"Rust Engineer\"");
+        assert_eq!(optimized_message("", "Proton"), "CV optimized for a role at Proton");
+        assert_eq!(optimized_message("Rust Engineer", "Proton"), "CV optimized for \"Rust Engineer\" at Proton");
+    }
+
+    #[test]
+    fn empty_title_falls_back_to_keyword_analysis() {
+        let extracted = "Senior Rust Engineer".to_string();
+        assert_eq!(non_empty_or(String::new(), Some(&extracted)), "Senior Rust Engineer");
+        assert_eq!(non_empty_or("Scraped".into(), Some(&extracted)), "Scraped");
+        assert_eq!(non_empty_or(" ".into(), None), "");
     }
 }

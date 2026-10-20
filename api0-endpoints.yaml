@@ -25,6 +25,8 @@
 # Payments (intent/confirm), DELETE /me (account deletion), admin and BD routes,
 # brands, preferences, feedback, multipart uploads (picture, CV file — MCP cannot
 # send a file), raw file save and structured cv-data writes, health, /outputs.
+# Profile writes are exposed only through save-optimized, which snapshots the
+# previous files first (restore profile version undoes it).
 
 api_groups:
 
@@ -108,6 +110,65 @@ api_groups:
             required: "true"
           - name: "profile_name"
             description: "Profile name to create (e.g. john-doe). Derived from the CV when omitted."
+            required: "false"
+
+      - text: "duplicate profile"
+        description: >-
+          Copy a profile (CV files, picture, logos) to a new profile name. Use it
+          to make a per-job copy before tailoring. Fails if the new name exists.
+        verb: "POST"
+        path: "/profiles/duplicate"
+        parameters:
+          - name: "profile"
+            description: "Profile to copy (e.g. john-doe)"
+            required: "true"
+          - name: "new_profile"
+            description: "Name of the copy (e.g. john-doe-proton)"
+            required: "true"
+
+      - text: "save cv as profile"
+        description: >-
+          Write a CV into a profile's files (cv_params.toml and experiences_<lang>.typ),
+          e.g. the optimized_cv_json returned by optimize cv for job. Creates the
+          profile, or replaces an existing one's CV; the previous files stay
+          restorable with restore profile version.
+        verb: "POST"
+        path: "/save-optimized"
+        parameters:
+          - name: "profile_name"
+            description: "Profile to write (e.g. john-doe-proton)"
+            required: "true"
+          - name: "cv_json"
+            description: "The CV as a JSON string, in the optimized_cv_json format"
+            required: "true"
+          - name: "lang"
+            description: "CV language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+
+      - text: "list profile versions"
+        description: >-
+          Saved earlier versions of a profile's CV files, newest first. A version
+          is kept every time a tool or the editor overwrites the profile.
+        verb: "GET"
+        path: "/profiles/{profile}/versions"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+
+      - text: "restore profile version"
+        description: >-
+          Put back an earlier version of a profile's CV files. The current files
+          are saved as a version first, so this can be undone.
+        verb: "POST"
+        path: "/profiles/restore"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe)"
+            required: "true"
+          - name: "version"
+            description: "Version id from list profile versions. Omit for the newest."
             required: "false"
 
       - text: "delete profile"
@@ -201,7 +262,10 @@ api_groups:
       - text: "optimize cv for job"
         description: >-
           Tailor a profile's CV to a job posting and return the optimized CV. Does
-          not change the saved profile. Use "optimize and generate" for a PDF.
+          not change or save any profile (saved is always false): pass
+          optimized_cv_json to save cv as profile to keep it, or use "optimize and
+          generate" for a saved copy plus a PDF. Check warnings for problems in
+          the source profile.
         verb: "POST"
         path: "/optimize"
         parameters:
@@ -220,7 +284,10 @@ api_groups:
             alternatives: ["en", "fr", "de"]
 
       - text: "optimize and generate"
-        description: "Tailor a profile's CV to a job posting and generate the PDF. Returns a download_url to give the user unchanged."
+        description: >-
+          Tailor a profile's CV to a job posting, save it as a NEW profile and
+          generate its PDF. The base profile is not modified. Returns the new
+          profile name and a download_url to give the user unchanged.
         verb: "POST"
         path: "/optimize-and-generate"
         parameters:
@@ -239,4 +306,7 @@ api_groups:
             alternatives: ["en", "fr", "de"]
           - name: "template"
             description: "Template id from list templates. Omit for the default."
+            required: "false"
+          - name: "save_as"
+            description: "Name for the new tailored profile. Omit for <profile>-<company>-<job-title>."
             required: "false"

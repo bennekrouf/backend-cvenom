@@ -99,7 +99,12 @@ pub fn normalize_template(template: Option<&str>, template_manager: &TemplateEng
     "default".to_string()
 }
 
-/// Save CvJson data to profile directory as TOML and Typst files
+/// Save CvJson data to profile directory as TOML and Typst files.
+///
+/// Both files are rendered and validated before anything is written, the
+/// profile's current files are snapshotted first (see `profile_store`), and
+/// settings CvJson does not model (custom `[styling]`, extra keys) are kept
+/// from the existing cv_params.toml instead of being reset.
 pub async fn save_profile_cv_data(
     profile_name: &str,
     tenant_data_dir: &Path,
@@ -107,16 +112,21 @@ pub async fn save_profile_cv_data(
     language: &str,
 ) -> anyhow::Result<()> {
     let profile_dir = tenant_data_dir.join(profile_name);
-    FsOps::ensure_dir_exists(&profile_dir).await?;
-
-    // Convert and save TOML
-    let toml_content = CvConverter::to_toml(cv_data)?;
     let toml_path = profile_dir.join("cv_params.toml");
-    FsOps::write_file_safe(&toml_path, &toml_content).await?;
-
-    // Convert and save Typst
-    let typst_content = CvConverter::to_typst(cv_data, language)?;
     let typst_path = profile_dir.join(&format!("experiences_{}.typ", language));
+
+    // ── Render everything first: a failure here leaves the profile untouched ──
+    let generated = CvConverter::to_toml(cv_data)?;
+    let existing = tokio::fs::read_to_string(&toml_path).await.ok();
+    let toml_content = merge_unmodelled_toml(existing.as_deref(), &generated)?;
+    let typst_content = CvConverter::to_typst(cv_data, language)?;
+
+    crate::core::profile_store::snapshot(tenant_data_dir, profile_name)
+        .await
+        .context("Failed to snapshot profile before saving")?;
+
+    FsOps::ensure_dir_exists(&profile_dir).await?;
+    FsOps::write_file_safe(&toml_path, &toml_content).await?;
     FsOps::write_file_safe(&typst_path, &typst_content).await?;
 
     app_log!(
@@ -126,6 +136,24 @@ pub async fn save_profile_cv_data(
         language
     );
     Ok(())
+}
+
+/// Overlay freshly generated cv_params.toml on the existing one: generated
+/// keys win, except `[styling]`, which is the user's; keys only the existing
+/// file has are kept. An unreadable existing file is ignored. The result is
+/// parsed back before being returned.
+pub fn merge_unmodelled_toml(existing: Option<&str>, generated: &str) -> anyhow::Result<String> {
+    let mut merged: toml::Table = toml::from_str(generated).context("Generated TOML is invalid")?;
+    if let Some(old) = existing.and_then(|s| toml::from_str::<toml::Table>(s).ok()) {
+        for (key, value) in old {
+            if key == "styling" || !merged.contains_key(&key) {
+                merged.insert(key, value);
+            }
+        }
+    }
+    let out = toml::to_string(&merged).context("Failed to serialize cv_params.toml")?;
+    toml::from_str::<toml::Table>(&out).context("Merged cv_params.toml does not parse")?;
+    Ok(out)
 }
 
 /// Validate CV data structure
@@ -144,4 +172,50 @@ pub fn validate_cv_data(cv_data: &CvJson) -> anyhow::Result<()> {
 /// Extract profile name from filename
 pub fn extract_profile_name_from_filename(filename: &str) -> String {
     filename.split('.').next().unwrap_or(filename).to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn merge_keeps_user_styling_and_unmodelled_keys() {
+        let existing = "name = \"Old\"\nkey_insights = [\"a\"]\n[styling]\nprimary_color = \"#FF0000\"\n";
+        let generated = "name = \"New\"\nsummary = \"x\\ny\"\n[styling]\nprimary_color = \"#14A4E6\"\n";
+        let merged: toml::Table = toml::from_str(&merge_unmodelled_toml(Some(existing), generated).unwrap()).unwrap();
+        assert_eq!(merged["name"].as_str(), Some("New"));
+        assert_eq!(merged["summary"].as_str(), Some("x\ny"));
+        assert_eq!(merged["styling"]["primary_color"].as_str(), Some("#FF0000"));
+        assert!(merged.contains_key("key_insights"));
+    }
+
+    #[test]
+    fn merge_ignores_a_corrupt_existing_file() {
+        // e.g. a cv_params.toml already broken by the old writer
+        let broken = "summary = \"line one\nline two\"\n";
+        let out = merge_unmodelled_toml(Some(broken), "summary = \"ok\"\n").unwrap();
+        assert_eq!(toml::from_str::<toml::Table>(&out).unwrap()["summary"].as_str(), Some("ok"));
+    }
+
+    #[tokio::test]
+    async fn save_snapshots_previous_files_first() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("base");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("cv_params.toml"), "name = \"Original\"\n").unwrap();
+        std::fs::write(dir.join("experiences_en.typ"), "old").unwrap();
+
+        let cv: CvJson = serde_json::from_value(serde_json::json!({
+            "personal_info": { "name": "Tailored", "summary": "multi\nline" },
+            "work_experience": [], "education": [], "skills": {}, "languages": {},
+            "metadata": { "language": "en" }
+        }))
+        .unwrap();
+        save_profile_cv_data("base", t.path(), &cv, "en").await.unwrap();
+
+        let versions = crate::core::profile_store::list_versions(t.path(), "base").await.unwrap();
+        assert_eq!(versions.len(), 1);
+        crate::core::profile_store::restore(t.path(), "base", None).await.unwrap();
+        assert_eq!(std::fs::read_to_string(dir.join("cv_params.toml")).unwrap(), "name = \"Original\"\n");
+    }
 }

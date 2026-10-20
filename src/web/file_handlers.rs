@@ -12,6 +12,21 @@ use rocket::http::Status;
 use rocket::serde::json::Json;
 use rocket::State;
 use std::collections::HashMap;
+use std::path::{Component, Path, PathBuf};
+
+/// Resolve a client-supplied relative path inside the tenant directory.
+/// Returns None unless every component is a plain name (no `..`, `.`, root or prefix),
+/// so the path cannot escape the tenant directory; `starts_with` stays as a second guard.
+fn resolve_tenant_path(tenant_data_dir: &Path, relative: &str) -> Option<PathBuf> {
+    let relative = Path::new(relative);
+    if relative.as_os_str().is_empty()
+        || !relative.components().all(|c| matches!(c, Component::Normal(_)))
+    {
+        return None;
+    }
+    let file_path = tenant_data_dir.join(relative);
+    file_path.starts_with(tenant_data_dir).then_some(file_path)
+}
 
 impl AuthenticatedUser {
     /// Ensure profile directory exists for this user
@@ -73,13 +88,12 @@ pub async fn get_tenant_file_content_handler(
 
     // Use new tenant folder path
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
-    let file_path = tenant_data_dir.join(&path);
 
     // Security: Ensure the file is within tenant directory
-    if !file_path.starts_with(&tenant_data_dir) {
+    let Some(file_path) = resolve_tenant_path(&tenant_data_dir, &path) else {
         app_log!(warn, "Path traversal attempt: {}", path);
         return Err(Status::Forbidden);
-    }
+    };
 
     match tokio::fs::read_to_string(&file_path).await {
         Ok(content) => {
@@ -135,10 +149,9 @@ pub async fn save_tenant_file_content_handler(
 
     // Use new tenant folder path
     let tenant_data_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
-    let file_path = tenant_data_dir.join(&request.data.path);
 
     // Security: Ensure the file is within tenant directory
-    if !file_path.starts_with(&tenant_data_dir) {
+    let Some(file_path) = resolve_tenant_path(&tenant_data_dir, &request.data.path) else {
         app_log!(warn, "Path traversal attempt: {}", request.data.path);
         return Err(Json(StandardErrorResponse::new(
             "Invalid file path".to_string(),
@@ -149,7 +162,7 @@ pub async fn save_tenant_file_content_handler(
             ],
             conversation_id,
         )));
-    }
+    };
 
     // Ensure parent directory exists
     if let Some(parent) = file_path.parent() {
@@ -169,6 +182,15 @@ pub async fn save_tenant_file_content_handler(
                 ],
                 conversation_id,
             )));
+        }
+    }
+
+    // Keep the previous version restorable (profile files live at <profile>/<file>).
+    let mut parts = std::path::Path::new(&request.data.path).components();
+    if let (Some(profile), Some(_), None) = (parts.next(), parts.next(), parts.next()) {
+        let profile = profile.as_os_str().to_string_lossy();
+        if let Err(e) = crate::core::profile_store::snapshot(&tenant_data_dir, &profile).await {
+            app_log!(warn, "Could not snapshot profile {} before save: {}", profile, e);
         }
     }
 
@@ -259,6 +281,10 @@ async fn build_file_tree(
     while let Some(entry) = entries.next_entry().await? {
         let path = entry.path();
         let name = entry.file_name().to_string_lossy().to_string();
+        // Hidden entries (e.g. the .history version store) are not profiles.
+        if name.starts_with('.') {
+            continue;
+        }
         let metadata = entry.metadata().await?;
         if metadata.is_dir() {
             let children = build_file_tree(&path, false).await?;
@@ -300,4 +326,35 @@ pub async fn get_tenant_file_tree(
     let tenant_path = get_tenant_folder_path(email, tenant_data_path);
     let has_default_photo = tenant_path.join("default_photo.png").exists();
     build_file_tree(&tenant_path, has_default_photo).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_tenant_path;
+    use std::path::Path;
+
+    const TENANT: &str = "/data/tenant-a";
+
+    #[test]
+    fn rejects_parent_traversal() {
+        assert_eq!(resolve_tenant_path(Path::new(TENANT), "../x.toml"), None);
+        assert_eq!(resolve_tenant_path(Path::new(TENANT), "a/../../x.toml"), None);
+        assert_eq!(
+            resolve_tenant_path(Path::new(TENANT), "../tenant-b/profile/cv_params.toml"),
+            None
+        );
+    }
+
+    #[test]
+    fn rejects_absolute_path() {
+        assert_eq!(resolve_tenant_path(Path::new(TENANT), "/etc/x.toml"), None);
+    }
+
+    #[test]
+    fn accepts_profile_file() {
+        assert_eq!(
+            resolve_tenant_path(Path::new(TENANT), "profile/cv_params.toml"),
+            Some(Path::new(TENANT).join("profile/cv_params.toml"))
+        );
+    }
 }
