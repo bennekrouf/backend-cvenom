@@ -655,7 +655,7 @@ pub async fn api0_get_transactions(user_email: &str) -> Result<Vec<serde_json::V
     let status = response.status();
     let body = response.text().await.map_err(|e| e.to_string())?;
 
-    app_log!(info, "api0 credit-transactions status={} body={}", status, &body[..body.len().min(300)]);
+    app_log!(info, "api0 credit-transactions status={} body={}", status, crate::utils::truncate_str(&body, 300));
 
     if !status.is_success() {
         // If the endpoint doesn't exist yet (404) return empty list gracefully
@@ -667,7 +667,7 @@ pub async fn api0_get_transactions(user_email: &str) -> Result<Vec<serde_json::V
     }
 
     let json: serde_json::Value = serde_json::from_str(&body)
-        .map_err(|e| format!("JSON parse error: {} — body: {}", e, &body[..body.len().min(200)]))?;
+        .map_err(|e| format!("JSON parse error: {} — body: {}", e, crate::utils::truncate_str(&body, 200)))?;
     Ok(json["transactions"].as_array().cloned().unwrap_or_default())
 }
 
