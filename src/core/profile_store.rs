@@ -7,6 +7,7 @@
 //! copy it, and the leading dot keeps it out of profile listings and the file tree.
 
 use anyhow::{bail, Context, Result};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
@@ -155,6 +156,55 @@ fn copy_dir<'a>(
     })
 }
 
+/// File in a tailored profile's folder recording the job post it was made for.
+pub const JOB_SOURCE_FILE: &str = "job.toml";
+
+/// The job post a tailored profile was generated from.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct JobSource {
+    /// Original posting URL (LinkedIn, …); absent when the description was pasted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub company: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub created_at: String,
+}
+
+impl JobSource {
+    /// `job_url` is kept only when it is a real http(s) URL (the UI sends
+    /// "manual" for pasted descriptions).
+    pub fn new(job_url: &str, company: &str, title: &str) -> Self {
+        let url = job_url.trim();
+        let is_url = url.starts_with("http://") || url.starts_with("https://");
+        Self {
+            url: is_url.then(|| url.to_string()),
+            company: company.trim().to_string(),
+            title: title.trim().to_string(),
+            created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+        }
+    }
+}
+
+pub async fn write_job_source(tenant_dir: &Path, profile: &str, source: &JobSource) -> Result<()> {
+    let path = tenant_dir.join(profile).join(JOB_SOURCE_FILE);
+    let content = toml::to_string(source).context("Failed to serialize job source")?;
+    fs::write(&path, content).await.with_context(|| format!("Failed to write {}", path.display()))
+}
+
+/// `None` when the profile was not made from a job post.
+pub async fn read_job_source(tenant_dir: &Path, profile: &str) -> Result<Option<JobSource>> {
+    let path = tenant_dir.join(profile).join(JOB_SOURCE_FILE);
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let content = fs::read_to_string(&path).await?;
+    let source = toml::from_str(&content).with_context(|| format!("Invalid {}", path.display()))?;
+    Ok(Some(source))
+}
+
 /// Lowercase, alphanumerics joined by single dashes.
 pub fn slug(s: &str) -> String {
     s.to_lowercase()
@@ -193,6 +243,19 @@ pub fn unique_name(tenant_dir: &Path, name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn job_source_round_trip_and_manual_has_no_url() {
+        let tenant = tempfile::tempdir().unwrap();
+        profile(tenant.path(), "p", "").await;
+        assert_eq!(read_job_source(tenant.path(), "p").await.unwrap(), None);
+
+        let src = JobSource::new(" https://www.linkedin.com/jobs/view/123 ", "Proton", "Rust Engineer");
+        write_job_source(tenant.path(), "p", &src).await.unwrap();
+        assert_eq!(read_job_source(tenant.path(), "p").await.unwrap(), Some(src));
+
+        assert_eq!(JobSource::new("manual", "Proton", "").url, None);
+    }
 
     async fn profile(tenant: &Path, name: &str, toml: &str) {
         let dir = tenant.join(name);

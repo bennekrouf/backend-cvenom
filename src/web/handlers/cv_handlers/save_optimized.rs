@@ -3,6 +3,7 @@
 
 use crate::auth::AuthenticatedUser;
 use crate::core::database::get_tenant_folder_path;
+use crate::core::profile_store;
 use crate::types::cv_data::CvJson;
 use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::handlers::cv_handlers::helpers::save_profile_cv_data;
@@ -22,6 +23,11 @@ pub struct SaveOptimizedRequest {
     pub cv_json: String,
     /// Language for the Typst experiences file (defaults to "en").
     pub lang: Option<String>,
+    /// Job post the CV was optimized for (`job_url` / `job_title` / `company_name`
+    /// as sent to and returned by `/optimize`); recorded in the profile's job.toml.
+    pub job_url: Option<String>,
+    pub job_title: Option<String>,
+    pub company_name: Option<String>,
 }
 
 pub async fn save_optimized_handler(
@@ -56,6 +62,18 @@ pub async fn save_optimized_handler(
     }
 
     app_log!(info, "Saved optimized profile '{}' (lang: {})", profile, lang);
+
+    let data = &request.data;
+    if data.job_url.is_some() || data.job_title.is_some() || data.company_name.is_some() {
+        let job_source = profile_store::JobSource::new(
+            data.job_url.as_deref().unwrap_or_default(),
+            data.company_name.as_deref().unwrap_or_default(),
+            data.job_title.as_deref().unwrap_or_default(),
+        );
+        if let Err(e) = profile_store::write_job_source(&tenant_data_dir, &profile, &job_source).await {
+            app_log!(warn, "Could not record job source for profile '{}': {}", profile, e);
+        }
+    }
 
     Ok(Json(ActionResponse::success(
         format!("Profile '{}' created successfully", profile),

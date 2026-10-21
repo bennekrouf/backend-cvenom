@@ -331,6 +331,16 @@ pub async fn optimize_and_generate_handler(
     }
     app_log!(info, "Tailored CV saved as new profile {} (base {}, lang {})", profile, base_profile, lang);
 
+    // Remember which job post this profile was tailored for.
+    let job_source = profile_store::JobSource::new(
+        &request.data.job_url,
+        &optimize_resp.company_name,
+        &optimize_resp.job_title,
+    );
+    if let Err(e) = profile_store::write_job_source(&tenant_data_dir, &profile, &job_source).await {
+        app_log!(warn, "Could not record job source for profile {}: {}", profile, e);
+    }
+
     // ── Step 2: Generate PDF from freshly-saved profile ───────────────────────
     let template_manager = match TemplateEngine::new(config.templates_dir.clone()) {
         Ok(m) => m,
@@ -458,6 +468,7 @@ pub async fn optimize_and_generate_handler(
                 download_url: pdf_url,
                 filename: ats_filename,
                 profile,
+                job_url: job_source.url,
                 conversation_id,
             }))
         }

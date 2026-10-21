@@ -242,6 +242,7 @@ pub async fn generate_portfolio_handler(
                     download_url,
                     filename,
                     profile: normalized_profile,
+                    job_url: None,
                     conversation_id,
                 }))
             }

@@ -22,8 +22,8 @@ use crate::web::handlers::{
 use crate::web::handlers::cv_handlers::GeneratePortfolioRequest;
 use crate::web::handlers::cv_handlers::ImportTextRequest;
 use crate::web::handlers::cv_handlers::{
-    duplicate_profile_handler, list_profile_versions_handler, restore_profile_version_handler,
-    DuplicateProfileRequest, RestoreProfileRequest,
+    duplicate_profile_handler, get_profile_job_handler, list_profile_versions_handler,
+    restore_profile_version_handler, DuplicateProfileRequest, RestoreProfileRequest,
 };
 use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
@@ -542,6 +542,16 @@ pub async fn list_profile_versions(
     config: &State<ServerConfig>,
 ) -> Result<Json<DataResponse<Vec<String>>>, Json<StandardErrorResponse>> {
     list_profile_versions_handler(name, auth, config).await
+}
+
+/// GET /profiles/:name/job — the job post a tailored profile was made for (null when none).
+#[get("/profiles/<name>/job")]
+pub async fn get_profile_job(
+    name: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<DataResponse<Option<crate::core::profile_store::JobSource>>>, Json<StandardErrorResponse>> {
+    get_profile_job_handler(name, auth, config).await
 }
 
 /// POST /profiles/restore — restore a saved version (newest when `version` is omitted).
@@ -1132,6 +1142,7 @@ pub fn build_rocket(
                 save_optimized_cv,
                 duplicate_profile,
                 list_profile_versions,
+                get_profile_job,
                 restore_profile_version,
                 translate_cv,
                 generate_cover_letter,
