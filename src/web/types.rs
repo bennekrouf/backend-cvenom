@@ -162,6 +162,9 @@ pub struct GeneratePdfResponse {
     pub download_url: String,
     pub filename: String,
     pub profile: String,
+    /// Original job post, for CVs tailored to one.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub job_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conversation_id: Option<String>,
 }

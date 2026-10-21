@@ -258,6 +258,12 @@ pub async fn generate_cv_handler(
                         });
                     }
 
+                    let job_url = crate::core::profile_store::read_job_source(&tenant_data_dir, &normalized_profile)
+                        .await
+                        .ok()
+                        .flatten()
+                        .and_then(|j| j.url);
+
                     Ok(Json(GeneratePdfResponse {
                         response_type: ResponseType::File,
                         success: true,
@@ -265,6 +271,7 @@ pub async fn generate_cv_handler(
                         download_url: pdf_url,
                         filename,
                         profile: normalized_profile,
+                        job_url,
                         conversation_id,
                     }))
                 }

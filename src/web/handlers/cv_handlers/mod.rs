@@ -21,8 +21,8 @@ pub use generate::generate_cv_handler;
 pub use portfolio::{generate_portfolio_handler, GeneratePortfolioRequest};
 pub use optimize::{optimize_and_generate_handler, optimize_cv_handler, OptimizeCvRequest};
 pub use profile_versions::{
-    duplicate_profile_handler, list_profile_versions_handler, restore_profile_version_handler,
-    DuplicateProfileRequest, RestoreProfileRequest,
+    duplicate_profile_handler, get_profile_job_handler, list_profile_versions_handler,
+    restore_profile_version_handler, DuplicateProfileRequest, RestoreProfileRequest,
 };
 pub use save_optimized::{save_optimized_handler, SaveOptimizedRequest};
 pub use translate::translate_cv_handler;

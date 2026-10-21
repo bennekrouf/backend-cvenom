@@ -1,5 +1,6 @@
 // src/web/handlers/cv_handlers/profile_versions.rs
-//! Duplicate a profile, and list / restore its saved versions.
+//! Duplicate a profile, list / restore its saved versions, and read the job
+//! post a tailored profile was made for.
 
 use crate::auth::AuthenticatedUser;
 use crate::core::database::get_tenant_folder_path;
@@ -88,4 +89,22 @@ pub async fn restore_profile_version_handler(
         "profile_restored".to_string(),
         conversation_id,
     )))
+}
+
+/// The job post a tailored profile was generated from (`data` is null when none).
+pub async fn get_profile_job_handler(
+    profile: String,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<DataResponse<Option<profile_store::JobSource>>>, Json<StandardErrorResponse>> {
+    let profile = normalize_profile_name(&profile);
+    let tenant_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
+    if !tenant_dir.join(&profile).join("cv_params.toml").is_file() {
+        return Err(err(format!("Profile '{}' not found", profile), "NOT_FOUND", None));
+    }
+    let job = profile_store::read_job_source(&tenant_dir, &profile)
+        .await
+        .map_err(|e| err(e.to_string(), "READ_FAILED", None))?;
+    let message = if job.is_some() { "Job source found" } else { "Profile was not made from a job post" };
+    Ok(Json(DataResponse::success(message.to_string(), job, None)))
 }
