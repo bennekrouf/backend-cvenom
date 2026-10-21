@@ -647,16 +647,22 @@ pub struct GetBalanceResponse {
     pub balance: i64,
 }
 
-pub async fn api0_get_transactions(user_email: &str) -> Result<Vec<serde_json::Value>, String> {
+pub async fn api0_get_transactions(
+    user_email: &str,
+    limit: Option<i64>,
+) -> Result<Vec<serde_json::Value>, String> {
     let store_url = std::env::var("API0_STORE_URL")
         .map_err(|_| "API0_STORE_URL not set".to_string())?;
     let client = reqwest::Client::new();
-    let response = client
-        .get(format!(
-            "{}/api/user/credit-transactions/{}",
-            store_url,
-            utf8_percent_encode(user_email, NON_ALPHANUMERIC)
-        ))
+    let mut request = client.get(format!(
+        "{}/api/user/credit-transactions/{}",
+        store_url,
+        utf8_percent_encode(user_email, NON_ALPHANUMERIC)
+    ));
+    if let Some(limit) = limit {
+        request = request.query(&[("limit", limit)]);
+    }
+    let response = request
         .send()
         .await
         .map_err(|e| e.to_string())?;
@@ -711,9 +717,10 @@ pub struct TransactionsResponse {
 
 pub async fn get_transactions_handler(
     auth: AuthenticatedUser,
+    limit: Option<i64>,
 ) -> Result<Json<TransactionsResponse>, Json<StandardErrorResponse>> {
     let user_email = &auth.user().email;
-    match api0_get_transactions(user_email).await {
+    match api0_get_transactions(user_email, limit).await {
         Ok(transactions) => Ok(Json(TransactionsResponse { success: true, transactions })),
         Err(e) => {
             app_log!(error, "Failed to get transactions for {}: {}", user_email, e);
@@ -997,7 +1004,7 @@ pub async fn admin_user_transactions_handler(
 
     let (balance, transactions) = tokio::join!(
         api0_get_balance(&decoded),
-        api0_get_transactions(&decoded),
+        api0_get_transactions(&decoded, None),
     );
 
     Ok(Json(AdminUserTransactionsResponse {

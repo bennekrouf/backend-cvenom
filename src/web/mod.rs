@@ -692,12 +692,13 @@ pub async fn payment_balance(
     crate::web::handlers::payment_handlers::get_balance_handler(auth).await
 }
 
-/// GET /payment/transactions — authenticated user's credit transaction history
-#[get("/payment/transactions")]
+/// GET /payment/transactions?<limit> — authenticated user's credit transaction history
+#[get("/payment/transactions?<limit>")]
 pub async fn payment_transactions(
     auth: AuthenticatedUser,
+    limit: Option<i64>,
 ) -> Result<Json<TransactionsResponse>, Json<StandardErrorResponse>> {
-    get_transactions_handler(auth).await
+    get_transactions_handler(auth, limit).await
 }
 
 /// POST /admin/credits — manually add or remove credits for a cvenom tenant (admin only).
