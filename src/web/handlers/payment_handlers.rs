@@ -345,6 +345,15 @@ pub async fn check_and_deduct_credits(
     Ok(())
 }
 
+/// Give back credits taken by `check_and_deduct_credits` when the paid operation
+/// then failed. Best effort: a failed refund is logged, never surfaced.
+pub async fn refund_credits(user_email: &str, cost: i64, action_type: &str) {
+    let refund_type = format!("{}_refund", action_type);
+    if let Err(e) = api0_topup_credits(user_email, cost, &refund_type, Some("Refund: operation failed")).await {
+        app_log!(error, "Failed to refund {} credits to {} ({}): {}", cost, user_email, refund_type, e);
+    }
+}
+
 // ── Route handlers ────────────────────────────────────────────────────────────
 
 /// POST /payment/intent
