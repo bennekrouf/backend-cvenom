@@ -141,6 +141,7 @@ assert_requires_auth!(portfolio_requires_auth,      post, "/portfolio/generate",
 // Files
 assert_requires_auth!(files_tree_requires_auth,    get,  "/files/tree");
 assert_requires_auth!(files_save_requires_auth,    post, "/files/save",       r#"{"path":"x/y","content":"z"}"#);
+assert_requires_auth!(events_requires_auth,        get,  "/events");
 
 // BD portal
 assert_requires_auth!(bd_register_requires_auth,   post, "/bd/register",     r#"{"name":"test"}"#);

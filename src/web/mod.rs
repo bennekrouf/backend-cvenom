@@ -1,5 +1,6 @@
 // src/web/mod.rs
 pub mod downloads;
+pub mod events;
 pub mod file_handlers;
 pub mod handlers;
 pub mod types;
@@ -164,8 +165,12 @@ pub async fn rename_profile_handler(
     request: Json<StandardRequest<RenameProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::rename_profile_handler(old_name, request, auth, config).await
+    let new_name = request.data.new_name.clone();
+    let email = auth.email().to_string();
+    let result = handlers::rename_profile_handler(old_name, request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(new_name)))
 }
 
 #[rocket::put("/profiles/<profile_name>/change-language", data = "<request>")]
@@ -174,8 +179,12 @@ pub async fn change_profile_language_handler(
     request: Json<StandardRequest<crate::web::types::ChangeLanguageRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::change_profile_language_handler(profile_name, request, auth, config).await
+    let email = auth.email().to_string();
+    let profile = profile_name.clone();
+    let result = handlers::change_profile_language_handler(profile_name, request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 #[post("/generate", data = "<request>")]
@@ -184,8 +193,11 @@ pub async fn generate_cv(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
-    handlers::generate_cv_handler(request, auth, config, db_config).await
+    let email = auth.email().to_string();
+    let result = handlers::generate_cv_handler(request, auth, config, db_config).await;
+    bus.on_ok(&email, result, cv_generated)
 }
 
 #[post("/create", data = "<request>")]
@@ -193,8 +205,12 @@ pub async fn create_profile(
     request: Json<StandardRequest<CreateProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::create_profile_handler(request, auth, config).await
+    let profile = request.data.profile.clone();
+    let email = auth.email().to_string();
+    let result = handlers::create_profile_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 #[post("/delete-profile", data = "<request>")]
@@ -203,8 +219,12 @@ pub async fn delete_profile(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::delete_profile_handler(request, auth, config, db_config).await
+    let profile = request.data.profile.clone();
+    let email = auth.email().to_string();
+    let result = handlers::delete_profile_handler(request, auth, config, db_config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 #[post("/upload-picture", data = "<upload>")]
@@ -213,8 +233,12 @@ pub async fn upload_picture(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    handlers::upload_picture_handler(upload, auth, config, db_config).await
+    let profile = upload.profile.clone();
+    let email = auth.email().to_string();
+    let result = handlers::upload_picture_handler(upload, auth, config, db_config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 #[post("/cv/upload", data = "<upload>")]
@@ -223,8 +247,11 @@ pub async fn upload_and_convert_cv(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     cv_service_url: &State<String>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    upload_and_convert_cv_handler(upload, auth, config, cv_service_url).await
+    let email = auth.email().to_string();
+    let result = upload_and_convert_cv_handler(upload, auth, config, cv_service_url).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(None))
 }
 
 /// POST /cv/import-text
@@ -236,8 +263,11 @@ pub async fn import_cv_from_text(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     cv_service_url: &State<String>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    import_text_cv_handler(request, auth, config, cv_service_url).await
+    let email = auth.email().to_string();
+    let result = import_text_cv_handler(request, auth, config, cv_service_url).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(None))
 }
 
 #[get("/templates")]
@@ -375,8 +405,11 @@ pub async fn save_tenant_file_content(
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    file_handlers::save_tenant_file_content_handler(request, auth, config, db_config).await
+    let email = auth.email().to_string();
+    let result = file_handlers::save_tenant_file_content_handler(request, auth, config, db_config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(None))
 }
 
 // ── Brand library routes ──────────────────────────────────────────────────────
@@ -475,8 +508,12 @@ pub async fn put_cv_data(
     request: Json<CvFormData>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
-    put_cv_data_handler(name, lang, request, auth, config).await
+    let email = auth.email().to_string();
+    let profile = name.clone();
+    let result = put_cv_data_handler(name, lang, request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 #[get("/files/tree")]
@@ -508,8 +545,11 @@ pub async fn optimize_and_generate(
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
-    optimize_and_generate_handler(request, auth, config, db_config, cv_service_url).await
+    let email = auth.email().to_string();
+    let result = optimize_and_generate_handler(request, auth, config, db_config, cv_service_url).await;
+    bus.on_ok(&email, result, cv_generated)
 }
 
 /// Save an optimized CV under a new profile name.
@@ -520,8 +560,11 @@ pub async fn save_optimized_cv(
     request: Json<StandardRequest<SaveOptimizedRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    save_optimized_handler(request, auth, config).await
+    let email = auth.email().to_string();
+    let result = save_optimized_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(None))
 }
 
 /// POST /profiles/duplicate — copy a profile (files, pictures) to a new name.
@@ -530,8 +573,12 @@ pub async fn duplicate_profile(
     request: Json<StandardRequest<DuplicateProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    duplicate_profile_handler(request, auth, config).await
+    let profile = request.data.new_profile.clone();
+    let email = auth.email().to_string();
+    let result = duplicate_profile_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 /// GET /profiles/:name/versions — saved versions of a profile's CV files, newest first.
@@ -560,8 +607,12 @@ pub async fn restore_profile_version(
     request: Json<StandardRequest<RestoreProfileRequest>>,
     auth: AuthenticatedUser,
     config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
-    restore_profile_version_handler(request, auth, config).await
+    let profile = request.data.profile.clone();
+    let email = auth.email().to_string();
+    let result = restore_profile_version_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
 #[post("/translate", data = "<request>")]
@@ -571,8 +622,11 @@ pub async fn translate_cv(
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<DataResponse<TranslateResponse>>, Json<StandardErrorResponse>> {
-    translate_cv_handler(request, auth, config, db_config, cv_service_url).await
+    let email = auth.email().to_string();
+    let result = translate_cv_handler(request, auth, config, db_config, cv_service_url).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(None))
 }
 
 /// POST /cover-letter — generate a cover letter from CV data + job description.
@@ -856,8 +910,19 @@ pub async fn generate_portfolio(
     config: &State<ServerConfig>,
     db_config: &State<DatabaseConfig>,
     cv_service_url: &State<String>,
+    bus: &State<events::EventBus>,
 ) -> Result<Json<GeneratePdfResponse>, Json<StandardErrorResponse>> {
-    generate_portfolio_handler(request, auth, config, db_config, cv_service_url).await
+    let email = auth.email().to_string();
+    let result = generate_portfolio_handler(request, auth, config, db_config, cv_service_url).await;
+    bus.on_ok(&email, result, cv_generated)
+}
+
+fn cv_generated(response: &Json<GeneratePdfResponse>) -> events::CvEvent {
+    events::CvEvent::cv_generated(
+        response.profile.clone(),
+        response.download_url.clone(),
+        response.filename.clone(),
+    )
 }
 
 /// GET /referral/my-link — return the authenticated user's referral link and stats
@@ -1117,6 +1182,7 @@ pub fn build_rocket(
         .manage(auth_config)
         .manage(db_config)
         .manage(cv_service_url)
+        .manage(events::EventBus::default())
         .register("/", catchers![bad_request, internal_error])
         .mount(
             "/",
@@ -1187,6 +1253,7 @@ pub fn build_rocket(
                 update_preferences,
                 email_unsubscribe_page,
                 email_unsubscribe,
+                events::events,
             ],
         )
 }
