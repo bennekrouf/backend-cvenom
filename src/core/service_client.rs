@@ -75,7 +75,7 @@ impl ServiceClient {
                 .await
                 .context("Failed to read response text")?;
 
-            app_log!(info, "Raw CV service response (first 500 chars): {}", &response_text[..response_text.len().min(500)]);
+            app_log!(info, "Raw CV service response (first 500 chars): {}", crate::utils::truncate_str(&response_text, 500));
 
             // Parse as a generic JSON value first so we can check "status"
             // before attempting to deserialize the full cv_data structure.

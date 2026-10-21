@@ -16,6 +16,19 @@ pub fn normalize_profile_name(name: &str) -> String {
         .collect()
 }
 
+/// Truncate to at most `max_bytes` without splitting a UTF-8 character.
+/// Plain `&s[..n]` panics when byte `n` falls inside a multi-byte char (é, ç, …).
+pub fn truncate_str(s: &str, max_bytes: usize) -> &str {
+    if s.len() <= max_bytes {
+        return s;
+    }
+    let mut end = max_bytes;
+    while !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 /// Normalize language code
 pub fn normalize_language(lang: Option<&str>) -> String {
     match lang.map(|s| s.to_lowercase()).as_deref() {
@@ -121,6 +134,15 @@ pub async fn read_file_safe(path: &Path) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_truncate_str_respects_char_boundaries() {
+        assert_eq!(truncate_str("abc", 10), "abc");
+        assert_eq!(truncate_str("abcdef", 3), "abc");
+        // 'é' is 2 bytes; cutting at byte 2 would split it
+        assert_eq!(truncate_str("aé", 2), "a");
+        assert_eq!(truncate_str("aé", 3), "aé");
+    }
+
     use super::*;
 
     #[test]

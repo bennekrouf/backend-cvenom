@@ -7,7 +7,7 @@ use crate::core::{profile_store, FsOps, ServiceClient, TemplateEngine};
 use crate::web::handlers::payment_handlers::check_and_deduct_credits;
 use crate::types::cv_data::{CvConverter, CvJson};
 use crate::types::response::OptimizeResponse;
-use crate::utils::{normalize_language, normalize_profile_name};
+use crate::utils::{normalize_language, normalize_profile_name, truncate_str};
 use crate::web::types::WithConversationId;
 use crate::web::types::{
     DataResponse, GeneratePdfResponse, ResponseType, ServerConfig, StandardErrorResponse, StandardRequest,
@@ -415,7 +415,7 @@ pub async fn optimize_and_generate_handler(
                 _              => format!("{}_ats",   profile),
             };
             // Cap at a reasonable filename length
-            let base = if base.len() > 60 { base[..60].trim_end_matches('-').to_string() } else { base };
+            let base = if base.len() > 60 { truncate_str(&base, 60).trim_end_matches('-').to_string() } else { base };
             let ats_filename = format!("{}_{}.pdf", base, lang);
 
             // Rename the output file to the ATS filename in the output directory
