@@ -4,7 +4,7 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::{profile_store, FsOps, ServiceClient, TemplateEngine};
-use crate::web::handlers::payment_handlers::check_and_deduct_credits;
+use crate::web::handlers::payment_handlers::{check_and_deduct_credits, refund_credits};
 use crate::types::cv_data::{CvConverter, CvJson};
 use crate::types::response::OptimizeResponse;
 use crate::utils::{normalize_language, normalize_profile_name, truncate_str};
@@ -75,13 +75,11 @@ async fn run_optimization(
     let optimization_response = match service_client.optimize_cv(cv_data, job_url, job_description).await {
         Ok(r) => r,
         Err(e) => {
+            let err_str = e.to_string();
             return Err(Json(StandardErrorResponse::new(
-                format!("CV optimization failed: {}", e),
+                format!("CV optimization failed: {}", err_str),
                 "OPTIMIZATION_FAILED".to_string(),
-                vec![
-                    "Verify the job URL is publicly accessible".to_string(),
-                    "Ensure the CV data is valid JSON".to_string(),
-                ],
+                optimization_suggestions(&err_str, job_description.is_some()),
                 conversation_id,
             )));
         }
@@ -127,6 +125,25 @@ async fn run_optimization(
     };
 
     Ok((response, optimized_cv_json))
+}
+
+/// Suggestions matching where the optimization failed, not a generic list.
+fn optimization_suggestions(err: &str, has_job_description: bool) -> Vec<String> {
+    let mut out = Vec::new();
+    if err.contains("returned the CV unchanged") {
+        out.push("The AI could not tailor this CV to the posting; no credits were charged".to_string());
+        out.push("Try again, or pass a fuller job description".to_string());
+    } else if err.contains("job description") || err.contains("Job page") || err.contains("job content") {
+        if !has_job_description {
+            out.push("The job page could not be read; pass the posting's text as job_description".to_string());
+        }
+    } else if err.contains("Failed to parse optimized CV") {
+        out.push("The AI returned a malformed CV; no credits were charged — try again".to_string());
+    }
+    if out.is_empty() {
+        out.push("Try again in a few moments; no credits were charged".to_string());
+    }
+    out
 }
 
 fn non_empty_or(value: String, fallback: Option<&String>) -> String {
@@ -184,7 +201,7 @@ pub async fn optimize_cv_handler(
     // Optimization — 5 credits (¼ of a CV generation)
     check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone(), "optimize").await?;
 
-    let (response, _) = run_optimization(
+    let (response, _) = match run_optimization(
         &cv_data,
         &lang,
         &request.data.job_url,
@@ -192,7 +209,14 @@ pub async fn optimize_cv_handler(
         cv_service_url.inner(),
         conversation_id.clone(),
     )
-    .await?;
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            refund_credits(&auth.user().email, 5, "optimize").await;
+            return Err(e);
+        }
+    };
 
     crate::email::send_email_with_prefs(
         &auth.user().email,
@@ -266,7 +290,7 @@ pub async fn optimize_and_generate_handler(
     check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone(), "optimize").await?;
 
     // ── Step 1: Optimize ─────────────────────────────────────────────────────
-    let (optimize_resp, optimized_cv_data) = run_optimization(
+    let (optimize_resp, optimized_cv_data) = match run_optimization(
         &cv_data,
         &lang,
         &request.data.job_url,
@@ -274,7 +298,14 @@ pub async fn optimize_and_generate_handler(
         cv_service_url.inner(),
         conversation_id.clone(),
     )
-    .await?;
+    .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            refund_credits(&auth.user().email, 5, "optimize").await;
+            return Err(e);
+        }
+    };
 
     // ── Step 1b: Save the tailored CV as a NEW profile ───────────────────────
     // The base profile stays untouched: copy it (pictures, logos, other
