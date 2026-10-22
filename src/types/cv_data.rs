@@ -315,13 +315,20 @@ impl CvConverter {
                 .iter()
                 .map(|edu| {
                     let mut t = Table::new();
-                    t.insert(
-                        "title".into(),
-                        Value::String(format!("{} - {}", edu.degree, edu.institution)),
-                    );
-                    let date = match &edu.end_date {
-                        Some(end) => format!("{} - {}", edu.start_date, end),
-                        None => format!("{} - Present", edu.start_date),
+                    let title = if edu.institution.trim().is_empty() {
+                        edu.degree.clone()
+                    } else {
+                        format!("{} - {}", edu.degree, edu.institution)
+                    };
+                    t.insert("title".into(), Value::String(title));
+                    let start = edu.start_date.trim();
+                    let end = edu.end_date.as_deref().map(str::trim).unwrap_or("");
+                    // No dates known: leave empty rather than inventing "- Present".
+                    let date = match (start.is_empty(), end.is_empty()) {
+                        (true, true) => String::new(),
+                        (true, false) => end.to_string(),
+                        (false, true) => format!("{} - Present", start),
+                        (false, false) => format!("{} - {}", start, end),
                     };
                     t.insert("date".into(), Value::String(date));
                     if let Some(location) = &edu.location {
@@ -589,12 +596,17 @@ impl CvConverter {
                 .iter()
                 .filter_map(|edu| {
                     let table = edu.as_table()?;
+                    let (degree, institution) =
+                        split_education_title(table.get("title")?.as_str()?);
+                    let (start_date, end_date) = split_education_date(
+                        table.get("date").and_then(|v| v.as_str()).unwrap_or(""),
+                    );
                     Some(Education {
-                        institution: "Unknown Institution".to_string(), // TODO: Parse from title
-                        degree: table.get("title")?.as_str()?.to_string(),
+                        institution,
+                        degree,
                         field: None,
-                        start_date: "Unknown".to_string(),
-                        end_date: None,
+                        start_date,
+                        end_date,
                         gpa: None,
                         honors: None,
                         location: table
@@ -628,6 +640,51 @@ impl CvConverter {
                 version: None,
             },
         })
+    }
+}
+
+// ── Education title/date parsing ───────────────────────────────────────────────
+
+/// Placeholders written by older versions of `from_files`; stripped on read so
+/// already-corrupted profiles heal on their next save.
+fn is_placeholder(s: &str) -> bool {
+    matches!(s.trim(), "" | "Unknown" | "Unknown Institution")
+}
+
+/// Inverse of `to_toml`'s `"{degree} - {institution}"`. Splits on the last
+/// " - " so degrees containing a dash keep it.
+fn split_education_title(title: &str) -> (String, String) {
+    let mut title = title.trim();
+    while let Some(rest) = title.strip_suffix(" - Unknown Institution") {
+        title = rest.trim_end();
+    }
+    match title.rsplit_once(" - ") {
+        Some((degree, institution)) if !degree.trim().is_empty() => {
+            (degree.trim().to_string(), institution.trim().to_string())
+        }
+        _ => (title.to_string(), String::new()),
+    }
+}
+
+/// Inverse of `to_toml`'s `"{start} - {end|Present}"`.
+fn split_education_date(date: &str) -> (String, Option<String>) {
+    let clean = |s: &str| if is_placeholder(s) { String::new() } else { s.trim().to_string() };
+    match date.split_once(" - ") {
+        Some((start, end)) => {
+            let end = end.trim();
+            let end = if end.eq_ignore_ascii_case("present") || is_placeholder(end) {
+                None
+            } else {
+                Some(end.to_string())
+            };
+            (clean(start), end)
+        }
+        // A single value is a graduation date; keep it as the end so it isn't
+        // rewritten as "{date} - Present".
+        None => {
+            let d = clean(date);
+            (String::new(), if d.is_empty() { None } else { Some(d) })
+        }
     }
 }
 
@@ -833,6 +890,28 @@ mod tests {
         let back = CvConverter::from_files(&toml_path, &typ_path).unwrap();
         assert_eq!(back.personal_info.summary.as_deref(), Some(summary));
         assert_eq!(back.personal_info.linkedin.as_deref(), Some("https://linkedin.com/in/jane"));
+        assert_eq!(back.education[0].degree, "MSc \\ CS");
+        assert_eq!(back.education[0].institution, "EPFL");
+        assert_eq!(back.education[0].start_date, "2010");
+        assert_eq!(back.education[0].end_date, None);
+    }
+
+    #[test]
+    fn education_title_and_date_parse_back() {
+        assert_eq!(
+            split_education_title("Master - Centrale Lyon"),
+            ("Master".into(), "Centrale Lyon".into())
+        );
+        // Heals profiles corrupted by the old "Unknown Institution" placeholder.
+        assert_eq!(
+            split_education_title("Diplôme d'ingénieur - INSA Lyon - Unknown Institution - Unknown Institution"),
+            ("Diplôme d'ingénieur".into(), "INSA Lyon".into())
+        );
+        assert_eq!(split_education_title("PhD"), ("PhD".into(), String::new()));
+        assert_eq!(split_education_date("Unknown - Present"), (String::new(), None));
+        assert_eq!(split_education_date("2015 - 2018"), ("2015".into(), Some("2018".into())));
+        assert_eq!(split_education_date("2018"), (String::new(), Some("2018".into())));
+        assert_eq!(split_education_date(""), (String::new(), None));
     }
 
     #[test]
