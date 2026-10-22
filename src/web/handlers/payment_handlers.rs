@@ -294,26 +294,68 @@ pub async fn api0_get_balance(user_email: &str) -> Result<i64, String> {
         .ok_or_else(|| "api0 store response missing 'balance'".to_string())
 }
 
-/// Check that the user has at least `cost` credits, then deduct them.
-/// Returns a 402-like error response if the balance is insufficient.
+/// What the user can spend: their mayorana plan's credits left this month,
+/// plus their CVenom balance. What CVenom shows them.
+///
+/// Calls: GET {API0_STORE_URL}/api/user/credits/{email}, reading `available`
+/// (a store from before plans answers `balance` only).
+pub async fn api0_get_available(user_email: &str) -> Result<i64, String> {
+    let store_url = api0_store_url()?;
+    let service_key = api0_service_key()?;
+    let res = reqwest::Client::new()
+        .get(format!("{store_url}/api/user/credits/{}", utf8_percent_encode(user_email, NON_ALPHANUMERIC)))
+        .header("X-Service-Key", &service_key)
+        .send()
+        .await
+        .map_err(|e| format!("api0 store request failed: {e}"))?;
+    if !res.status().is_success() {
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("api0 store error: {text}"));
+    }
+    let json: serde_json::Value = res.json().await.map_err(|e| format!("api0 store JSON parse error: {e}"))?;
+    json["available"]
+        .as_i64()
+        .or_else(|| json["balance"].as_i64())
+        .ok_or_else(|| "api0 store response missing 'available'".to_string())
+}
+
+/// Charges `cost` credits for an operation: the user's mayorana plan pays
+/// first, then their CVenom balance. The store checks and charges in one call,
+/// so nothing is taken when the two together fall short.
+///
+/// Calls: POST {API0_STORE_URL}/api/user/credits/spend
 pub async fn check_and_deduct_credits(
     user_email: &str,
     cost: i64,
     conversation_id: Option<String>,
     action_type: &str,
 ) -> Result<(), Json<StandardErrorResponse>> {
-    let balance = api0_get_balance(user_email).await.map_err(|e| {
+    let failed = |e: String| {
         Json(StandardErrorResponse::new(
-            format!("Could not retrieve credit balance: {}", e),
-            "BALANCE_CHECK_FAILED".to_string(),
+            format!("Failed to deduct credits: {}", e),
+            "CREDIT_DEDUCT_FAILED".to_string(),
             vec!["Contact support if this persists".to_string()],
             conversation_id.clone(),
         ))
-    })?;
+    };
+    let (store_url, service_key) = match (api0_store_url(), api0_service_key()) {
+        (Ok(u), Ok(k)) => (u, k),
+        (Err(e), _) | (_, Err(e)) => return Err(failed(e)),
+    };
+    let res = reqwest::Client::new()
+        .post(format!("{store_url}/api/user/credits/spend"))
+        .header("X-Service-Key", &service_key)
+        .json(&serde_json::json!({ "email": user_email, "amount": cost, "action_type": action_type }))
+        .send()
+        .await
+        .map_err(|e| failed(format!("api0 store request failed: {e}")))?;
+    let status = res.status();
+    let json: serde_json::Value = res.json().await.unwrap_or_default();
 
-    if balance < cost {
+    if status.as_u16() == 402 {
+        let available = json["available"].as_i64().unwrap_or(0);
         return Err(Json(StandardErrorResponse::new(
-            format!("Insufficient Cvenom credits: your account has {} but this operation costs {}", balance, cost),
+            format!("Insufficient Cvenom credits: your account has {} but this operation costs {}", available, cost),
             "INSUFFICIENT_CREDITS".to_string(),
             vec![
                 "Top up your Cvenom credits at https://studio.cvenom.com/credits".to_string(),
@@ -322,22 +364,17 @@ pub async fn check_and_deduct_credits(
             conversation_id,
         )));
     }
+    if !status.is_success() {
+        return Err(failed(format!("api0 store error: {}", json["message"].as_str().unwrap_or("unknown"))));
+    }
 
-    api0_topup_credits(user_email, -cost, action_type, None).await.map_err(|e| {
-        Json(StandardErrorResponse::new(
-            format!("Failed to deduct credits: {}", e),
-            "CREDIT_DEDUCT_FAILED".to_string(),
-            vec!["Contact support if this persists".to_string()],
-            conversation_id.clone(),
-        ))
-    })?;
-
-    let new_balance = balance - cost;
+    // The low-credit warning is about what is left to spend, plan included.
+    let new_available = json["available"].as_i64().unwrap_or(0);
     const LOW_CREDIT_THRESHOLD: i64 = 10;
-    if new_balance <= LOW_CREDIT_THRESHOLD && new_balance + cost > LOW_CREDIT_THRESHOLD {
+    if new_available <= LOW_CREDIT_THRESHOLD && new_available + cost > LOW_CREDIT_THRESHOLD {
         crate::email::send_email(
             user_email,
-            crate::email::EmailKind::LowCredits { balance: new_balance },
+            crate::email::EmailKind::LowCredits { balance: new_available },
             "en", // no lang context in credit check
         );
     }
@@ -346,7 +383,8 @@ pub async fn check_and_deduct_credits(
 }
 
 /// Give back credits taken by `check_and_deduct_credits` when the paid operation
-/// then failed. Best effort: a failed refund is logged, never surfaced.
+/// then failed. Best effort: a failed refund is logged, never surfaced. It goes
+/// to the CVenom balance even when the plan paid: the charge does not say which.
 pub async fn refund_credits(user_email: &str, cost: i64, action_type: &str) {
     let refund_type = format!("{}_refund", action_type);
     if let Err(e) = api0_topup_credits(user_email, cost, &refund_type, Some("Refund: operation failed")).await {
@@ -694,7 +732,8 @@ pub async fn get_balance_handler(
 ) -> Result<Json<GetBalanceResponse>, Json<StandardErrorResponse>> {
     let user_email = auth.email();
 
-    match api0_get_balance(user_email).await {
+    // The plan's credits are the user's to spend here too.
+    match api0_get_available(user_email).await {
         Ok(balance) => Ok(Json(GetBalanceResponse { success: true, balance })),
         Err(e) => {
             app_log!(error, user = %user_email, error = %e, "Failed to get credit balance");
