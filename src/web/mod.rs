@@ -1097,7 +1097,7 @@ pub async fn start_web_server(
                         app_log!(info, "[engagement] Nudge candidates: {}", candidates.len());
                         for r in candidates {
                             let email = &r.email;
-                            let credits = match crate::web::handlers::payment_handlers::api0_get_balance(email).await {
+                            let credits = match crate::web::handlers::payment_handlers::api0_get_available(email).await {
                                 Ok(b) => b,
                                 Err(e) => {
                                     app_log!(warn, "[engagement] balance fetch failed for {}: {}", email, e);
