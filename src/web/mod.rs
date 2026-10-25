@@ -32,7 +32,7 @@ use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{
     ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse,
-    get_transactions_handler, AdminCreditRequest, admin_add_credits_handler,
+    get_transactions_handler, get_plans_handler, PlansResponse, AdminCreditRequest, admin_add_credits_handler,
     AdminCreditUsersResponse, AdminUserTransactionsResponse,
     admin_credit_users_handler, admin_user_transactions_handler,
 };
@@ -106,6 +106,10 @@ impl Fairing for Cors {
         let allowed_origins = [
             "https://studio.cvenom.com",
             "https://app.api0.ai",
+            // The landing reads GET /payment/plans for its pricing section.
+            "https://cvenom.com",
+            "https://www.cvenom.com",
+            "http://localhost:4004",
             "http://localhost:4001",
             "http://localhost:3000",
             "http://127.0.0.1:4001",
@@ -692,6 +696,12 @@ pub async fn payment_balance(
     crate::web::handlers::payment_handlers::get_balance_handler(auth).await
 }
 
+/// GET /payment/plans — the mayorana plans on sale (no auth: the landing and signed-out studio show them)
+#[get("/payment/plans")]
+pub async fn payment_plans() -> Result<Json<PlansResponse>, Json<StandardErrorResponse>> {
+    get_plans_handler().await
+}
+
 /// GET /payment/transactions?<limit> — authenticated user's credit transaction history
 #[get("/payment/transactions?<limit>")]
 pub async fn payment_transactions(
@@ -1217,6 +1227,7 @@ pub fn build_rocket(
                 payment_intent,
                 payment_confirm,
                 payment_balance,
+                payment_plans,
                 payment_transactions,
                 get_cv_data,
                 put_cv_data,
