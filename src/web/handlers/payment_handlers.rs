@@ -67,6 +67,9 @@ pub struct ConfirmPaymentResponse {
     pub new_balance: i64,
 }
 
+/// Where mayorana sells its plans; `from=cvenom` brings the buyer back here.
+pub const MAYORANA_PRICING_URL: &str = "https://mayorana.ch/pricing?from=cvenom";
+
 // ── Stripe API helpers ────────────────────────────────────────────────────────
 
 /// Retrieve the Stripe secret key from the environment.
@@ -294,12 +297,34 @@ pub async fn api0_get_balance(user_email: &str) -> Result<i64, String> {
         .ok_or_else(|| "api0 store response missing 'balance'".to_string())
 }
 
-/// What the user can spend: their mayorana plan's credits left this month,
-/// plus their CVenom balance. What CVenom shows them.
-///
+/// What the user can spend, and where it comes from: their mayorana plan's
+/// credits left this month, and their own CVenom balance (top-ups, welcome,
+/// referrals, refunds). The plan is spent first.
+pub struct CreditBreakdown {
+    /// Plan credits left plus the CVenom balance: what a charge can take.
+    pub available: i64,
+    pub plan_credits_left: i64,
+    /// The live mayorana plan, as the store describes it; None without one.
+    pub plan: Option<PlanSummary>,
+}
+
+/// The user's live mayorana plan, for showing next to the balance.
+#[derive(Serialize, Deserialize, Clone)]
+pub struct PlanSummary {
+    pub name: String,
+    pub credits_granted: i64,
+    pub credits_left: i64,
+    /// When this month's credits lapse, and the plan renews or ends (RFC 3339).
+    pub period_end: String,
+    #[serde(default)]
+    pub cancel_at_period_end: bool,
+    #[serde(default)]
+    pub is_free: bool,
+}
+
 /// Calls: GET {API0_STORE_URL}/api/user/credits/{email}, reading `available`
-/// (a store from before plans answers `balance` only).
-pub async fn api0_get_available(user_email: &str) -> Result<i64, String> {
+/// `plan_credits_left` and `plan` (a store from before plans answers `balance` only).
+pub async fn api0_get_credits(user_email: &str) -> Result<CreditBreakdown, String> {
     let store_url = api0_store_url()?;
     let service_key = api0_service_key()?;
     let res = reqwest::Client::new()
@@ -313,10 +338,21 @@ pub async fn api0_get_available(user_email: &str) -> Result<i64, String> {
         return Err(format!("api0 store error: {text}"));
     }
     let json: serde_json::Value = res.json().await.map_err(|e| format!("api0 store JSON parse error: {e}"))?;
-    json["available"]
+    let available = json["available"]
         .as_i64()
         .or_else(|| json["balance"].as_i64())
-        .ok_or_else(|| "api0 store response missing 'available'".to_string())
+        .ok_or_else(|| "api0 store response missing 'available'".to_string())?;
+    Ok(CreditBreakdown {
+        available,
+        plan_credits_left: json["plan_credits_left"].as_i64().unwrap_or(0),
+        plan: serde_json::from_value(json["plan"].clone()).ok(),
+    })
+}
+
+/// What the user can spend: their mayorana plan's credits left this month,
+/// plus their CVenom balance.
+pub async fn api0_get_available(user_email: &str) -> Result<i64, String> {
+    api0_get_credits(user_email).await.map(|c| c.available)
 }
 
 /// Charges `cost` credits for an operation: the user's mayorana plan pays
@@ -355,11 +391,12 @@ pub async fn check_and_deduct_credits(
     if status.as_u16() == 402 {
         let available = json["available"].as_i64().unwrap_or(0);
         return Err(Json(StandardErrorResponse::new(
-            format!("Insufficient Cvenom credits: your account has {} but this operation costs {}", available, cost),
+            format!("Not enough credits: you have {} but this costs {}", available, cost),
             "INSUFFICIENT_CREDITS".to_string(),
             vec![
-                "Top up your Cvenom credits at https://studio.cvenom.com/credits".to_string(),
-                "Each CV generation costs 20 credits.".to_string(),
+                format!("Subscribe to a mayorana plan for monthly credits (CVenom plus the other apps): {MAYORANA_PRICING_URL}"),
+                "Or buy a one-off top-up at https://studio.cvenom.com/credits".to_string(),
+                format!("Sign in on mayorana.ch with {user_email} so the plan's credits count here."),
             ],
             conversation_id,
         )));
@@ -682,7 +719,12 @@ pub async fn confirm_payment_handler(
 #[derive(Serialize)]
 pub struct GetBalanceResponse {
     pub success: bool,
+    /// Everything the user can spend: plan credits left plus their own balance.
     pub balance: i64,
+    /// The part of `balance` that is their mayorana plan's, lapsing at its renewal.
+    pub plan_credits_left: i64,
+    /// Their live mayorana plan, or null.
+    pub plan: Option<PlanSummary>,
 }
 
 pub async fn api0_get_transactions(
@@ -733,14 +775,89 @@ pub async fn get_balance_handler(
     let user_email = auth.email();
 
     // The plan's credits are the user's to spend here too.
-    match api0_get_available(user_email).await {
-        Ok(balance) => Ok(Json(GetBalanceResponse { success: true, balance })),
+    match api0_get_credits(user_email).await {
+        Ok(c) => Ok(Json(GetBalanceResponse {
+            success: true,
+            balance: c.available,
+            plan_credits_left: c.plan_credits_left,
+            plan: c.plan,
+        })),
         Err(e) => {
             app_log!(error, user = %user_email, error = %e, "Failed to get credit balance");
             Err(Json(StandardErrorResponse::new(
                 format!("Failed to retrieve credit balance: {}", e),
                 "BALANCE_ERROR".to_string(),
                 vec!["Contact support if this persists".to_string()],
+                None,
+            )))
+        }
+    }
+}
+
+// ── GET /payment/plans ────────────────────────────────────────────────────────
+//
+// The mayorana plans on sale, read from the api0 gateway's public catalogue
+// (what mayorana.ch/pricing shows), so the studio never keeps its own prices.
+// Asked server-side: the gateway's CORS is for mayorana's origin, not ours.
+//
+//   API0_GATEWAY_URL  – default https://gateway.api0.ai
+
+#[derive(Serialize, Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct MayoranaPlan {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    pub price_cents: i64,
+    pub currency: String,
+    pub monthly_credits: i64,
+    /// The apps it unlocks, by product id; "*" is every app.
+    #[serde(default)]
+    pub products: Vec<String>,
+    #[serde(default)]
+    pub sort_order: i64,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct PlansResponse {
+    pub success: bool,
+    pub plans: Vec<MayoranaPlan>,
+    pub pricing_url: &'static str,
+}
+
+pub async fn get_plans_handler() -> Result<Json<PlansResponse>, Json<StandardErrorResponse>> {
+    let gateway = std::env::var("API0_GATEWAY_URL").unwrap_or_else(|_| "https://gateway.api0.ai".to_string());
+    let fetched = async {
+        let res = reqwest::Client::new()
+            .get(format!("{}/api/plans", gateway.trim_end_matches('/')))
+            .timeout(std::time::Duration::from_secs(8))
+            .send()
+            .await
+            .map_err(|e| format!("gateway request failed: {e}"))?;
+        if !res.status().is_success() {
+            return Err(format!("gateway returned {}", res.status()));
+        }
+        let json: serde_json::Value = res.json().await.map_err(|e| format!("gateway JSON parse error: {e}"))?;
+        let plans: Vec<MayoranaPlan> = serde_json::from_value(json["plans"].clone()).unwrap_or_default();
+        Ok::<_, String>(plans)
+    }
+    .await;
+
+    match fetched {
+        Ok(mut plans) => {
+            // A plan priced 0 is the apps' free allowance, never an offer.
+            plans.retain(|p| p.price_cents > 0);
+            plans.sort_by_key(|p| p.sort_order);
+            Ok(Json(PlansResponse { success: true, plans, pricing_url: MAYORANA_PRICING_URL }))
+        }
+        Err(e) => {
+            app_log!(error, error = %e, "Failed to read mayorana plans");
+            Err(Json(StandardErrorResponse::new(
+                format!("Failed to load plans: {e}"),
+                "PLANS_FETCH_FAILED".to_string(),
+                vec![format!("See the plans at {MAYORANA_PRICING_URL}")],
                 None,
             )))
         }
