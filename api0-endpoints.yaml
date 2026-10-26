@@ -25,8 +25,9 @@
 # Payments (intent/confirm), DELETE /me (account deletion), admin and BD routes,
 # brands, preferences, feedback, multipart uploads (picture, CV file — MCP cannot
 # send a file), raw file save and structured cv-data writes, health, /outputs.
-# Profile writes are exposed only through save-optimized, which snapshots the
-# previous files first (restore profile version undoes it).
+# Profile writes are exposed only through save-optimized, update profile details
+# and add experience bullet, which all snapshot the previous files first
+# (restore profile version undoes them).
 
 api_groups:
 
@@ -168,6 +169,72 @@ api_groups:
             required: "true"
           - name: "lang"
             description: "CV language. Omit for English."
+            required: "false"
+            alternatives: ["en", "fr", "de"]
+
+      - text: "update profile details"
+        description: >-
+          Set a profile's personal details and links — GitHub, LinkedIn, website,
+          name, job title, email, phone, address, summary. Give only the fields
+          to change; everything else in the profile stays as it is. Restore
+          profile version undoes it.
+        verb: "POST"
+        path: "/profiles/details"
+        parameters:
+          - name: "profile"
+            description: "Profile name, from list profiles (e.g. john-doe)"
+            required: "true"
+          - name: "github"
+            description: "GitHub URL, e.g. https://github.com/johndoe"
+            required: "false"
+          - name: "linkedin"
+            description: "LinkedIn URL"
+            required: "false"
+          - name: "website"
+            description: "Personal website URL"
+            required: "false"
+          - name: "name"
+            description: "Full name"
+            required: "false"
+          - name: "title"
+            description: "Job title shown under the name, e.g. Senior Backend Engineer"
+            required: "false"
+          - name: "email"
+            description: "Contact email"
+            required: "false"
+          - name: "phone"
+            description: "Phone number"
+            required: "false"
+          - name: "address"
+            description: "City or address"
+            required: "false"
+          - name: "summary"
+            description: "Profile summary paragraph"
+            required: "false"
+
+      - text: "add experience bullet"
+        description: >-
+          Add one bullet point (responsibility or achievement) at the end of one
+          work experience. Pick the experience by company, as get cv shows it;
+          add the job title when the company has several. Only that line is
+          added. Restore profile version undoes it.
+        verb: "POST"
+        path: "/profiles/experience-bullet"
+        parameters:
+          - name: "profile"
+            description: "Profile name, from list profiles (e.g. john-doe)"
+            required: "true"
+          - name: "company"
+            description: "Company of the experience, from get cv (case-insensitive, may be partial)"
+            required: "true"
+          - name: "bullet"
+            description: "The bullet text, one sentence, in the CV's language"
+            required: "true"
+          - name: "title"
+            description: "Job title of the experience, only needed when several match the company"
+            required: "false"
+          - name: "lang"
+            description: "CV language to edit. Omit for English."
             required: "false"
             alternatives: ["en", "fr", "de"]
 

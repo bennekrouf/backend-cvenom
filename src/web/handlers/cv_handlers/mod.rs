@@ -8,6 +8,7 @@ pub mod generate;
 pub mod helpers;
 pub mod optimize;
 pub mod portfolio;
+pub mod profile_edit;
 pub mod profile_versions;
 pub mod save_optimized;
 pub mod translate;
@@ -20,6 +21,10 @@ pub use cv_data::{get_cv_data_handler, put_cv_data_handler, CvFormData};
 pub use generate::generate_cv_handler;
 pub use portfolio::{generate_portfolio_handler, GeneratePortfolioRequest};
 pub use optimize::{optimize_and_generate_handler, optimize_cv_handler, OptimizeCvRequest};
+pub use profile_edit::{
+    add_experience_bullet_handler, update_profile_details_handler, AddExperienceBulletRequest,
+    UpdateProfileDetailsRequest,
+};
 pub use profile_versions::{
     archive_profile_handler, duplicate_profile_handler, get_profile_job_handler,
     list_profile_versions_handler, restore_profile_version_handler, ArchiveProfileRequest,
