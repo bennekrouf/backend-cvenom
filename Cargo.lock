@@ -457,6 +457,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml 0.9.5",
+ "toml_edit",
  "tower-http",
  "uuid",
 ]

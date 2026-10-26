@@ -23,6 +23,10 @@ use crate::web::handlers::{
 use crate::web::handlers::cv_handlers::GeneratePortfolioRequest;
 use crate::web::handlers::cv_handlers::ImportTextRequest;
 use crate::web::handlers::cv_handlers::{
+    add_experience_bullet_handler, update_profile_details_handler, AddExperienceBulletRequest,
+    UpdateProfileDetailsRequest,
+};
+use crate::web::handlers::cv_handlers::{
     archive_profile_handler, duplicate_profile_handler, get_profile_job_handler,
     list_profile_versions_handler, restore_profile_version_handler, ArchiveProfileRequest,
     DuplicateProfileRequest, RestoreProfileRequest,
@@ -665,6 +669,34 @@ pub async fn archive_profile(
     bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
+/// POST /profiles/details — set personal fields and links (GitHub, LinkedIn, …).
+#[post("/profiles/details", data = "<request>")]
+pub async fn update_profile_details(
+    request: Json<StandardRequest<UpdateProfileDetailsRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let profile = request.data.profile.clone();
+    let email = auth.email().to_string();
+    let result = update_profile_details_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
+}
+
+/// POST /profiles/experience-bullet — append one bullet to one experience.
+#[post("/profiles/experience-bullet", data = "<request>")]
+pub async fn add_experience_bullet(
+    request: Json<StandardRequest<AddExperienceBulletRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let profile = request.data.profile.clone();
+    let email = auth.email().to_string();
+    let result = add_experience_bullet_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
+}
+
 /// GET /profiles/:name/versions — saved versions of a profile's CV files, newest first.
 #[get("/profiles/<name>/versions")]
 pub async fn list_profile_versions(
@@ -1300,6 +1332,8 @@ pub fn build_rocket(
                 duplicate_profile,
                 archive_profile,
                 list_profile_versions,
+                update_profile_details,
+                add_experience_bullet,
                 get_profile_job,
                 restore_profile_version,
                 translate_cv,

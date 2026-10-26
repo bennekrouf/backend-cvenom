@@ -378,7 +378,7 @@ fn str_array_toml(items: &[String]) -> String {
 //     ]
 //   )
 
-fn parse_experiences_typ(content: &str) -> Vec<WorkExperienceEntry> {
+pub(super) fn parse_experiences_typ(content: &str) -> Vec<WorkExperienceEntry> {
     let mut result = Vec::new();
     let lines: Vec<&str> = content.lines().collect();
     let mut i = 0;
@@ -450,7 +450,7 @@ fn parse_experiences_typ(content: &str) -> Vec<WorkExperienceEntry> {
 /// Tolerates whitespace/newlines between the opening `(` and the `"` — the
 /// generator emits the title on its own line, so an `find("(\"")` would
 /// silently miss the title and produce `title=""` on every round-trip.
-fn extract_first_quoted(text: &str) -> Option<String> {
+pub(super) fn extract_first_quoted(text: &str) -> Option<String> {
     let paren = text.find('(')?;
     let after = text[paren + 1..].trim_start();
     if !after.starts_with('"') {
@@ -550,7 +550,7 @@ fn generate_experiences_typ(experiences: &[WorkExperienceEntry]) -> String {
     out
 }
 
-fn escape_typ(s: &str) -> String {
+pub(super) fn escape_typ(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
