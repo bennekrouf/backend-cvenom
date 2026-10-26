@@ -1,6 +1,7 @@
 // src/core/mod.rs
 //! Core services to eliminate redundancy while preserving API compatibility
 
+pub mod ai_region;
 pub mod brand_store;
 pub mod branding;
 pub mod config_manager;

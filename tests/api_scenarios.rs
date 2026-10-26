@@ -134,6 +134,7 @@ macro_rules! assert_requires_auth {
 assert_requires_auth!(generate_requires_auth,      post, "/generate",        r#"{"profile":"test","lang":"en"}"#);
 assert_requires_auth!(create_requires_auth,         post, "/create",          r#"{"profile":"test"}"#);
 assert_requires_auth!(delete_requires_auth,         post, "/delete-profile",  r#"{"profile":"test"}"#);
+assert_requires_auth!(archive_requires_auth,        post, "/profiles/archive", r#"{"profile":"test","archived":"true"}"#);
 assert_requires_auth!(cover_letter_requires_auth,   post, "/cover-letter",    r#"{"profile":"test","lang":"en","job_description":"x"}"#);
 assert_requires_auth!(optimize_requires_auth,       post, "/optimize",        r#"{"profile":"test","job_url":"https://x.com"}"#);
 assert_requires_auth!(portfolio_requires_auth,      post, "/portfolio/generate", r#"{"profile":"test","lang":"en"}"#);

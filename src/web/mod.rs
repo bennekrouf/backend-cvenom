@@ -23,8 +23,9 @@ use crate::web::handlers::{
 use crate::web::handlers::cv_handlers::GeneratePortfolioRequest;
 use crate::web::handlers::cv_handlers::ImportTextRequest;
 use crate::web::handlers::cv_handlers::{
-    duplicate_profile_handler, get_profile_job_handler, list_profile_versions_handler,
-    restore_profile_version_handler, DuplicateProfileRequest, RestoreProfileRequest,
+    archive_profile_handler, duplicate_profile_handler, get_profile_job_handler,
+    list_profile_versions_handler, restore_profile_version_handler, ArchiveProfileRequest,
+    DuplicateProfileRequest, RestoreProfileRequest,
 };
 use crate::web::handlers::cv_handlers::CoverLetterExportRequest;
 use crate::core::database::{get_tenant_folder_path, TenantRepository};
@@ -306,6 +307,71 @@ pub async fn get_preferences(
     Ok(Json(serde_json::json!({ "email_prefs": prefs, "preferred_lang": lang })))
 }
 
+/// GET /ai/regions — the api0 AI regions on offer and the one the user picked
+/// (null: cvenom's default providers), with what each AI action costs in
+/// credits on the default (`default_prices`) and in each region (`prices`).
+#[get("/ai/regions")]
+pub async fn get_ai_regions(
+    auth: AuthenticatedUser,
+    cv_service_url: &State<String>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    use crate::core::ai_region;
+    let mut regions = ai_region::on_offer(cv_service_url.inner()).await.map_err(|e| {
+        Json(StandardErrorResponse::new(format!("Could not list AI regions: {e}"), "AI_REGIONS_UNAVAILABLE".into(), vec![], None))
+    })?;
+    for r in &mut regions {
+        r["prices"] = ai_region::prices(r["multiplier"].as_f64().unwrap_or(1.0));
+    }
+    Ok(Json(serde_json::json!({
+        "success": true,
+        "current": auth.ai_region(),
+        "default_prices": ai_region::prices(1.0),
+        "regions": regions,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct AiRegionRequest {
+    /// europe, china or usa; "default" (or nothing) for cvenom's own providers.
+    pub region: Option<String>,
+}
+
+/// PUT /ai/region — where the user's AI calls run from now on.
+#[put("/ai/region", data = "<body>")]
+pub async fn update_ai_region(
+    body: Json<AiRegionRequest>,
+    auth: AuthenticatedUser,
+    db_config: &State<DatabaseConfig>,
+    cv_service_url: &State<String>,
+) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
+    let err = |msg: String, code: &str, hint: Vec<String>| Json(StandardErrorResponse::new(msg, code.into(), hint, None));
+    let asked = body.region.as_deref().map(str::trim).filter(|r| !r.is_empty() && *r != "default");
+    let region = match asked {
+        None => None,
+        Some(id) => {
+            let region = crate::core::ai_region::find(id).ok_or_else(|| {
+                err(format!("Unknown AI region '{id}'"), "INVALID_AI_REGION", vec!["Use europe, china, usa or default".into()])
+            })?;
+            // Only a region on offer: one without api0 behind it would fail every call.
+            let offered = crate::core::ai_region::on_offer(cv_service_url.inner())
+                .await
+                .map_err(|e| err(format!("Could not list AI regions: {e}"), "AI_REGIONS_UNAVAILABLE", vec![]))?;
+            if !offered.iter().any(|r| r["id"].as_str() == Some(region)) {
+                return Err(err(format!("The AI region '{region}' is not on offer right now"), "AI_REGION_UNAVAILABLE", vec![]));
+            }
+            Some(region)
+        }
+    };
+    let pool = db_config.pool().map_err(|e| err(format!("DB error: {e}"), "INTERNAL_ERROR", vec![]))?;
+    crate::core::database::TenantRepository::new(pool)
+        .update_ai_region(&auth.user().email, region)
+        .await
+        .map_err(|e| err(format!("Failed to save the AI region: {e}"), "PREFS_ERROR", vec![]))?;
+    app_log!(info, user = %auth.user().email, region = ?region, "AI region set");
+    Ok(Json(serde_json::json!({ "success": true, "region": region })))
+}
+
 #[put("/preferences", data = "<body>")]
 pub async fn update_preferences(
     body: Json<serde_json::Value>,
@@ -582,6 +648,20 @@ pub async fn duplicate_profile(
     let profile = request.data.new_profile.clone();
     let email = auth.email().to_string();
     let result = duplicate_profile_handler(request, auth, config).await;
+    bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
+}
+
+/// POST /profiles/archive — archive a profile, or unarchive it with `archived: false`.
+#[post("/profiles/archive", data = "<request>")]
+pub async fn archive_profile(
+    request: Json<StandardRequest<ArchiveProfileRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    bus: &State<events::EventBus>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let profile = request.data.profile.clone();
+    let email = auth.email().to_string();
+    let result = archive_profile_handler(request, auth, config).await;
     bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
@@ -1218,6 +1298,7 @@ pub fn build_rocket(
                 optimize_and_generate,
                 save_optimized_cv,
                 duplicate_profile,
+                archive_profile,
                 list_profile_versions,
                 get_profile_job,
                 restore_profile_version,
@@ -1263,6 +1344,8 @@ pub fn build_rocket(
                 get_output_file,
                 get_preferences,
                 update_preferences,
+                get_ai_regions,
+                update_ai_region,
                 email_unsubscribe_page,
                 email_unsubscribe,
                 events::events,

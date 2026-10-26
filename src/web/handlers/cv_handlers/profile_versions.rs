@@ -27,6 +27,30 @@ pub struct RestoreProfileRequest {
     pub version: Option<String>,
 }
 
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct ArchiveProfileRequest {
+    pub profile: String,
+    /// `false` unarchives. Accepts a JSON bool or "true"/"false" (MCP sends strings).
+    #[serde(default, deserialize_with = "bool_or_string")]
+    pub archived: Option<bool>,
+}
+
+fn bool_or_string<'de, D: rocket::serde::Deserializer<'de>>(d: D) -> Result<Option<bool>, D::Error> {
+    use rocket::serde::de::Error;
+    match Option::<rocket::serde::json::Value>::deserialize(d)? {
+        None | Some(rocket::serde::json::Value::Null) => Ok(None),
+        Some(rocket::serde::json::Value::Bool(b)) => Ok(Some(b)),
+        Some(rocket::serde::json::Value::String(s)) => match s.trim().to_lowercase().as_str() {
+            "" => Ok(None),
+            "true" => Ok(Some(true)),
+            "false" => Ok(Some(false)),
+            other => Err(D::Error::custom(format!("archived must be true or false, got '{}'", other))),
+        },
+        Some(other) => Err(D::Error::custom(format!("archived must be true or false, got {}", other))),
+    }
+}
+
 fn err(message: String, code: &str, conversation_id: Option<String>) -> Json<StandardErrorResponse> {
     Json(StandardErrorResponse::new(message, code.to_string(), vec![], conversation_id))
 }
@@ -91,6 +115,27 @@ pub async fn restore_profile_version_handler(
     )))
 }
 
+/// Archive a profile (or unarchive it with `archived: false`).
+pub async fn archive_profile_handler(
+    request: Json<StandardRequest<ArchiveProfileRequest>>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+) -> Result<Json<ActionResponse>, Json<StandardErrorResponse>> {
+    let conversation_id = request.conversation_id();
+    let profile = normalize_profile_name(&request.data.profile);
+    let archived = request.data.archived.unwrap_or(true);
+    let tenant_dir = get_tenant_folder_path(&auth.user().email, &config.data_dir);
+    profile_store::set_archived(&tenant_dir, &profile, archived)
+        .await
+        .map_err(|e| err(e.to_string(), "ARCHIVE_FAILED", conversation_id.clone()))?;
+    let (message, action) = if archived {
+        (format!("Profile '{}' archived", profile), "profile_archived")
+    } else {
+        (format!("Profile '{}' unarchived", profile), "profile_unarchived")
+    };
+    Ok(Json(ActionResponse::success(message, action.to_string(), conversation_id)))
+}
+
 /// The job post a tailored profile was generated from (`data` is null when none).
 pub async fn get_profile_job_handler(
     profile: String,
@@ -107,4 +152,24 @@ pub async fn get_profile_job_handler(
         .map_err(|e| err(e.to_string(), "READ_FAILED", None))?;
     let message = if job.is_some() { "Job source found" } else { "Profile was not made from a job post" };
     Ok(Json(DataResponse::success(message.to_string(), job, None)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ArchiveProfileRequest;
+
+    fn archived(body: &str) -> Result<Option<bool>, String> {
+        rocket::serde::json::from_str::<ArchiveProfileRequest>(body)
+            .map(|r| r.archived)
+            .map_err(|e| e.to_string())
+    }
+
+    #[test]
+    fn archived_accepts_bool_string_or_absent() {
+        assert_eq!(archived(r#"{"profile":"p"}"#), Ok(None));
+        assert_eq!(archived(r#"{"profile":"p","archived":false}"#), Ok(Some(false)));
+        assert_eq!(archived(r#"{"profile":"p","archived":"true"}"#), Ok(Some(true)));
+        assert_eq!(archived(r#"{"profile":"p","archived":"False"}"#), Ok(Some(false)));
+        assert!(archived(r#"{"profile":"p","archived":"maybe"}"#).is_err());
+    }
 }

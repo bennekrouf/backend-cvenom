@@ -140,6 +140,9 @@ async fn run_migrations(pool: &SqlitePool) -> Result<()> {
     let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN email_prefs TEXT DEFAULT '{}'")
         .execute(pool)
         .await;
+    let _ = sqlx::query("ALTER TABLE tenants ADD COLUMN ai_region TEXT")
+        .execute(pool)
+        .await;
 
     // ── Referrals table ──────────────────────────────────────────────────────
     sqlx::query(
@@ -265,6 +268,9 @@ pub struct Tenant {
     pub referred_by_code: Option<String>,
     pub preferred_lang: Option<String>,
     pub email_prefs: Option<String>,
+    /// The api0 AI region the user picked (europe, china, usa); None runs on
+    /// cvenom's own providers.
+    pub ai_region: Option<String>,
 }
 
 impl Tenant {
@@ -366,7 +372,7 @@ impl<'a> TenantRepository<'a> {
 
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs, ai_region
             FROM tenants
             WHERE is_active = TRUE AND (
                 email = ? OR domain = ?
@@ -414,6 +420,7 @@ impl<'a> TenantRepository<'a> {
             referred_by_code: None,
             preferred_lang: Some("en".to_string()),
             email_prefs: Some("{}".to_string()),
+            ai_region: None,
         };
 
         app_log!(
@@ -456,6 +463,7 @@ impl<'a> TenantRepository<'a> {
             referred_by_code: None,
             preferred_lang: Some("en".to_string()),
             email_prefs: Some("{}".to_string()),
+            ai_region: None,
         };
 
         app_log!(
@@ -471,7 +479,7 @@ impl<'a> TenantRepository<'a> {
     pub async fn list_active(&self) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs, ai_region
             FROM tenants
             WHERE is_active = TRUE
             ORDER BY tenant_name ASC, email ASC, domain ASC
@@ -515,6 +523,16 @@ impl<'a> TenantRepository<'a> {
         Ok(())
     }
 
+    /// Set the api0 AI region for a tenant; None goes back to cvenom's default.
+    pub async fn update_ai_region(&self, email: &str, region: Option<&str>) -> Result<()> {
+        sqlx::query("UPDATE tenants SET ai_region = ? WHERE email = ?")
+            .bind(region)
+            .bind(email)
+            .execute(self.pool)
+            .await?;
+        Ok(())
+    }
+
     /// Update last_seen_at to NOW() for a given email tenant (fire-and-forget safe).
     pub async fn touch_last_seen(&self, email: &str) -> Result<()> {
         sqlx::query("UPDATE tenants SET last_seen_at = ? WHERE email = ?")
@@ -531,7 +549,7 @@ impl<'a> TenantRepository<'a> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs
+            SELECT id, email, domain, tenant_name, created_at, updated_at, is_active, last_seen_at, referred_by_code, preferred_lang, email_prefs, ai_region
             FROM tenants
             WHERE is_active = TRUE
               AND email IS NOT NULL

@@ -419,6 +419,29 @@ pub async fn check_and_deduct_credits(
     Ok(())
 }
 
+/// Charges an AI action at its price in the user's AI region (core::ai_region)
+/// and returns what it took, for a refund to give back the same.
+pub async fn check_and_deduct_ai_credits(
+    auth: &crate::auth::AuthenticatedUser,
+    action: crate::core::ai_region::AiAction,
+    cv_service_url: &str,
+    conversation_id: Option<String>,
+    action_type: &str,
+) -> Result<i64, Json<StandardErrorResponse>> {
+    let cost = crate::core::ai_region::cost(cv_service_url, auth.ai_region(), action)
+        .await
+        .map_err(|e| {
+            Json(StandardErrorResponse::new(
+                format!("Could not price this in your AI region: {e}"),
+                "AI_REGION_UNAVAILABLE".to_string(),
+                vec!["Pick another AI region, or the default, in Preferences".to_string()],
+                conversation_id.clone(),
+            ))
+        })?;
+    check_and_deduct_credits(&auth.user().email, cost, conversation_id, action_type).await?;
+    Ok(cost)
+}
+
 /// Give back credits taken by `check_and_deduct_credits` when the paid operation
 /// then failed. Best effort: a failed refund is logged, never surfaced. It goes
 /// to the CVenom balance even when the plan paid: the charge does not say which.

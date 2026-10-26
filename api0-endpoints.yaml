@@ -52,13 +52,38 @@ api_groups:
         verb: "GET"
         path: "/payment/transactions"
 
+      - text: "list ai regions"
+        description: >-
+          The AI regions (Europe, China, United States) cvenom can run its AI in —
+          importing, tailoring, translating, cover letters — and the one I picked
+          (current: null means cvenom's default). Same regions as GitAgent. Each
+          region charges its own price: prices gives the credits per AI action
+          there, default_prices those on the default.
+        verb: "GET"
+        path: "/ai/regions"
+
+      - text: "set ai region"
+        description: >-
+          Choose where my cvenom AI runs from now on, for every AI tool. Pick a
+          region on offer from list ai regions, or "default" for cvenom's own
+          choice. It changes what each AI action costs: tell me the new prices
+          from list ai regions before switching.
+        verb: "PUT"
+        path: "/ai/region"
+        parameters:
+          - name: "region"
+            description: "The region id, or default"
+            required: "true"
+            alternatives: ["europe", "china", "usa", "default"]
+
       # ── Profiles ───────────────────────────────────────────────────────────
 
       - text: "list profiles"
         description: >-
           My CV profiles and their files, as a tree. Each top-level folder is a
-          profile (e.g. john-doe); its files show which languages exist. Start here
-          to find the profile name every other tool needs.
+          profile (e.g. john-doe); its files show which languages exist, and
+          archived: true marks an archived profile. Start here to find the profile
+          name every other tool needs.
         verb: "GET"
         path: "/files/tree"
 
@@ -170,6 +195,22 @@ api_groups:
           - name: "version"
             description: "Version id from list profile versions. Omit for the newest."
             required: "false"
+
+      - text: "archive profile"
+        description: >-
+          Archive a profile to tidy the dashboard: it moves to the Archived section
+          and keeps all its files. Archived profiles still work with every tool.
+          Pass archived "false" to unarchive. Prefer this over delete profile.
+        verb: "POST"
+        path: "/profiles/archive"
+        parameters:
+          - name: "profile"
+            description: "Profile name (e.g. john-doe-proton)"
+            required: "true"
+          - name: "archived"
+            description: "\"true\" to archive (the default), \"false\" to unarchive"
+            required: "false"
+            alternatives: ["true", "false"]
 
       - text: "delete profile"
         description: "Permanently delete a CV profile and all its files. Confirm with the user first."
