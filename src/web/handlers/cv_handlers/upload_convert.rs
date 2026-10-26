@@ -11,7 +11,8 @@ use rocket::form::Form;
 use rocket::serde::{json::Json, Deserialize};
 use rocket::State;
 
-use crate::web::handlers::payment_handlers::check_and_deduct_credits;
+use crate::core::ai_region;
+use crate::web::handlers::payment_handlers::check_and_deduct_ai_credits;
 use super::helpers::create_profile_from_cv_data;
 
 #[derive(Deserialize)]
@@ -30,8 +31,8 @@ pub async fn upload_and_convert_cv_handler(
     let user = auth.user();
     let tenant = auth.tenant();
 
-    // CV import calls Claude Sonnet — 4 credits ($1.00 at $0.25/credit)
-    check_and_deduct_credits(&user.email, 4, None, "cv_import").await?;
+    // CV import calls the AI — 4 credits by default, scaled in an AI region
+    check_and_deduct_ai_credits(&auth, ai_region::CV_IMPORT, cv_service_url.inner(), None, "cv_import").await?;
 
     let upload_span = app_span!("cv_upload_conversion",
         user_email = %user.email,
@@ -140,7 +141,7 @@ pub async fn upload_and_convert_cv_handler(
     }
 
     // Initialize service client for cv-import
-    let service_client = match ServiceClient::new(cv_service_url.inner().clone(), 400) {
+    let service_client = match ServiceClient::new_in_region(cv_service_url.inner().clone(), 400, auth.ai_region()) {
         Ok(client) => client,
         Err(e) => {
             app_log!(error, "Failed to initialize service client: {}", e);
@@ -379,8 +380,8 @@ pub async fn import_text_cv_handler(
         )));
     }
 
-    // CV import calls an LLM — 4 credits
-    check_and_deduct_credits(&user.email, 4, None, "cv_import_text").await?;
+    // CV import calls the AI — 4 credits by default, scaled in an AI region
+    check_and_deduct_ai_credits(&auth, ai_region::CV_IMPORT, cv_service_url.inner(), None, "cv_import_text").await?;
 
     app_log!(
         info,
@@ -410,7 +411,7 @@ pub async fn import_text_cv_handler(
         )));
     }
 
-    let service_client = match ServiceClient::new(cv_service_url.inner().clone(), 400) {
+    let service_client = match ServiceClient::new_in_region(cv_service_url.inner().clone(), 400, auth.ai_region()) {
         Ok(c) => c,
         Err(e) => {
             app_log!(error, "Failed to initialize service client: {}", e);

@@ -5,7 +5,8 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::{FsOps, ServiceClient, TemplateEngine};
-use crate::web::handlers::payment_handlers::check_and_deduct_credits;
+use crate::core::ai_region;
+use crate::web::handlers::payment_handlers::check_and_deduct_ai_credits;
 use crate::utils::{normalize_language, normalize_profile_name};
 use crate::web::types::WithConversationId;
 use crate::web::types::{
@@ -42,7 +43,8 @@ pub async fn generate_portfolio_handler(
     let tenant = auth.tenant();
     let conversation_id = request.conversation_id();
 
-    check_and_deduct_credits(&user.email, 20, conversation_id.clone(), "portfolio_generation")
+    // Portfolio uses the AI — 20 credits by default, scaled in an AI region
+    check_and_deduct_ai_credits(&auth, ai_region::PORTFOLIO, cv_service_url.inner(), conversation_id.clone(), "portfolio_generation")
         .await?;
 
     let span = app_span!("portfolio_generation",
@@ -109,7 +111,7 @@ pub async fn generate_portfolio_handler(
     };
 
     // ── 2. Call AI service to generate [[projects]] TOML ─────────────────────
-    let service_client = ServiceClient::new(cv_service_url.inner().clone(), 120).map_err(|e| {
+    let service_client = ServiceClient::new_in_region(cv_service_url.inner().clone(), 120, auth.ai_region()).map_err(|e| {
         err("SERVICE_CLIENT_ERROR", format!("Failed to create service client: {}", e), conversation_id.clone())
     })?;
 

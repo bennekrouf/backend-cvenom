@@ -276,6 +276,11 @@ impl AuthenticatedUser {
         self.tenant.email_prefs.as_deref()
     }
 
+    /// The api0 AI region the user's model calls run in, if they picked one.
+    pub fn ai_region(&self) -> Option<&str> {
+        self.tenant.ai_region.as_deref()
+    }
+
     pub async fn ensure_tenant_exists(
         &self,
         config: &ServerConfig,

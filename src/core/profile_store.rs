@@ -205,6 +205,32 @@ pub async fn read_job_source(tenant_dir: &Path, profile: &str) -> Result<Option<
     Ok(Some(source))
 }
 
+/// Marker file in an archived profile's folder. The leading dot keeps it out of
+/// the file tree and out of duplicates (a copy of an archived profile is active);
+/// it moves with the folder on rename and goes with it on delete.
+pub const ARCHIVED_MARKER: &str = ".archived";
+
+pub fn is_archived(profile_dir: &Path) -> bool {
+    profile_dir.join(ARCHIVED_MARKER).is_file()
+}
+
+/// Archive (`true`) or unarchive (`false`) a profile. Archived profiles keep
+/// all their files and still work with every tool; they are only listed apart.
+pub async fn set_archived(tenant_dir: &Path, profile: &str, archived: bool) -> Result<()> {
+    let profile_dir = tenant_dir.join(profile);
+    if !profile_dir.join("cv_params.toml").is_file() {
+        bail!("Profile '{}' not found", profile);
+    }
+    let marker = profile_dir.join(ARCHIVED_MARKER);
+    if archived {
+        let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        fs::write(&marker, stamp).await.context("Failed to archive profile")?;
+    } else if marker.exists() {
+        fs::remove_file(&marker).await.context("Failed to unarchive profile")?;
+    }
+    Ok(())
+}
+
 /// Lowercase, alphanumerics joined by single dashes.
 pub fn slug(s: &str) -> String {
     s.to_lowercase()
@@ -301,6 +327,25 @@ mod tests {
 
         assert!(duplicate(t.path(), "base", "taken").await.is_err());
         assert!(duplicate(t.path(), "missing", "x").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn archive_round_trip_and_duplicate_is_active() {
+        let t = tempfile::tempdir().unwrap();
+        profile(t.path(), "base", "").await;
+        let dir = t.path().join("base");
+        assert!(!is_archived(&dir));
+
+        set_archived(t.path(), "base", true).await.unwrap();
+        assert!(is_archived(&dir));
+        duplicate(t.path(), "base", "copy").await.unwrap();
+        assert!(!is_archived(&t.path().join("copy")));
+
+        set_archived(t.path(), "base", false).await.unwrap();
+        assert!(!is_archived(&dir));
+        // Unarchiving an active profile is a no-op.
+        set_archived(t.path(), "base", false).await.unwrap();
+        assert!(set_archived(t.path(), "missing", true).await.is_err());
     }
 
     #[test]

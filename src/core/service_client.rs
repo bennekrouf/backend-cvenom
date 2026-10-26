@@ -30,9 +30,21 @@ pub struct ServiceClient {
 
 impl ServiceClient {
     /// Create new service client with configuration
-    pub fn new(base_url: String, _timeout_seconds: u64) -> Result<Self> {
+    pub fn new(base_url: String, timeout_seconds: u64) -> Result<Self> {
+        Self::new_in_region(base_url, timeout_seconds, None)
+    }
+
+    /// A client whose model calls run in an api0 AI region (`europe`, `china`,
+    /// `usa`): cv-import reads it from `X-AI-Region` on every call. None keeps
+    /// cv-import's own providers.
+    pub fn new_in_region(base_url: String, _timeout_seconds: u64, ai_region: Option<&str>) -> Result<Self> {
+        let mut headers = reqwest::header::HeaderMap::new();
+        if let Some(region) = ai_region.and_then(crate::core::ai_region::find) {
+            headers.insert("X-AI-Region", reqwest::header::HeaderValue::from_static(region));
+        }
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(DEFAULT_TIMEOUT_SECS))
+            .default_headers(headers)
             .build()
             .context("Failed to create HTTP client")?;
 

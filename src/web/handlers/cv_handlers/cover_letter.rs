@@ -10,7 +10,8 @@ use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::ServiceClient;
 use crate::types::cv_data::CvConverter;
-use crate::web::handlers::payment_handlers::check_and_deduct_credits;
+use crate::core::ai_region;
+use crate::web::handlers::payment_handlers::check_and_deduct_ai_credits;
 use crate::web::types::{DataResponse, StandardErrorResponse, StandardRequest, WithConversationId};
 use crate::web::ServerConfig;
 use graflog::app_log;
@@ -65,8 +66,8 @@ pub async fn cover_letter_handler(
         )));
     }
 
-    // Cover letter uses LLM — 20 credits (same as CV generation)
-    check_and_deduct_credits(&user.email, 20, conversation_id.clone(), "cover_letter").await?;
+    // Cover letter uses the AI — 20 credits by default, scaled in an AI region
+    check_and_deduct_ai_credits(&auth, ai_region::COVER_LETTER, cv_service_url.inner(), conversation_id.clone(), "cover_letter").await?;
 
     app_log!(
         info,
@@ -128,7 +129,7 @@ pub async fn cover_letter_handler(
     };
 
     // Initialise service client
-    let service_client = match ServiceClient::new(cv_service_url.inner().clone(), 60) {
+    let service_client = match ServiceClient::new_in_region(cv_service_url.inner().clone(), 60, auth.ai_region()) {
         Ok(c) => c,
         Err(e) => {
             return Err(Json(StandardErrorResponse::new(

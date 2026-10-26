@@ -47,7 +47,7 @@ pub async fn analyze_job_fit_handler(
     }
 
     // Initialize service client
-    let service_client = match ServiceClient::new(cv_service_url.inner().clone(), 400) {
+    let service_client = match ServiceClient::new_in_region(cv_service_url.inner().clone(), 400, auth.ai_region()) {
         Ok(client) => client,
         Err(e) => {
             app_log!(error, "Failed to initialize service client: {}", e);

@@ -299,7 +299,8 @@ async fn build_file_tree(
                     "type": "folder",
                     "children": children,
                     "has_photo": has_photo,
-                    "has_own_photo": has_own_photo
+                    "has_own_photo": has_own_photo,
+                    "archived": crate::core::profile_store::is_archived(&path)
                 }),
             );
         } else if name.ends_with(".typ") || name.ends_with(".toml") {

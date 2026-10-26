@@ -4,7 +4,8 @@
 use crate::auth::AuthenticatedUser;
 use crate::core::database::{get_tenant_folder_path, DatabaseConfig};
 use crate::core::{profile_store, FsOps, ServiceClient, TemplateEngine};
-use crate::web::handlers::payment_handlers::{check_and_deduct_credits, refund_credits};
+use crate::core::ai_region;
+use crate::web::handlers::payment_handlers::{check_and_deduct_ai_credits, refund_credits};
 use crate::types::cv_data::{CvConverter, CvJson};
 use crate::types::response::OptimizeResponse;
 use crate::utils::{normalize_language, normalize_profile_name, truncate_str};
@@ -56,10 +57,11 @@ async fn run_optimization(
     job_url: &str,
     job_description: Option<&str>,
     cv_service_url: &str,
+    ai_region: Option<&str>,
     conversation_id: Option<String>,
 ) -> Result<(OptimizeResponse, CvJson), Json<StandardErrorResponse>> {
     // ── 1. Init service client ────────────────────────────────────────────────
-    let service_client = match ServiceClient::new(cv_service_url.to_string(), 30) {
+    let service_client = match ServiceClient::new_in_region(cv_service_url.to_string(), 30, ai_region) {
         Ok(c) => c,
         Err(e) => {
             return Err(Json(StandardErrorResponse::new(
@@ -198,8 +200,8 @@ pub async fn optimize_cv_handler(
         })?,
     };
 
-    // Optimization — 5 credits (¼ of a CV generation)
-    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone(), "optimize").await?;
+    // Optimization — 5 credits by default (¼ of a CV generation), scaled in an AI region
+    let cost = check_and_deduct_ai_credits(&auth, ai_region::OPTIMIZE, cv_service_url.inner(), conversation_id.clone(), "optimize").await?;
 
     let (response, _) = match run_optimization(
         &cv_data,
@@ -207,13 +209,14 @@ pub async fn optimize_cv_handler(
         &request.data.job_url,
         request.data.job_description.as_deref(),
         cv_service_url.inner(),
+        auth.ai_region(),
         conversation_id.clone(),
     )
     .await
     {
         Ok(r) => r,
         Err(e) => {
-            refund_credits(&auth.user().email, 5, "optimize").await;
+            refund_credits(&auth.user().email, cost, "optimize").await;
             return Err(e);
         }
     };
@@ -286,8 +289,8 @@ pub async fn optimize_and_generate_handler(
         })?,
     };
 
-    // Optimization — 5 credits (¼ of a CV generation)
-    check_and_deduct_credits(&auth.user().email, 5, conversation_id.clone(), "optimize").await?;
+    // Optimization — 5 credits by default (¼ of a CV generation), scaled in an AI region
+    let cost = check_and_deduct_ai_credits(&auth, ai_region::OPTIMIZE, cv_service_url.inner(), conversation_id.clone(), "optimize").await?;
 
     // ── Step 1: Optimize ─────────────────────────────────────────────────────
     let (optimize_resp, optimized_cv_data) = match run_optimization(
@@ -296,13 +299,14 @@ pub async fn optimize_and_generate_handler(
         &request.data.job_url,
         request.data.job_description.as_deref(),
         cv_service_url.inner(),
+        auth.ai_region(),
         conversation_id.clone(),
     )
     .await
     {
         Ok(r) => r,
         Err(e) => {
-            refund_credits(&auth.user().email, 5, "optimize").await;
+            refund_credits(&auth.user().email, cost, "optimize").await;
             return Err(e);
         }
     };
