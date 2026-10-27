@@ -74,7 +74,7 @@ async fn run_optimization(
     };
 
     // ── 2. Call cv-import optimization service ────────────────────────────────
-    let optimization_response = match service_client.optimize_cv(cv_data, job_url, job_description).await {
+    let optimization_response = match service_client.optimize_cv(cv_data, job_url, job_description, lang).await {
         Ok(r) => r,
         Err(e) => {
             let err_str = e.to_string();
@@ -188,12 +188,12 @@ pub async fn optimize_cv_handler(
                 conversation_id.clone(),
             ))
         })?,
-        None => load_profile_cv_data(&profile, &tenant_data_dir).await.map_err(|e| {
+        None => load_profile_cv_data(&profile, &tenant_data_dir, &lang).await.map_err(|e| {
             Json(StandardErrorResponse::new(
                 format!("Failed to load CV data for profile '{}': {}", profile, e),
                 "PROFILE_LOAD_FAILED".to_string(),
                 vec![
-                    "Ensure the profile exists and has valid cv_params.toml and experiences_en.typ files".to_string(),
+                    "Ensure the profile exists and has valid cv_params.toml and experiences_<lang>.typ files".to_string(),
                 ],
                 conversation_id.clone(),
             ))
@@ -277,12 +277,12 @@ pub async fn optimize_and_generate_handler(
                 conversation_id.clone(),
             ))
         })?,
-        None => load_profile_cv_data(&profile, &tenant_data_dir).await.map_err(|e| {
+        None => load_profile_cv_data(&profile, &tenant_data_dir, &lang).await.map_err(|e| {
             Json(StandardErrorResponse::new(
                 format!("Failed to load CV data for profile '{}': {}", profile, e),
                 "PROFILE_LOAD_FAILED".to_string(),
                 vec![
-                    "Ensure the profile exists and has valid cv_params.toml and experiences_en.typ files".to_string(),
+                    "Ensure the profile exists and has valid cv_params.toml and experiences_<lang>.typ files".to_string(),
                 ],
                 conversation_id.clone(),
             ))

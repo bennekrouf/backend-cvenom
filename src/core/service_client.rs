@@ -198,22 +198,17 @@ impl ServiceClient {
         }
     }
 
-    /// 4. CV Optimization - sends CvJson + job_url, receives optimized CvJson
+    /// 4. CV Optimization - sends CvJson + job_url + lang, receives optimized CvJson
+    /// written in `lang`, whatever the language of the posting or of `cv_data`.
     pub async fn optimize_cv(
         &self,
         cv_data: &CvJson,
         job_url: &str,
         job_description: Option<&str>,
+        lang: &str,
     ) -> Result<CvOptimizationResponse> {
         let url = format!("{}{}", self.base_url, OPTIMIZE_ENDPOINT);
-
-        let mut payload = serde_json::json!({
-            "cv_data": cv_data,
-            "job_url": job_url
-        });
-        if let Some(desc) = job_description {
-            payload["job_description"] = serde_json::Value::String(desc.to_string());
-        }
+        let payload = optimize_payload(cv_data, job_url, job_description, lang);
 
         app_log!(trace, "Calling CV optimization service: {}", url);
 
@@ -474,3 +469,42 @@ impl ServiceClient {
     }
 }
 
+
+/// Body of the /optimize call. `lang` tells cv-import which language to write
+/// the tailored CV in; without it the model followed the posting's language.
+fn optimize_payload(
+    cv_data: &CvJson,
+    job_url: &str,
+    job_description: Option<&str>,
+    lang: &str,
+) -> serde_json::Value {
+    let mut payload = serde_json::json!({
+        "cv_data": cv_data,
+        "job_url": job_url,
+        "lang": lang
+    });
+    if let Some(desc) = job_description {
+        payload["job_description"] = serde_json::Value::String(desc.to_string());
+    }
+    payload
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn optimize_payload_carries_the_target_language() {
+        let cv: CvJson = serde_json::from_value(serde_json::json!({
+            "personal_info": { "name": "Camille" },
+            "work_experience": [], "education": [], "skills": {}, "languages": {},
+            "metadata": { "language": "en" }
+        }))
+        .unwrap();
+        let p = optimize_payload(&cv, "https://job", Some("Nous recherchons"), "fr");
+        assert_eq!(p["lang"], "fr");
+        assert_eq!(p["job_description"], "Nous recherchons");
+        assert_eq!(p["cv_data"]["metadata"]["language"], "en");
+        assert!(optimize_payload(&cv, "https://job", None, "en").get("job_description").is_none());
+    }
+}

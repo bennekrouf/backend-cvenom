@@ -58,32 +58,63 @@ pub async fn create_profile_from_cv_data(
     Ok(())
 }
 
-/// Load profile CV data as CvJson (for job matching, etc.)
+/// Load profile CV data as CvJson (for job matching, etc.), preferring the
+/// experiences file in `language`. Falls back to English, the legacy
+/// `experiences.typ`, then any other language; `metadata.language` says which
+/// one was loaded, so a caller can tell the CV must still be translated.
 pub async fn load_profile_cv_data(
     profile_name: &str,
     tenant_data_dir: &Path,
+    language: &str,
 ) -> anyhow::Result<CvJson> {
     let profile_dir = tenant_data_dir.join(profile_name);
     let toml_path = profile_dir.join("cv_params.toml");
-    
-    // Support both language-specific and legacy filenames
-    let typst_path_en = profile_dir.join("experiences_en.typ");
-    let typst_path_legacy = profile_dir.join("experiences.typ");
-    
-    let active_typst_path = if typst_path_en.exists() {
-        Some(typst_path_en)
-    } else if typst_path_legacy.exists() {
-        Some(typst_path_legacy)
-    } else {
-        None
-    };
 
-    if !toml_path.exists() || active_typst_path.is_none() {
-        anyhow::bail!("CV files not found for profile: {} (checked experiences_en.typ and experiences.typ)", profile_name);
+    let Some((typst_path, loaded_lang)) = experiences_file(&profile_dir, language) else {
+        anyhow::bail!(
+            "CV files not found for profile: {} (no experiences_{}.typ, experiences_en.typ or experiences.typ)",
+            profile_name,
+            language
+        );
+    };
+    if !toml_path.exists() {
+        anyhow::bail!("CV files not found for profile: {} (no cv_params.toml)", profile_name);
     }
 
-    CvConverter::from_files(&toml_path, &active_typst_path.unwrap())
-        .with_context(|| format!("Failed to load CV data for profile: {}", profile_name))
+    let mut cv = CvConverter::from_files(&toml_path, &typst_path)
+        .with_context(|| format!("Failed to load CV data for profile: {}", profile_name))?;
+    if loaded_lang != language {
+        app_log!(info, "Profile {} has no {} experiences; loaded {}", profile_name, language, loaded_lang);
+    }
+    cv.metadata.language = loaded_lang;
+    Ok(cv)
+}
+
+/// The experiences file to load for `language` and the language it is in.
+fn experiences_file(profile_dir: &Path, language: &str) -> Option<(std::path::PathBuf, String)> {
+    let wanted = profile_dir.join(format!("experiences_{}.typ", language));
+    if wanted.exists() {
+        return Some((wanted, language.to_string()));
+    }
+    let en = profile_dir.join("experiences_en.typ");
+    if en.exists() {
+        return Some((en, "en".to_string()));
+    }
+    let legacy = profile_dir.join("experiences.typ");
+    if legacy.exists() {
+        return Some((legacy, "en".to_string()));
+    }
+    let mut others: Vec<(std::path::PathBuf, String)> = std::fs::read_dir(profile_dir)
+        .ok()?
+        .filter_map(|e| e.ok())
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let lang = name.strip_prefix("experiences_")?.strip_suffix(".typ")?.to_string();
+            Some((e.path(), lang))
+        })
+        .collect();
+    others.sort();
+    others.into_iter().next()
 }
 
 /// Normalize template name against available templates
@@ -195,6 +226,57 @@ mod tests {
         let broken = "summary = \"line one\nline two\"\n";
         let out = merge_unmodelled_toml(Some(broken), "summary = \"ok\"\n").unwrap();
         assert_eq!(toml::from_str::<toml::Table>(&out).unwrap()["summary"].as_str(), Some("ok"));
+    }
+
+    fn experiences(bullet: &str) -> String {
+        format!(
+            "#import \"template.typ\": *\n\n#let get_work_experience() = [\n  == Acme\n  #dated_experience(\n    \"Engineer\",\n    date: \"2020 - Present\",\n    content: [\n      #experience_details(\"{}\")\n    ]\n  )\n\n]\n",
+            bullet
+        )
+    }
+
+    #[tokio::test]
+    async fn load_prefers_the_requested_language() {
+        // Regression: optimize always loaded experiences_en.typ, so lang fr
+        // tailored the English CV even when a French one existed.
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("camille");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("cv_params.toml"), "name = \"Camille\"\n").unwrap();
+        std::fs::write(dir.join("experiences_en.typ"), experiences("Built payment APIs")).unwrap();
+        std::fs::write(dir.join("experiences_fr.typ"), experiences("Conception des API de paiement")).unwrap();
+
+        let fr = load_profile_cv_data("camille", t.path(), "fr").await.unwrap();
+        assert_eq!(fr.metadata.language, "fr");
+        assert_eq!(fr.work_experience[0].responsibilities, vec!["Conception des API de paiement"]);
+
+        let en = load_profile_cv_data("camille", t.path(), "en").await.unwrap();
+        assert_eq!(en.metadata.language, "en");
+        assert_eq!(en.work_experience[0].responsibilities, vec!["Built payment APIs"]);
+    }
+
+    #[tokio::test]
+    async fn load_falls_back_and_says_which_language_it_loaded() {
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("camille");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("cv_params.toml"), "name = \"Camille\"\n").unwrap();
+        std::fs::write(dir.join("experiences_en.typ"), experiences("Built payment APIs")).unwrap();
+
+        // English-only profile asked for French: English, flagged as such so
+        // cv-import translates it.
+        let cv = load_profile_cv_data("camille", t.path(), "fr").await.unwrap();
+        assert_eq!(cv.metadata.language, "en");
+        assert_eq!(cv.work_experience[0].responsibilities, vec!["Built payment APIs"]);
+
+        // French-only profile asked for English.
+        std::fs::remove_file(dir.join("experiences_en.typ")).unwrap();
+        std::fs::write(dir.join("experiences_fr.typ"), experiences("Conception des API")).unwrap();
+        let cv = load_profile_cv_data("camille", t.path(), "en").await.unwrap();
+        assert_eq!(cv.metadata.language, "fr");
+
+        std::fs::remove_file(dir.join("experiences_fr.typ")).unwrap();
+        assert!(load_profile_cv_data("camille", t.path(), "en").await.is_err());
     }
 
     #[tokio::test]
