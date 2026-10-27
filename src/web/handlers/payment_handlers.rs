@@ -300,9 +300,17 @@ pub async fn api0_get_balance(user_email: &str) -> Result<i64, String> {
 /// What the user can spend, and where it comes from: their mayorana plan's
 /// credits left this month, and their own CVenom balance (top-ups, welcome,
 /// referrals, refunds). The plan is spent first.
+///
+/// When CVenom's api0 workspace bills each person's plan (billing_mode
+/// "user"), the store reports the plan alone: there is no balance, and
+/// top-ups are off.
 pub struct CreditBreakdown {
     /// Plan credits left plus the CVenom balance: what a charge can take.
     pub available: i64,
+    /// The api0 workspace's billing mode: "user" (each person's plan only),
+    /// "tenant" (the workspace's balance), or None from a store that does not
+    /// know CVenom's workspace (plan, then balance).
+    pub billing_mode: Option<String>,
     pub plan_credits_left: i64,
     /// The live mayorana plan, as the store describes it; None without one.
     pub plan: Option<PlanSummary>,
@@ -344,9 +352,16 @@ pub async fn api0_get_credits(user_email: &str) -> Result<CreditBreakdown, Strin
         .ok_or_else(|| "api0 store response missing 'available'".to_string())?;
     Ok(CreditBreakdown {
         available,
+        billing_mode: json["mode"].as_str().map(str::to_string),
         plan_credits_left: json["plan_credits_left"].as_i64().unwrap_or(0),
         plan: serde_json::from_value(json["plan"].clone()).ok(),
     })
+}
+
+/// Whether credits here come only from each person's mayorana plan, so there
+/// is no balance to top up.
+pub fn plan_only(billing_mode: Option<&str>) -> bool {
+    billing_mode == Some("user")
 }
 
 /// What the user can spend: their mayorana plan's credits left this month,
@@ -390,14 +405,23 @@ pub async fn check_and_deduct_credits(
 
     if status.as_u16() == 402 {
         let available = json["available"].as_i64().unwrap_or(0);
+        let mut suggestions = vec![
+            format!("Subscribe to a mayorana plan for monthly credits (CVenom plus the other apps): {MAYORANA_PRICING_URL}"),
+        ];
+        // Per-person billing has no balance, so no top-up to point to.
+        if !plan_only(json["mode"].as_str()) {
+            suggestions.push("Or buy a one-off top-up at https://studio.cvenom.com/credits".to_string());
+        }
+        suggestions.push(format!("Sign in on mayorana.ch with {user_email} so the plan's credits count here."));
+        let message = if plan_only(json["mode"].as_str()) {
+            format!("Not enough plan credits: you have {} left this month but this costs {}", available, cost)
+        } else {
+            format!("Not enough credits: you have {} but this costs {}", available, cost)
+        };
         return Err(Json(StandardErrorResponse::new(
-            format!("Not enough credits: you have {} but this costs {}", available, cost),
+            message,
             "INSUFFICIENT_CREDITS".to_string(),
-            vec![
-                format!("Subscribe to a mayorana plan for monthly credits (CVenom plus the other apps): {MAYORANA_PRICING_URL}"),
-                "Or buy a one-off top-up at https://studio.cvenom.com/credits".to_string(),
-                format!("Sign in on mayorana.ch with {user_email} so the plan's credits count here."),
-            ],
+            suggestions,
             conversation_id,
         )));
     }
@@ -464,6 +488,29 @@ pub async fn create_payment_intent_handler(
 ) -> Result<Json<CreateIntentResponse>, Json<StandardErrorResponse>> {
     let amount_dollars = request.amount_dollars;
     let currency = normalise_currency(request.currency.as_deref());
+
+    // Refused before the card is charged: with per-person billing the store
+    // has no balance to put a top-up in.
+    match api0_get_credits(auth.email()).await {
+        Ok(c) if plan_only(c.billing_mode.as_deref()) => {
+            return Err(Json(StandardErrorResponse::new(
+                "Credits come from your mayorana plan; one-off top-ups are not available".to_string(),
+                "TOPUP_DISABLED".to_string(),
+                vec![format!("Choose or upgrade a plan at {MAYORANA_PRICING_URL}")],
+                None,
+            )));
+        }
+        Ok(_) => {}
+        Err(e) => {
+            app_log!(error, user = %auth.email(), error = %e, "Could not read the billing mode before a top-up");
+            return Err(Json(StandardErrorResponse::new(
+                "Could not check your credits; no payment was taken".to_string(),
+                "BALANCE_ERROR".to_string(),
+                vec!["Try again shortly".to_string()],
+                None,
+            )));
+        }
+    }
 
     if amount_dollars < 1 {
         return Err(Json(StandardErrorResponse::new(
@@ -748,6 +795,9 @@ pub struct GetBalanceResponse {
     pub plan_credits_left: i64,
     /// Their live mayorana plan, or null.
     pub plan: Option<PlanSummary>,
+    /// "user" when credits come only from the plan (no top-ups), "tenant" or
+    /// null otherwise; see CreditBreakdown.
+    pub billing_mode: Option<String>,
 }
 
 pub async fn api0_get_transactions(
@@ -804,6 +854,7 @@ pub async fn get_balance_handler(
             balance: c.available,
             plan_credits_left: c.plan_credits_left,
             plan: c.plan,
+            billing_mode: c.billing_mode,
         })),
         Err(e) => {
             app_log!(error, user = %user_email, error = %e, "Failed to get credit balance");
