@@ -390,6 +390,12 @@ api_groups:
             description: "Language the tailored CV is written in, headings and text alike, whatever the posting's or the profile's language. Omit for English."
             required: "false"
             alternatives: ["en", "fr", "de"]
+          - name: "job_title"
+            description: "The posting's job title, when already known (e.g. from a job board)."
+            required: "false"
+          - name: "company"
+            description: "The hiring company, when already known."
+            required: "false"
 
       - text: "optimize and generate"
         description: >-
@@ -412,6 +418,12 @@ api_groups:
             description: "Language the tailored CV is written in, headings and text alike, whatever the posting's or the profile's language. Omit for English."
             required: "false"
             alternatives: ["en", "fr", "de"]
+          - name: "job_title"
+            description: "The posting's job title, when already known (e.g. from a job board). Names the PDF and the tailored profile."
+            required: "false"
+          - name: "company"
+            description: "The hiring company, when already known. Names the PDF and the tailored profile."
+            required: "false"
           - name: "template"
             description: "Template id from list templates. Omit for the default."
             required: "false"

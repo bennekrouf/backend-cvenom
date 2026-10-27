@@ -37,7 +37,7 @@ use crate::core::FsOps;
 use crate::web::handlers::cv_data::CvFormData;
 use crate::web::handlers::payment_handlers::{
     ConfirmPaymentRequest, CreateIntentRequest, GetBalanceResponse, TransactionsResponse,
-    get_transactions_handler, get_plans_handler, PlansResponse, AdminCreditRequest, admin_add_credits_handler,
+    get_transactions_handler, get_plan_usage_handler, get_plans_handler, PlansResponse, AdminCreditRequest, admin_add_credits_handler,
     AdminCreditUsersResponse, AdminUserTransactionsResponse,
     admin_credit_users_handler, admin_user_transactions_handler,
 };
@@ -814,6 +814,15 @@ pub async fn payment_plans() -> Result<Json<PlansResponse>, Json<StandardErrorRe
     get_plans_handler().await
 }
 
+/// GET /payment/plan-usage?<limit> — the user's mayorana plan usage (per-person billing's history)
+#[get("/payment/plan-usage?<limit>")]
+pub async fn payment_plan_usage(
+    auth: AuthenticatedUser,
+    limit: Option<i64>,
+) -> Result<Json<crate::web::handlers::payment_handlers::PlanUsageResponse>, Json<StandardErrorResponse>> {
+    get_plan_usage_handler(auth, limit).await
+}
+
 /// GET /payment/transactions?<limit> — authenticated user's credit transaction history
 #[get("/payment/transactions?<limit>")]
 pub async fn payment_transactions(
@@ -1344,6 +1353,7 @@ pub fn build_rocket(
                 payment_balance,
                 payment_plans,
                 payment_transactions,
+                payment_plan_usage,
                 get_cv_data,
                 put_cv_data,
                 list_brands,
