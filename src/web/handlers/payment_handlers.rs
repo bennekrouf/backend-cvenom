@@ -221,6 +221,24 @@ async fn stripe_record_withdrawal_waiver(
     Ok(())
 }
 
+/// Refund a PaymentIntent in full. The idempotency key makes a retried confirm
+/// refund it once, never twice.
+async fn stripe_refund_payment_intent(secret_key: &str, payment_intent_id: &str) -> Result<(), String> {
+    let res = reqwest::Client::new()
+        .post("https://api.stripe.com/v1/refunds")
+        .basic_auth(secret_key, Some(""))
+        .header("Idempotency-Key", format!("cvenom-topup-refund-{payment_intent_id}"))
+        .form(&[("payment_intent", payment_intent_id), ("reason", "requested_by_customer")])
+        .send()
+        .await
+        .map_err(|e| format!("Stripe request failed: {e}"))?;
+    if !res.status().is_success() {
+        let body = res.text().await.unwrap_or_default();
+        return Err(format!("Stripe error: {body}"));
+    }
+    Ok(())
+}
+
 // ── api0 Store helpers ────────────────────────────────────────────────────────
 
 fn api0_store_url() -> Result<String, String> {
@@ -666,7 +684,40 @@ pub async fn confirm_payment_handler(
         "Payment verified – topping up api0 credit balance"
     );
 
-    // 3. Top up this user's credit balance in api0
+    // 3. Credits come only from plans now (billing switched to each person's plan
+    //    after this checkout started): there is no balance to add to, so the
+    //    payment goes back to the card rather than being kept for nothing.
+    if let Ok(c) = api0_get_credits(user_email).await {
+        if plan_only(c.billing_mode.as_deref()) {
+            return match stripe_refund_payment_intent(&secret_key, payment_intent_id).await {
+                Ok(()) => {
+                    app_log!(warn, user = %user_email, intent = %payment_intent_id, amount_dollars = amount_dollars,
+                        "Top-up refunded: credits come only from plans");
+                    Err(Json(StandardErrorResponse::new(
+                        "One-off top-ups are no longer available, so your payment has been refunded to your card.".to_string(),
+                        "TOPUP_REFUNDED".to_string(),
+                        vec![
+                            format!("Credits now come from your mayorana plan: {MAYORANA_PRICING_URL}"),
+                            format!("Refund reference: {payment_intent_id}"),
+                        ],
+                        None,
+                    )))
+                }
+                Err(e) => {
+                    app_log!(error, user = %user_email, intent = %payment_intent_id, amount_dollars = amount_dollars, error = %e,
+                        "CRITICAL: top-up paid while credits come only from plans, and the refund FAILED – refund it by hand");
+                    Err(Json(StandardErrorResponse::new(
+                        "One-off top-ups are no longer available. Your payment will be refunded; support has been notified.".to_string(),
+                        "TOPUP_REFUND_FAILED".to_string(),
+                        vec![format!("Payment ID: {payment_intent_id}")],
+                        None,
+                    )))
+                }
+            };
+        }
+    }
+
+    // 4. Top up this user's credit balance in api0
     match api0_topup_credits(user_email, credits_to_add, "topup", None).await {
         Ok(new_balance) => {
             app_log!(
@@ -962,6 +1013,57 @@ pub async fn get_transactions_handler(
             )))
         }
     }
+}
+
+// ── GET /payment/plan-usage ───────────────────────────────────────────────────
+//
+// With per-person billing the user's credits are their mayorana plan's, so their
+// history is the plan's usage (every app that spends it), not balance
+// transactions. Read from the api0 store: GET /api/plans/usage/{email}, rows of
+// { id, created_at, app, model, credits, ok } where `model` is the action an app
+// charged for ("cv_generation") and a refund's credits are negative.
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct PlanUsageResponse {
+    pub success: bool,
+    pub usage: Vec<serde_json::Value>,
+}
+
+pub async fn get_plan_usage_handler(
+    auth: AuthenticatedUser,
+    limit: Option<i64>,
+) -> Result<Json<PlanUsageResponse>, Json<StandardErrorResponse>> {
+    let user_email = &auth.user().email;
+    let failed = |e: String| {
+        app_log!(error, "Failed to get plan usage for {}: {}", user_email, e);
+        Json(StandardErrorResponse::new(
+            format!("Failed to retrieve plan usage: {}", e),
+            "PLAN_USAGE_FETCH_FAILED".to_string(),
+            vec![],
+            None,
+        ))
+    };
+    let (store_url, service_key) = match (api0_store_url(), api0_service_key()) {
+        (Ok(u), Ok(k)) => (u, k),
+        (Err(e), _) | (_, Err(e)) => return Err(failed(e)),
+    };
+    let mut request = reqwest::Client::new()
+        .get(format!("{store_url}/api/plans/usage/{}", utf8_percent_encode(user_email, NON_ALPHANUMERIC)))
+        .header("X-Service-Key", &service_key);
+    if let Some(limit) = limit {
+        request = request.query(&[("limit", limit)]);
+    }
+    let res = request.send().await.map_err(|e| failed(format!("api0 store request failed: {e}")))?;
+    if !res.status().is_success() {
+        let status = res.status();
+        return Err(failed(format!("api0 store answered {status}")));
+    }
+    let json: serde_json::Value = res.json().await.map_err(|e| failed(format!("api0 store JSON parse error: {e}")))?;
+    Ok(Json(PlanUsageResponse {
+        success: true,
+        usage: json["usage"].as_array().cloned().unwrap_or_default(),
+    }))
 }
 
 // ── POST /admin/credits ───────────────────────────────────────────────────────

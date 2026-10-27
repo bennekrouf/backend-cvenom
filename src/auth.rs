@@ -426,36 +426,67 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
         // Grant free-offer welcome credits to brand-new users — SYNCHRONOUS.
         if is_new_user {
             const WELCOME_CREDITS: i64 = 100;
+            use crate::web::handlers::payment_handlers::{api0_get_credits, plan_only};
+            // Where credits come from here: a balance, or only each person's
+            // mayorana plan (per-person billing), which has no balance to grant to.
+            let plan_only = match api0_get_credits(&firebase_user.email).await {
+                Ok(c) => plan_only(c.billing_mode.as_deref()),
+                Err(e) => {
+                    app_log!(warn, "Could not read the billing mode for new user {}: {}", firebase_user.email, e);
+                    false
+                }
+            };
             if let (Ok(store_url), Ok(secret)) = (
                 std::env::var("API0_STORE_URL"),
                 std::env::var("API0_STORE_SERVICE_KEY"),
             ) {
                 let client = reqwest::Client::new();
-                let body = serde_json::json!({
-                    "email": firebase_user.email,
-                    "amount": WELCOME_CREDITS,
-                    "action_type": "welcome"
-                });
-                match client
-                    .post(format!("{}/api/user/credits", store_url))
+                // Per-person billing: the welcome is the free plan (its licence is
+                // emailed by api0), not a balance grant.
+                let (path, body) = if plan_only {
+                    ("/api/plans/free", serde_json::json!({ "email": firebase_user.email }))
+                } else {
+                    (
+                        "/api/user/credits",
+                        serde_json::json!({
+                            "email": firebase_user.email,
+                            "amount": WELCOME_CREDITS,
+                            "action_type": "welcome"
+                        }),
+                    )
+                };
+                let sent = client
+                    .post(format!("{}{}", store_url, path))
                     .header("X-Service-Key", &secret)
                     .json(&body)
                     .send()
-                    .await
-                    .and_then(|r| r.error_for_status())
-                {
-                    Ok(_) => {
+                    .await;
+                // 409 from the free plan: they already pay for a plan, which is welcome enough.
+                let granted = match sent {
+                    Ok(r) if r.status().is_success() => Ok(()),
+                    Ok(r) if plan_only && r.status().as_u16() == 409 => Ok(()),
+                    Ok(r) => Err(format!("store answered {}", r.status())),
+                    Err(e) => Err(e.to_string()),
+                };
+                match granted {
+                    Ok(()) => {
+                        let credits = if plan_only {
+                            api0_get_credits(&firebase_user.email).await.map(|c| c.available).unwrap_or(0)
+                        } else {
+                            WELCOME_CREDITS
+                        };
                         app_log!(
                             info,
-                            "Granted {} welcome credits to new user: {}",
-                            WELCOME_CREDITS,
-                            firebase_user.email
+                            "Welcomed new user {} with {} credits ({})",
+                            firebase_user.email,
+                            credits,
+                            if plan_only { "plan" } else { "balance" }
                         );
                         crate::email::send_email(
                             &firebase_user.email,
                             crate::email::EmailKind::Welcome {
                                 name: firebase_user.email.split('@').next().unwrap_or("there").to_string(),
-                                credits: WELCOME_CREDITS,
+                                credits,
                             },
                             "en", // new user, no preference yet
                         );
@@ -463,7 +494,7 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                         crate::email::notify_admin(
                             crate::email::EmailKind::AdminNewUser {
                                 user_email: firebase_user.email.clone(),
-                                credits_granted: WELCOME_CREDITS,
+                                credits_granted: credits,
                             },
                         );
                     }
@@ -483,7 +514,8 @@ impl<'r> FromRequest<'r> for AuthenticatedUser {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty());
 
-            if let Some(ref_code) = ref_code_opt {
+            // Referral bonuses are balance grants: nothing to give with per-person billing.
+            if let Some(ref_code) = ref_code_opt.filter(|_| !plan_only) {
                 if let Ok(pool) = db_config.pool().map(|p| p.clone()) {
                     let referred_email = firebase_user.email.clone();
                     tokio::spawn(async move {
