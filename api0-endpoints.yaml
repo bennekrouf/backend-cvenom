@@ -387,7 +387,7 @@ api_groups:
             description: "The posting's text, when the URL cannot be read"
             required: "false"
           - name: "lang"
-            description: "CV language. Omit for English."
+            description: "Language the tailored CV is written in, headings and text alike, whatever the posting's or the profile's language. Omit for English."
             required: "false"
             alternatives: ["en", "fr", "de"]
 
@@ -409,7 +409,7 @@ api_groups:
             description: "The posting's text, when the URL cannot be read"
             required: "false"
           - name: "lang"
-            description: "CV language. Omit for English."
+            description: "Language the tailored CV is written in, headings and text alike, whatever the posting's or the profile's language. Omit for English."
             required: "false"
             alternatives: ["en", "fr", "de"]
           - name: "template"
