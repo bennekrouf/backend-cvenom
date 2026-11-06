@@ -149,6 +149,28 @@ cargo run -- list-templates
 - `POST /analyze-job-fit` - LinkedIn job analysis
 - `GET /me` - Current user info
 
+### Through api0 (MCP gateway)
+
+cvenom is an api0 tenant (dashboard: app.api0.ai, workspace "cvenom"). api0 calls
+this backend with a Google identity token plus `X-User-Email`; `src/auth.rs`
+checks both. Values (set in `ecosystem.config.js`):
+
+| | |
+|---|---|
+| `CVENOM_OIDC_AUDIENCE` (expected `aud`) | `https://api.cvenom.com/api0/tenant/c752f139-9fad-47c9-b10b-9983dcce8333` |
+| `CVENOM_OIDC_SERVICE_ACCOUNT` (pinned signer) | `firebase-adminsdk-fbsvc@cvenom-de582.iam.gserviceaccount.com` |
+| Issuer | `accounts.google.com` |
+
+Unset audience disables this path; an audience with no signer refuses every
+api0 call. The api0 workspace must match: Access tab, auth mode `google_sa`,
+same service account and audience, connection "Google identity token".
+Who can connect: the workspace's Google sign-in (OAuth client in Firebase
+project `cvenom-de582`; full client id to check in the Google Cloud console).
+
+Connecting from claude.ai: server URL `https://gateway.api0.ai/mcp/cvenom-mcp`,
+"Use your own OAuth client", Client ID `cvenom-mcp`, no secret. Do not pick
+automatic registration: it gives api0's generic client, not the cvenom workspace.
+
 ## Directory Structure
 
 ```
