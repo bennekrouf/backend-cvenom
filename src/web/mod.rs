@@ -311,19 +311,20 @@ pub async fn get_preferences(
     Ok(Json(serde_json::json!({ "email_prefs": prefs, "preferred_lang": lang })))
 }
 
-/// GET /ai/regions — the api0 AI regions on offer and the one the user picked
-/// (null: cvenom's default providers), with what each AI action costs in
-/// credits on the default (`default_prices`) and in each region (`prices`).
+/// GET /ai/regions — every api0 AI region (`available` false for one not open
+/// yet) and the one the user picked (null: cvenom's default providers), with
+/// what each AI action costs in credits on the default (`default_prices`) and
+/// in each available region (`prices`).
 #[get("/ai/regions")]
 pub async fn get_ai_regions(
     auth: AuthenticatedUser,
     cv_service_url: &State<String>,
 ) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
     use crate::core::ai_region;
-    let mut regions = ai_region::on_offer(cv_service_url.inner()).await.map_err(|e| {
+    let mut regions = ai_region::listed(cv_service_url.inner()).await.map_err(|e| {
         Json(StandardErrorResponse::new(format!("Could not list AI regions: {e}"), "AI_REGIONS_UNAVAILABLE".into(), vec![], None))
     })?;
-    for r in &mut regions {
+    for r in regions.iter_mut().filter(|r| ai_region::is_available(r)) {
         r["prices"] = ai_region::prices(r["multiplier"].as_f64().unwrap_or(1.0));
     }
     Ok(Json(serde_json::json!({
