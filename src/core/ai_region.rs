@@ -66,9 +66,21 @@ pub fn find(id: &str) -> Option<&'static str> {
     REGIONS.iter().copied().find(|r| *r == id.trim())
 }
 
-/// The regions cv-import offers now: `[{ id, flag, label, multiplier }]`,
-/// empty when it has no api0 licence.
+/// Whether a listed region can be used: only an explicit false says it can't.
+pub fn is_available(region: &serde_json::Value) -> bool {
+    region["available"] != false
+}
+
+/// The regions that can be used now.
 pub async fn on_offer(cv_service_url: &str) -> Result<Vec<serde_json::Value>> {
+    let mut regions = listed(cv_service_url).await?;
+    regions.retain(is_available);
+    Ok(regions)
+}
+
+/// Every region cv-import lists: `[{ id, flag, label, available, multiplier }]`,
+/// no multiplier on one not open yet; empty when it has no api0 licence.
+pub async fn listed(cv_service_url: &str) -> Result<Vec<serde_json::Value>> {
     let v: serde_json::Value = reqwest::Client::new()
         .get(format!("{}/regions", cv_service_url.trim_end_matches('/')))
         .timeout(std::time::Duration::from_secs(15))
@@ -94,6 +106,13 @@ mod tests {
         assert_eq!(find("usa"), Some("usa"));
         assert_eq!(find("default"), None);
         assert_eq!(find("Europe"), None);
+    }
+
+    #[test]
+    fn only_an_explicit_false_makes_a_region_unavailable() {
+        assert!(!is_available(&serde_json::json!({ "id": "usa", "available": false })));
+        assert!(is_available(&serde_json::json!({ "id": "china", "available": true })));
+        assert!(is_available(&serde_json::json!({ "id": "china" })), "as an older cv-import lists it");
     }
 
     #[test]
