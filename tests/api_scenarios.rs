@@ -156,7 +156,6 @@ assert_requires_auth!(bd_attach_ref_requires_auth, post, "/bd/attach-ref",   r#"
 // Admin
 assert_requires_auth!(admin_bds_requires_auth,     get,  "/admin/bd");
 assert_requires_auth!(admin_commissions_requires_auth, get, "/admin/commissions");
-assert_requires_auth!(admin_models_requires_auth,  get,  "/admin/models");
 
 // ── The api0 internal secret is not a credential here ─────────────────────────
 //

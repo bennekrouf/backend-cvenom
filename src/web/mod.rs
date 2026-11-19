@@ -47,10 +47,6 @@ use crate::web::handlers::feedback_handlers::{
     SubmitFeedbackRequest, SubmitFeedbackResponse, FeedbackEligibleResponse,
     AdminFeedbackResponse,
 };
-use crate::web::handlers::model_handlers::{
-    get_model_config_handler, update_model_config_handler,
-    ModelConfigResponse, UpdateModelConfigResponse, UpdateModelConfigRequest,
-};
 use crate::web::handlers::bd_handlers::{
     register_bd_handler, get_bd_me_handler, get_bd_customers_handler, attach_ref_handler,
     get_bd_commissions_handler, admin_list_bd_handler, admin_bd_customers_handler,
@@ -312,9 +308,8 @@ pub async fn get_preferences(
 }
 
 /// GET /ai/regions — every api0 AI region (`available` false for one not open
-/// yet) and the one the user picked (null: cvenom's default providers), with
-/// what each AI action costs in credits on the default (`default_prices`) and
-/// in each available region (`prices`).
+/// yet) with what each AI action costs there in credits (`prices`), and the
+/// one the user's calls run in (`current`: their pick, or the default).
 #[get("/ai/regions")]
 pub async fn get_ai_regions(
     auth: AuthenticatedUser,
@@ -329,8 +324,7 @@ pub async fn get_ai_regions(
     }
     Ok(Json(serde_json::json!({
         "success": true,
-        "current": auth.ai_region(),
-        "default_prices": ai_region::prices(1.0),
+        "current": ai_region::resolve(auth.ai_region()),
         "regions": regions,
     })))
 }
@@ -338,8 +332,8 @@ pub async fn get_ai_regions(
 #[derive(serde::Deserialize)]
 #[serde(crate = "rocket::serde")]
 pub struct AiRegionRequest {
-    /// europe, china or usa; "default" (or nothing) for cvenom's own providers.
-    pub region: Option<String>,
+    /// europe, china or usa.
+    pub region: String,
 }
 
 /// PUT /ai/region — where the user's AI calls run from now on.
@@ -351,29 +345,23 @@ pub async fn update_ai_region(
     cv_service_url: &State<String>,
 ) -> Result<Json<serde_json::Value>, Json<StandardErrorResponse>> {
     let err = |msg: String, code: &str, hint: Vec<String>| Json(StandardErrorResponse::new(msg, code.into(), hint, None));
-    let asked = body.region.as_deref().map(str::trim).filter(|r| !r.is_empty() && *r != "default");
-    let region = match asked {
-        None => None,
-        Some(id) => {
-            let region = crate::core::ai_region::find(id).ok_or_else(|| {
-                err(format!("Unknown AI region '{id}'"), "INVALID_AI_REGION", vec!["Use europe, china, usa or default".into()])
-            })?;
-            // Only a region on offer: one without api0 behind it would fail every call.
-            let offered = crate::core::ai_region::on_offer(cv_service_url.inner())
-                .await
-                .map_err(|e| err(format!("Could not list AI regions: {e}"), "AI_REGIONS_UNAVAILABLE", vec![]))?;
-            if !offered.iter().any(|r| r["id"].as_str() == Some(region)) {
-                return Err(err(format!("The AI region '{region}' is not on offer right now"), "AI_REGION_UNAVAILABLE", vec![]));
-            }
-            Some(region)
-        }
-    };
+    let id = body.region.trim();
+    let region = crate::core::ai_region::find(id).ok_or_else(|| {
+        err(format!("Unknown AI region '{id}'"), "INVALID_AI_REGION", vec!["Use europe, china or usa".into()])
+    })?;
+    // Only a region on offer: one without api0 behind it would fail every call.
+    let offered = crate::core::ai_region::on_offer(cv_service_url.inner())
+        .await
+        .map_err(|e| err(format!("Could not list AI regions: {e}"), "AI_REGIONS_UNAVAILABLE", vec![]))?;
+    if !offered.iter().any(|r| r["id"].as_str() == Some(region)) {
+        return Err(err(format!("The AI region '{region}' is not on offer right now"), "AI_REGION_UNAVAILABLE", vec![]));
+    }
     let pool = db_config.pool().map_err(|e| err(format!("DB error: {e}"), "INTERNAL_ERROR", vec![]))?;
     crate::core::database::TenantRepository::new(pool)
-        .update_ai_region(&auth.user().email, region)
+        .update_ai_region(&auth.user().email, Some(region))
         .await
         .map_err(|e| err(format!("Failed to save the AI region: {e}"), "PREFS_ERROR", vec![]))?;
-    app_log!(info, user = %auth.user().email, region = ?region, "AI region set");
+    app_log!(info, user = %auth.user().email, region = %region, "AI region set");
     Ok(Json(serde_json::json!({ "success": true, "region": region })))
 }
 
@@ -1000,23 +988,6 @@ pub async fn admin_delete_bd(
 
 // ── Referral routes ───────────────────────────────────────────────────────────
 
-/// GET /admin/models — read cv-import model config (admin only)
-#[get("/admin/models")]
-pub async fn admin_get_models(
-    auth: AuthenticatedUser,
-) -> Result<Json<ModelConfigResponse>, Json<StandardErrorResponse>> {
-    get_model_config_handler(auth).await
-}
-
-/// POST /admin/models — update cv-import model config and restart (admin only)
-#[post("/admin/models", data = "<body>")]
-pub async fn admin_update_models(
-    body: Json<UpdateModelConfigRequest>,
-    auth: AuthenticatedUser,
-) -> Result<Json<UpdateModelConfigResponse>, Json<StandardErrorResponse>> {
-    update_model_config_handler(body, auth).await
-}
-
 /// GET /admin/credits/users — all tenants with their api0 credit balances (admin only)
 #[get("/admin/credits/users")]
 pub async fn admin_credit_users(
@@ -1374,8 +1345,6 @@ pub fn build_rocket(
                 bd_commissions,
                 admin_commissions,
                 admin_commissions_pay,
-                admin_get_models,
-                admin_update_models,
                 admin_list_bds,
                 admin_bd_customers,
                 admin_delete_bd,

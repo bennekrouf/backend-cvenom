@@ -476,7 +476,7 @@ pub async fn check_and_deduct_ai_credits(
             Json(StandardErrorResponse::new(
                 format!("Could not price this in your AI region: {e}"),
                 "AI_REGION_UNAVAILABLE".to_string(),
-                vec!["Pick another AI region, or the default, in Preferences".to_string()],
+                vec!["Pick another AI region in Preferences".to_string()],
                 conversation_id.clone(),
             ))
         })?;

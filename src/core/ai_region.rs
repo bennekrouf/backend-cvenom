@@ -1,20 +1,25 @@
 // src/core/ai_region.rs
-//! The api0 AI regions a user can run cvenom's model calls in, as GitAgent
-//! offers them. cv-import holds the api0 licence and says which are on offer
-//! (`GET /regions`); a user's pick is stored on their tenant and sent to
-//! cv-import in `X-AI-Region` (service_client.rs).
+//! The api0 AI regions cvenom's model calls run in, as GitAgent offers them.
+//! Every AI action runs in a region, on the model api0 has selected for it:
+//! cvenom picks no model and has no provider of its own. cv-import holds the
+//! api0 licence and says which regions are on offer (`GET /regions`); a
+//! user's pick is stored on their tenant, and every call to cv-import names
+//! it in `X-AI-Region` (service_client.rs). A user who has not picked one
+//! runs in `DEFAULT_REGION`.
 //!
-//! An AI action costs its base price on cvenom's default providers, and that
-//! price times the region's api0 multiplier in a region — rounded up, at least
-//! 1, as GitAgent counts a step.
+//! An AI action costs its base price times the region's api0 multiplier —
+//! rounded up, at least 1, as GitAgent counts a step.
 
 use anyhow::{Context, Result};
 
 /// Every region cv-import knows, in the order the dashboard shows them.
 pub const REGIONS: &[&str] = &["europe", "china", "usa"];
 
-/// One of the actions that call the AI, and its price in credits on cvenom's
-/// default providers.
+/// Where a user who has not picked a region runs.
+pub const DEFAULT_REGION: &str = "europe";
+
+/// One of the actions that call the AI, and its base price in credits (at a
+/// multiplier of 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AiAction {
     pub id: &'static str,
@@ -45,13 +50,11 @@ pub fn prices(multiplier: f64) -> serde_json::Value {
         .into()
 }
 
-/// What `action` costs in `region` right now: its base price on the default
-/// providers, scaled by api0's multiplier in a region. A region that is not
-/// on offer is an error, so nothing is charged for a call that would fail.
+/// What `action` costs in the region its call runs in (`resolve(region)`)
+/// right now: its base price scaled by api0's multiplier there. A region that
+/// is not on offer is an error, so nothing is charged for a call that would fail.
 pub async fn cost(cv_service_url: &str, region: Option<&str>, action: AiAction) -> Result<i64> {
-    let Some(region) = region.and_then(find) else {
-        return Ok(action.base);
-    };
+    let region = resolve(region);
     let offered = on_offer(cv_service_url).await?;
     let multiplier = offered
         .iter()
@@ -59,6 +62,11 @@ pub async fn cost(cv_service_url: &str, region: Option<&str>, action: AiAction) 
         .map(|r| r["multiplier"].as_f64().unwrap_or(1.0))
         .ok_or_else(|| anyhow::anyhow!("The AI region '{region}' is not on offer right now"))?;
     Ok(scaled(action.base, multiplier))
+}
+
+/// The region a call runs in: the user's pick, or `DEFAULT_REGION`.
+pub fn resolve(picked: Option<&str>) -> &'static str {
+    picked.and_then(find).unwrap_or(DEFAULT_REGION)
 }
 
 /// The region `id` names, if it is one.
@@ -133,11 +141,17 @@ mod tests {
         assert_eq!(p.as_object().unwrap().len(), AI_ACTIONS.len());
     }
 
+    #[test]
+    fn a_user_without_a_pick_runs_in_the_default_region() {
+        assert_eq!(resolve(None), DEFAULT_REGION);
+        assert_eq!(resolve(Some("default")), DEFAULT_REGION);
+        assert_eq!(resolve(Some(" china ")), "china");
+    }
+
     #[tokio::test]
-    async fn the_default_costs_the_base_price_without_asking_cv_import() {
-        // Nothing listens here: the default must not need cv-import at all.
-        assert_eq!(cost("http://127.0.0.1:9", None, COVER_LETTER).await.unwrap(), 20);
-        assert_eq!(cost("http://127.0.0.1:9", Some("default"), OPTIMIZE).await.unwrap(), 5);
-        assert!(cost("http://127.0.0.1:9", Some("europe"), OPTIMIZE).await.is_err());
+    async fn every_price_comes_from_a_region_on_offer() {
+        // Nothing listens here: with no region list, nothing is priced or charged.
+        assert!(cost("http://127.0.0.1:9", None, COVER_LETTER).await.is_err());
+        assert!(cost("http://127.0.0.1:9", Some("china"), OPTIMIZE).await.is_err());
     }
 }

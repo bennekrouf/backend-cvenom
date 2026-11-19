@@ -222,11 +222,10 @@ pub async fn upload_and_convert_cv_handler(
                 || err_str.contains("model:")
             {
                 (
-                    "AI model error — the configured LLM model is unavailable or misconfigured".to_string(),
+                    "AI model error — the model api0 runs in your AI region failed".to_string(),
                     vec![
-                        "The AI model may be deprecated or misspelled — check CV_IMPORT_MODEL".to_string(),
-                        "Verify the CLAUDE_API_KEY is valid and has access to the model".to_string(),
-                        "Contact the administrator to update the model configuration".to_string(),
+                        "Try again, or pick another AI region in Preferences".to_string(),
+                        "Contact the administrator if it keeps failing".to_string(),
                     ],
                 )
             } else if err_str.contains("API key") || err_str.contains("authentication") || err_str.contains("401") {
