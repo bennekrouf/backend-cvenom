@@ -48,8 +48,10 @@ pub struct Experience {
     pub company: String,
     pub title: String,
     pub start_date: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub end_date: Option<String>, // None means current
+    /// None means current. cv-import sends a current position back as `""`,
+    /// so a blank or "Present"-like value is read as None too.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_end_date")]
+    pub end_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub responsibilities: Vec<String>,
@@ -381,7 +383,7 @@ impl CvConverter {
 
         // Process experiences
         for exp in &cv_data.work_experience {
-            let date_range = if let Some(end) = &exp.end_date {
+            let date_range = if let Some(end) = exp.end_date.as_deref().and_then(ended_on) {
                 format!("{} - {}", exp.start_date, end)
             } else {
                 match language {
@@ -757,12 +759,8 @@ fn parse_typst_experiences(content: &str) -> Vec<Experience> {
                 let parts: Vec<&str> = date.splitn(2, " - ").collect();
                 exp.start_date = parts[0].trim().to_string();
                 if parts.len() > 1 {
-                    let end = parts[1].trim().to_string();
-                    if end.is_empty() || end == "Present" || end == "Présent" {
-                        exp.end_date = None; // current position
-                    } else {
-                        exp.end_date = Some(end);
-                    }
+                    // None: current position
+                    exp.end_date = ended_on(parts[1]).map(str::to_string);
                 }
             }
             // Extract optional description
@@ -840,9 +838,59 @@ fn typ_extract_details(block: &str) -> Vec<String> {
     result
 }
 
+/// A position's end date, or None when it is current: blank, or a word for
+/// "present" in a language cvenom writes (what `to_typst` puts there).
+fn ended_on(end: &str) -> Option<&str> {
+    let end = end.trim();
+    let current = end.is_empty()
+        || ["present", "présent", "heute", "current", "now"].contains(&end.to_lowercase().as_str());
+    (!current).then_some(end)
+}
+
+fn deserialize_end_date<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<String>, D::Error> {
+    let raw: Option<String> = Option::deserialize(d)?;
+    Ok(raw.as_deref().and_then(ended_on).map(str::to_string))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn cv_with_job(end_date: serde_json::Value) -> CvJson {
+        serde_json::from_value(serde_json::json!({
+            "personal_info": { "name": "Jane Doe" },
+            "work_experience": [{
+                "company": "Acme", "title": "Engineer", "start_date": "09/2025",
+                "end_date": end_date, "responsibilities": ["Built things"]
+            }],
+            "education": [],
+            "skills": {},
+            "languages": {},
+            "metadata": { "language": "en" }
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn blank_end_date_from_cv_import_is_a_current_position() {
+        for end in [serde_json::json!(""), serde_json::json!("  "), serde_json::json!(null), serde_json::json!("Present")] {
+            let cv = cv_with_job(end.clone());
+            assert_eq!(cv.work_experience[0].end_date, None, "end_date {end}");
+            let typ = CvConverter::to_typst(&cv, "en").unwrap();
+            assert!(typ.contains("date: \"09/2025 - Present\""), "end_date {end}:\n{typ}");
+        }
+        let fr = CvConverter::to_typst(&cv_with_job(serde_json::json!("")), "fr").unwrap();
+        assert!(fr.contains("09/2025 - Présent"));
+        let de = CvConverter::to_typst(&cv_with_job(serde_json::json!("")), "de").unwrap();
+        assert!(de.contains("09/2025 - Heute"));
+    }
+
+    #[test]
+    fn a_real_end_date_is_kept() {
+        let cv = cv_with_job(serde_json::json!("12/2024"));
+        assert_eq!(cv.work_experience[0].end_date.as_deref(), Some("12/2024"));
+        assert!(CvConverter::to_typst(&cv, "en").unwrap().contains("09/2025 - 12/2024"));
+    }
 
     fn cv_with_summary(summary: &str) -> CvJson {
         serde_json::from_value(serde_json::json!({
