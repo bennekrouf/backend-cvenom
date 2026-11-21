@@ -136,7 +136,8 @@
 
 // "09/2025 - Present" → "09.2025 – Aujourd’hui".
 #let fmt_date(d) = {
-  if not nonempty(d) { return "" }
+  // Blank, or only dashes (" - "): no date at all, not an ongoing one.
+  if not nonempty(d) or d.find(regex("[\p{L}\p{N}]")) == none { return "" }
   let current = ("present", "présent", "heute", "aujourd'hui", "aujourd’hui", "current", "now", "")
   d.split(regex("\s+[-–—]\s+|\s*[-–—]\s*$")).map(p => {
     let p = p.trim()
@@ -308,6 +309,20 @@
   out
 }
 
+// Width of the name / title block: from its left edge to just before the
+// vertical arm of the red corner mark.
+#let header_text_w = 11.6cm
+
+// One bold line at `max` size, shrunk down to `min` until it fits the block;
+// past `min` it wraps.
+#let fit_line(body, max, min, fill: black) = layout(size => context {
+  let s = max
+  while s > min and measure(text(size: s, weight: "bold", body)).width > size.width {
+    s -= 0.5pt
+  }
+  text(size: s, weight: "bold", fill: fill, body)
+})
+
 #let show_header(details) = {
   let name = details.at("name", default: "")
   let title = details.at("title", default: details.at("job_title", default: ""))
@@ -328,15 +343,14 @@
         image(pic, width: 3.4cm, height: 3.4cm, fit: "cover"),
       ))
     }
-    #place(top + left, dx: main_x - margin_x - 1.2cm, dy: 0.75cm, block(width: 12.6cm)[
+    // The block stops before the red mark's vertical arm; the name and the
+    // title shrink to fit one line rather than run under it.
+    #place(top + left, dx: main_x - margin_x - 1.2cm, dy: 0.75cm, block(width: header_text_w)[
       #set par(justify: false, leading: 0.4em)
-      // Long names shrink rather than wrap under the red mark.
-      #let n = display_name(name)
-      #let size = if n.len() > 24 { 21pt } else if n.len() > 20 { 24pt } else { 26pt }
-      #text(size: size, weight: "bold", fill: navy, n)
+      #fit_line(display_name(name), 26pt, 19pt, fill: navy)
       #if nonempty(title) {
         v(0.75em, weak: true)
-        text(size: 15pt, weight: "bold", fill: navy, title)
+        fit_line(title, 15pt, 11pt, fill: navy)
       }
       #if tagline != none {
         v(0.75em, weak: true)
@@ -450,7 +464,10 @@
       let degree = parts.first()
       let school = parts.slice(1).join(" – ")
       let meta = if type(e) == dictionary {
-        (e.at("location", default: ""), e.at("date", default: "")).filter(nonempty).join(" · ")
+        // A blank date can arrive as " - ": keep only parts with a letter or digit.
+        (e.at("location", default: ""), fmt_date(str(e.at("date", default: ""))))
+          .filter(v => type(v) == str and v.find(regex("[\p{L}\p{N}]")) != none)
+          .join(" · ")
       } else { "" }
       block(below: 1em)[
         #text(weight: "bold", size: 10pt, upper(degree))
