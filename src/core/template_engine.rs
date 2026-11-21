@@ -503,7 +503,7 @@ mod tests {
         let expected = [
             "default", "consulting", "academic", "creative",
             "tech", "executive", "keyteo", "keyteo_full", "enterprise2",
-            "legal", "portfolio",
+            "enterprise3", "legal", "portfolio",
         ];
         for name in expected {
             assert!(engine.get_template(name).is_some(), "template '{name}' not found");
@@ -545,6 +545,22 @@ mod tests {
         assert!(main.exists(), "enterprise2/main.typ is missing");
         for dep in t.manifest.dependencies.as_deref().unwrap_or(&[]) {
             assert!(t.path.join(dep).exists(), "enterprise2 dependency '{dep}' missing");
+        }
+    }
+
+    // ── enterprise3 manifest ─────────────────────────────────────────────────
+
+    #[test]
+    fn enterprise3_manifest_parses_correctly() {
+        let engine = TemplateEngine::new(templates_dir()).unwrap();
+        let t = engine.get_template("enterprise3").unwrap();
+        assert_eq!(t.manifest.name, "enterprise3");
+        assert_eq!(t.manifest.main_file.as_deref(), Some("main.typ"));
+        let deps = t.manifest.dependencies.as_ref().unwrap();
+        assert!(deps.contains(&"template.typ".to_string()));
+        let langs = t.manifest.languages.as_ref().unwrap();
+        for l in ["en", "fr", "de"] {
+            assert!(langs.contains(&l.to_string()), "enterprise3 lacks {l}");
         }
     }
 

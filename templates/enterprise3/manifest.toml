@@ -1,0 +1,9 @@
+name = "enterprise3"
+description = "CGI corporate CV (2026 format): purple sidebar cover page, key figures, mission entries with technical environment, skills matrix"
+main_file = "main.typ"
+dependencies = ["template.typ"]
+features = ["sidebar_layout", "key_figures", "key_competencies", "areas_of_expertise", "sector_expertise", "mission_format", "skills_matrix"]
+photo_recommended = true
+shows_logo = true
+languages = ["en", "fr", "de"]
+version = "1.0.0"
