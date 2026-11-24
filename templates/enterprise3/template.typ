@@ -621,8 +621,10 @@
       text(size: 10pt, weight: "bold", fill: purple, upper(g.at("category", default: "")))))
     for it in g.at("items", default: ()) {
       let years = it.at("years", default: "")
-      let years = if type(years) == int {
-        str(years) + " " + if years == 1 { get_text("year") } else { get_text("years") }
+      // 5 → "5 ans"; "10+" → "10+ ans"; any other text as written.
+      let years = if type(years) == int or (type(years) == str and years.trim().match(regex("^\d+\+?$")) != none) {
+        let y = str(years).trim()
+        y + " " + if y == "1" { get_text("year") } else { get_text("years") }
       } else { str(years) }
       cells.push(text(size: 9.5pt, fill: ink, it.at("name", default: "")))
       cells.push(text(size: 9.5pt, weight: "bold", fill: ink, years))

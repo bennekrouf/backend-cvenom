@@ -31,9 +31,10 @@ pub const OPTIMIZE: AiAction = AiAction { id: "optimize", base: 5 };
 pub const TRANSLATE: AiAction = AiAction { id: "translate", base: 5 };
 pub const COVER_LETTER: AiAction = AiAction { id: "cover_letter", base: 20 };
 pub const PORTFOLIO: AiAction = AiAction { id: "portfolio", base: 20 };
+pub const SKILLS_MATRIX: AiAction = AiAction { id: "skills_matrix", base: 2 };
 
 /// Every AI action, in the order the dashboard lists their prices.
-pub const AI_ACTIONS: &[AiAction] = &[CV_IMPORT, OPTIMIZE, TRANSLATE, COVER_LETTER, PORTFOLIO];
+pub const AI_ACTIONS: &[AiAction] = &[CV_IMPORT, OPTIMIZE, TRANSLATE, COVER_LETTER, PORTFOLIO, SKILLS_MATRIX];
 
 /// `base` credits at `multiplier` times the plain rate: rounded up, at least 1.
 pub fn scaled(base: i64, multiplier: f64) -> i64 {

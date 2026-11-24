@@ -110,6 +110,10 @@ pub struct CvFormData {
     pub languages: LanguagesData,
     pub work_experience: Vec<WorkExperienceEntry>,
     pub styling: StylingData,
+    /// enterprise3's "skill | years | level" table. `None` (an older client
+    /// that doesn't know it) keeps the stored one; `Some(vec![])` removes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skills_matrix: Option<Vec<crate::core::skills_matrix::MatrixGroup>>,
 }
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
@@ -268,7 +272,47 @@ fn parse_toml_cv(content: &str) -> CvFormData {
         paper:            str_field("paper"),
     };
 
-    CvFormData { personal, links, skills, education, languages, work_experience: vec![], styling }
+    let skills_matrix = Some(crate::core::skills_matrix::read(&toml::Value::Table(table.clone())));
+
+    CvFormData { personal, links, skills, education, languages, work_experience: vec![], styling, skills_matrix }
+}
+
+/// Top-level keys `generate_toml` writes. Everything else in cv_params.toml
+/// (enterprise3's key_figures, sectors, manager_*, projects…) is not the
+/// form's, so a save carries it over instead of dropping it.
+const FORM_KEYS: &[&str] = &[
+    "name", "title", "email", "phonenumber", "address", "summary",
+    "skills", "education", "languages", "links", "styling", "skills_matrix",
+    "Personal", "personal",
+];
+
+/// The form's TOML, plus whatever the previous file had beyond the form.
+fn merge_with_existing(previous: &str, data: &CvFormData) -> String {
+    let generated = generate_toml(data);
+    let mut doc: toml_edit::DocumentMut = match generated.parse() {
+        Ok(d) => d,
+        Err(_) => return generated,
+    };
+    let old: Option<toml_edit::DocumentMut> = previous.parse().ok();
+    if let Some(old) = &old {
+        for (key, item) in old.iter() {
+            if !FORM_KEYS.contains(&key) && !doc.contains_key(key) {
+                doc.insert(key, item.clone());
+            }
+        }
+    }
+    match &data.skills_matrix {
+        Some(groups) if !groups.is_empty() => {
+            doc.insert("skills_matrix", toml_edit::Item::ArrayOfTables(crate::core::skills_matrix::to_toml_edit(groups)));
+        }
+        Some(_) => {}
+        None => {
+            if let Some(item) = old.as_ref().and_then(|o| o.get("skills_matrix")) {
+                doc.insert("skills_matrix", item.clone());
+            }
+        }
+    }
+    doc.to_string()
 }
 
 // ── TOML generator ────────────────────────────────────────────────────────────
@@ -624,9 +668,10 @@ pub async fn put_cv_data_handler(
         }
     }
 
-    // Write cv_params.toml
-    let toml_content = generate_toml(&data);
+    // Write cv_params.toml, keeping what the form doesn't edit
     let toml_path = profile_dir.join("cv_params.toml");
+    let previous = tokio::fs::read_to_string(&toml_path).await.unwrap_or_default();
+    let toml_content = merge_with_existing(&previous, &data);
     if let Err(e) = tokio::fs::write(&toml_path, &toml_content).await {
         app_log!(error, "Failed to write cv_params.toml: {}", e);
         return Err(Json(StandardErrorResponse::new(
@@ -663,6 +708,23 @@ pub async fn put_cv_data_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn save_keeps_keys_the_form_does_not_edit() {
+        let previous = "name = \"Old\"\ntagline = \"Tech lead\"\nsectors = [\"Banque\"]\n\n[[key_figures]]\nvalue = \"15+\"\nlabel = \"ans\"\n\n[[education]]\ntitle = \"Gone\"\ndate = \"2000\"\n\n[[skills_matrix]]\ncategory = \"Tech\"\n[[skills_matrix.items]]\nname = \"Rust\"\nyears = 5\nlevel = 4\n";
+        let mut data = CvFormData { personal: PersonalData { name: "New".into(), ..Default::default() }, ..Default::default() };
+        let out: toml::Value = toml::from_str(&merge_with_existing(previous, &data)).unwrap();
+        assert_eq!(out["name"].as_str(), Some("New"));
+        assert_eq!(out["tagline"].as_str(), Some("Tech lead"));
+        assert_eq!(out["key_figures"][0]["value"].as_str(), Some("15+"));
+        assert!(out.get("education").is_none(), "education removed in the form stays removed");
+        // An older client that doesn't send the matrix keeps it.
+        assert_eq!(crate::core::skills_matrix::read(&out)[0].items[0].name, "Rust");
+        // An empty one removes it.
+        data.skills_matrix = Some(vec![]);
+        let out: toml::Value = toml::from_str(&merge_with_existing(previous, &data)).unwrap();
+        assert!(out.get("skills_matrix").is_none());
+    }
 
     #[test]
     fn extract_first_quoted_handles_multiline_format() {
