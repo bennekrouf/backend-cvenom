@@ -1067,7 +1067,8 @@ pub async fn create_plan_checkout_handler(
 
     let res = reqwest::Client::new()
         .post(format!("{}/api/plans/checkout", gateway.trim_end_matches('/')))
-        .bearer_auth(&token.0)
+        // The header the gateway's sign-in check reads (as mayorana.ch sends it).
+        .header("X-Google-Auth", &token.0)
         .json(&body)
         .timeout(std::time::Duration::from_secs(15))
         .send()
