@@ -192,6 +192,24 @@ pub async fn change_profile_language_handler(
     bus.on_ok(&email, result, |_| events::CvEvent::files_changed(Some(profile)))
 }
 
+/// POST /profiles/:name/skills-matrix/suggest?lang=fr
+/// Default years and levels for enterprise3's skills matrix, computed from the
+/// missions and, with `ai: true`, refined by the AI. Writes nothing.
+#[post("/profiles/<name>/skills-matrix/suggest?<lang>", data = "<request>")]
+pub async fn suggest_skills_matrix(
+    name: String,
+    lang: Option<String>,
+    request: Json<crate::web::handlers::cv_handlers::SuggestSkillsMatrixRequest>,
+    auth: AuthenticatedUser,
+    config: &State<ServerConfig>,
+    cv_service_url: &State<String>,
+) -> Result<Json<crate::web::handlers::cv_handlers::skills_matrix::SuggestSkillsMatrixResponse>, Json<StandardErrorResponse>> {
+    crate::web::handlers::cv_handlers::suggest_skills_matrix_handler(
+        name, lang, request.into_inner(), auth, &config.data_dir, cv_service_url.inner(),
+    )
+    .await
+}
+
 #[post("/generate", data = "<request>")]
 pub async fn generate_cv(
     request: Json<StandardRequest<GenerateRequest>>,
@@ -803,6 +821,16 @@ pub async fn payment_plans() -> Result<Json<PlansResponse>, Json<StandardErrorRe
     get_plans_handler().await
 }
 
+/// POST /payment/plan-checkout — a fresh Stripe Checkout Session for a mayorana plan → { url }
+#[post("/payment/plan-checkout", data = "<request>")]
+pub async fn payment_plan_checkout(
+    request: Json<crate::web::handlers::payment_handlers::PlanCheckoutRequest>,
+    auth: AuthenticatedUser,
+    token: crate::web::handlers::payment_handlers::BearerToken,
+) -> Result<Json<crate::web::handlers::payment_handlers::PlanCheckoutResponse>, Json<StandardErrorResponse>> {
+    crate::web::handlers::payment_handlers::create_plan_checkout_handler(request, auth, token).await
+}
+
 /// GET /payment/plan-usage?<limit> — the user's mayorana plan usage (per-person billing's history)
 #[get("/payment/plan-usage?<limit>")]
 pub async fn payment_plan_usage(
@@ -1324,10 +1352,12 @@ pub fn build_rocket(
                 payment_confirm,
                 payment_balance,
                 payment_plans,
+                payment_plan_checkout,
                 payment_transactions,
                 payment_plan_usage,
                 get_cv_data,
                 put_cv_data,
+                suggest_skills_matrix,
                 list_brands,
                 get_brand,
                 put_brand,

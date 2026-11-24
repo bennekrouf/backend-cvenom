@@ -989,6 +989,127 @@ pub async fn get_plans_handler() -> Result<Json<PlansResponse>, Json<StandardErr
     }
 }
 
+// ── POST /payment/plan-checkout ───────────────────────────────────────────────
+//
+// A plan card's click: a fresh Stripe Checkout Session for that plan on
+// mayorana's Stripe account, so the buyer lands on checkout.stripe.com with no
+// page in between. The api0 gateway creates it (POST /api/plans/checkout), as
+// it does for mayorana.ch; cvenom's sign-in is the gateway's own Firebase
+// project, so the user's ID token is passed on and the plan is kept under
+// their email. Stripe's keys stay with the gateway: cvenom holds none for this.
+// Asked server-side, like GET /payment/plans: the gateway's CORS is mayorana's.
+
+/// The caller's raw bearer token, to pass on to the gateway as their sign-in.
+pub struct BearerToken(pub String);
+
+#[rocket::async_trait]
+impl<'r> rocket::request::FromRequest<'r> for BearerToken {
+    type Error = ();
+
+    async fn from_request(req: &'r rocket::Request<'_>) -> rocket::request::Outcome<Self, Self::Error> {
+        match req
+            .headers()
+            .get_one("Authorization")
+            .and_then(|h| h.strip_prefix("Bearer "))
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
+            Some(token) => rocket::request::Outcome::Success(BearerToken(token.to_string())),
+            None => rocket::request::Outcome::Error((rocket::http::Status::Unauthorized, ())),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(crate = "rocket::serde")]
+pub struct PlanCheckoutRequest {
+    pub plan_id: String,
+    /// The studio's language ("en", "fr", "de"): the Checkout page's and the emails'.
+    #[serde(default)]
+    pub locale: Option<String>,
+}
+
+#[derive(Serialize)]
+#[serde(crate = "rocket::serde")]
+pub struct PlanCheckoutResponse {
+    pub success: bool,
+    /// The Stripe Checkout page (checkout.stripe.com/...), single-use.
+    pub url: String,
+}
+
+pub async fn create_plan_checkout_handler(
+    request: Json<PlanCheckoutRequest>,
+    auth: AuthenticatedUser,
+    token: BearerToken,
+) -> Result<Json<PlanCheckoutResponse>, Json<StandardErrorResponse>> {
+    let user_email = auth.user().email.clone();
+    let fail = |message: String, code: &str| {
+        Json(StandardErrorResponse::new(
+            message,
+            code.to_string(),
+            vec![format!("See the plans at {MAYORANA_PRICING_URL}")],
+            None,
+        ))
+    };
+
+    let plan_id = request.plan_id.trim();
+    if plan_id.is_empty() || plan_id.len() > 64 || !plan_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        return Err(fail("Unknown plan".to_string(), "PLAN_UNKNOWN"));
+    }
+    // An api0 gateway OIDC token (an MCP call) names a service account, not
+    // the buyer; only the person's own sign-in can start their checkout.
+    if crate::auth::peek_token_issuer(&token.0).is_some_and(|iss| iss.contains("accounts.google.com")) {
+        return Err(fail("Sign in to the studio to subscribe".to_string(), "PLAN_CHECKOUT_NEEDS_SIGN_IN"));
+    }
+
+    let gateway = std::env::var("API0_GATEWAY_URL").unwrap_or_else(|_| "https://gateway.api0.ai".to_string());
+    let body = serde_json::json!({ "plan_id": plan_id, "locale": request.locale.as_deref().map(|l| l.chars().take(8).collect::<String>()) });
+
+    let res = reqwest::Client::new()
+        .post(format!("{}/api/plans/checkout", gateway.trim_end_matches('/')))
+        .bearer_auth(&token.0)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(15))
+        .send()
+        .await;
+
+    let res = match res {
+        Ok(r) => r,
+        Err(e) => {
+            app_log!(error, error = %e, plan = %plan_id, "Plan checkout: gateway unreachable");
+            return Err(fail("Checkout could not be started".to_string(), "PLAN_CHECKOUT_FAILED"));
+        }
+    };
+    let status = res.status();
+    let json: serde_json::Value = res.json().await.unwrap_or_default();
+
+    if status.is_success() {
+        if let Some(url) = json["url"].as_str().filter(|u| u.starts_with("https://checkout.stripe.com/")) {
+            app_log!(info, plan = %plan_id, email = %user_email, "Plan checkout started");
+            return Ok(Json(PlanCheckoutResponse { success: true, url: url.to_string() }));
+        }
+        app_log!(error, plan = %plan_id, "Plan checkout: gateway answered without a Stripe Checkout url");
+        return Err(fail("Checkout could not be started".to_string(), "PLAN_CHECKOUT_FAILED"));
+    }
+
+    // The store's own words (unknown plan, a plan already running) are meant
+    // for the buyer; anything else stays generic.
+    let message = json["error"]
+        .as_str()
+        .or_else(|| json["message"].as_str())
+        .or_else(|| json["error"]["message"].as_str())
+        .unwrap_or("Checkout could not be started")
+        .to_string();
+    app_log!(warn, plan = %plan_id, status = %status, error = %message, "Plan checkout refused by the gateway");
+    let code = match status.as_u16() {
+        409 => "PLAN_ALREADY_ACTIVE",
+        404 => "PLAN_UNKNOWN",
+        401 | 403 => "PLAN_CHECKOUT_NEEDS_SIGN_IN",
+        _ => "PLAN_CHECKOUT_FAILED",
+    };
+    Err(fail(message, code))
+}
+
 #[derive(Serialize)]
 #[serde(crate = "rocket::serde")]
 pub struct TransactionsResponse {

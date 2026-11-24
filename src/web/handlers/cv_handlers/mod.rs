@@ -11,6 +11,7 @@ pub mod portfolio;
 pub mod profile_edit;
 pub mod profile_versions;
 pub mod save_optimized;
+pub mod skills_matrix;
 pub mod translate;
 pub mod upload_convert;
 
@@ -30,6 +31,7 @@ pub use profile_versions::{
     list_profile_versions_handler, restore_profile_version_handler, ArchiveProfileRequest,
     DuplicateProfileRequest, RestoreProfileRequest,
 };
+pub use skills_matrix::{suggest_skills_matrix_handler, SuggestSkillsMatrixRequest};
 pub use save_optimized::{save_optimized_handler, SaveOptimizedRequest};
 pub use translate::translate_cv_handler;
 pub use upload_convert::{upload_and_convert_cv_handler, import_text_cv_handler, ImportTextRequest};

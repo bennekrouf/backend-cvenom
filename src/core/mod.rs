@@ -9,6 +9,7 @@ pub mod database;
 pub mod fs_ops;
 pub mod profile_store;
 pub mod service_client;
+pub mod skills_matrix;
 pub mod template_engine;
 
 pub use config_manager::ConfigManager;

@@ -160,7 +160,7 @@ impl AuthConfig {
 
 /// Decode the JWT payload (without signature verification) to read the `iss` claim.
 /// Returns `None` if the token is malformed.
-fn peek_token_issuer(token: &str) -> Option<String> {
+pub(crate) fn peek_token_issuer(token: &str) -> Option<String> {
     let parts: Vec<&str> = token.splitn(4, '.').collect();
     if parts.len() < 3 {
         return None;
